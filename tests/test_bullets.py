@@ -225,3 +225,71 @@ class TestKeywordMatching:
         before = b.render_text()
         bullets.match_score(b, ["ablation"])
         assert b.render_text() == before
+
+
+class TestHeaderMatchesTheProfile:
+    """The fabrication firewall does not cover the resume header.
+
+    Bullet TEXT is protected structurally: ids are enum-constrained in the
+    response schema and `Bank.select` re-validates, so a model cannot invent a
+    bullet. `meta:`, `education:` and each role's company/title/dates are not
+    protected at all — they are trusted YAML, hard-required by `load_bank()`
+    and read straight into the PDF at `resume.py:213-219`. What linked them to
+    a source document was a convention in the bank's own header, addressed to
+    a human editor.
+
+    `master_profile.md` §12 is now the source and these assert the two agree.
+    The generator that emits the header from it lands with `render_resume`
+    (PHASE5_PLAN Track B slice 3); until then this test is the mechanism —
+    and it is the more valuable half, because it fails when the source changes
+    rather than when somebody happens to notice.
+    """
+
+    PROFILE = "config/master_profile.md"
+
+    @pytest.fixture
+    def block(self):
+        import re
+        from pathlib import Path
+        path = Path(self.PROFILE)
+        if not path.exists():
+            # Gitignored: it carries contact details and visa status, so a
+            # fresh checkout has no copy and this cannot be a hard failure.
+            pytest.skip(f"{self.PROFILE} not present (gitignored)")
+        text = path.read_text(encoding="utf-8")
+        match = re.search(r"## 12\. Structured identity.*?```yaml\n(.*?)```",
+                          text, re.S)
+        assert match, "master_profile.md has no §12 structured identity block"
+        import yaml
+        return yaml.safe_load(match.group(1))
+
+    def test_identity_matches(self, block, bank):
+        for key in ("name", "email", "phone", "linkedin", "location"):
+            assert block["identity"][key] == bank.meta[key], \
+                f"identity.{key} has drifted from the profile"
+
+    def test_education_matches(self, block, bank):
+        for key in ("school", "degree", "date"):
+            assert block["education"][key] == bank.education[key], \
+                f"education.{key} has drifted from the profile"
+        assert (" ".join(block["education"]["coursework"].split())
+                == " ".join(bank.education["coursework"].split()))
+
+    def test_every_job_matches(self, block, bank):
+        jobs = {r["id"]: r for r in bank.roles.values()
+                if r.get("kind") == "experience"}
+        listed = {entry["id"]: entry for entry in block["experience"]}
+        assert set(listed) == set(jobs), \
+            "the profile and the bank disagree about which jobs exist"
+        for role_id, entry in listed.items():
+            for key in ("company", "title", "dates"):
+                assert entry[key] == jobs[role_id][key], \
+                    f"{role_id}.{key} has drifted from the profile"
+
+    def test_projects_are_not_listed_as_jobs(self, block, bank):
+        """Five jobs, five projects. The YAML key is `roles:` for both, which
+        is what made an earlier count of 'ten roles' misleading."""
+        projects = {r["id"] for r in bank.roles.values()
+                    if r.get("kind") != "experience"}
+        assert projects and not (projects & {e["id"] for e in
+                                            block["experience"]})
