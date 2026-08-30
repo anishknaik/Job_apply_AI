@@ -53,8 +53,24 @@ $settings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit (New-TimeSpan -Hours 2) `
     -MultipleInstances IgnoreNew
 
+# S4U - "service for user": run whether or not the user is logged on, with no
+# stored password. The task was previously registered with the default
+# Interactive principal, which needs a live session. It fired exactly on time
+# and died at process init with 0xC0000142 (STATUS_DLL_INIT_FAILED) on 5 of 17
+# days, writing no log at all because the failure preceded Python starting -
+# so the scheduler reported 0 missed runs while a third of the days had no
+# data. S4U still runs AS the calling user, so .env and the service account
+# JSON in the profile stay readable; that is why this is not run-as-SYSTEM.
+$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" `
+    -LogonType S4U -RunLevel Limited
+
+# The description is the only thing visible in the Task Scheduler UI, so it
+# must not claim a stage that -Spend has switched off.
+$desc = if ($Spend) { 'jobpipe: fetch, filter, score, sync' }
+        else        { 'jobpipe: fetch, filter, sync (no scoring)' }
+
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
-    -Settings $settings -Description 'jobpipe: fetch, filter, score, sync' `
+    -Principal $principal -Settings $settings -Description $desc `
     -Force | Out-Null
 
 $mode = if ($Spend) { 'WITH scoring (spends money)' } else { 'no scoring (free)' }
