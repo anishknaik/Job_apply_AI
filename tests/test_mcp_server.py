@@ -12,6 +12,7 @@ is asked to respect. That only holds while the absence is enforced, and a
 convention is not enforcement.
 """
 import asyncio
+from pathlib import Path
 
 import pytest
 
@@ -60,12 +61,20 @@ class TestTheAllowlist:
         assert (sorted(t.name for t in tools())
                 == sorted(mcp_server.TOOL_ALLOWLIST))
 
-    def test_every_tool_is_annotated_read_only(self):
-        """Slice 1 writes nothing. A client that trusts annotations to decide
-        what needs confirming is entitled to a correct answer."""
+    def test_annotations_match_the_declared_split(self):
+        """A client that trusts annotations to decide what needs confirming is
+        entitled to a correct answer. Asserted against the declared
+        WRITE_TOOLS rather than against "everything is read-only", so adding a
+        write tool has to update the declaration."""
         for tool in tools():
             assert tool.annotations is not None, f"{tool.name} unannotated"
-            assert tool.annotations.read_only_hint is True, tool.name
+            writes = tool.name in mcp_server.WRITE_TOOLS
+            assert tool.annotations.read_only_hint is not writes, tool.name
+
+    def test_nothing_is_annotated_destructive(self):
+        """Nothing on this surface destroys data: copy_for_editing refuses to
+        overwrite, and status is an append-only log."""
+        for tool in tools():
             assert tool.annotations.destructive_hint is False, tool.name
 
     @pytest.mark.parametrize("forbidden", [
@@ -82,8 +91,9 @@ class TestTheAllowlist:
 
 
 class TestNothingWrites:
-    def test_every_tool_leaves_the_database_untouched(self, conn, monkeypatch):
-        """Structural, not by inspection: call all five and diff the counts."""
+    def test_the_read_only_tools_leave_the_database_untouched(
+            self, conn, monkeypatch):
+        """Structural, not by inspection: call them all and diff the counts."""
         monkeypatch.setattr(mcp_server, "_tier_map", lambda: {})
         pid = seed(conn)
 
@@ -195,3 +205,184 @@ class TestStats:
         run = db.start_run(conn)
         db.finish_run(conn, run, fetched=12)
         assert mcp_server.stats(conn)["last_run"]["fetched"] == 12
+
+
+# ---------------------------------------------------------------------------
+# Slice 2 - the first writes
+# ---------------------------------------------------------------------------
+
+def letter(conn, pid, tmp_path, *, ok=1, content="Dear Team,\n\nBody.\n",
+           accuracy=1.0):
+    """A cover letter document with a grounding verdict already recorded."""
+    path = tmp_path / "cover_letter.md"
+    path.write_text(content, encoding="utf-8")
+    doc = db.insert_document(conn, pid, "cover_letter",
+                             generated_path=str(path), content=content,
+                             model="gemini-3.5-flash")
+    if ok is not None:
+        conn.execute("UPDATE documents SET grounding_ok = ?, "
+                     "grounding_accuracy = ?, grounding_claims = ?, "
+                     "grounding_checked_at = ? WHERE id = ?",
+                     (ok, accuracy, '[{"supported": "unsupported"}]',
+                      db.utcnow(), doc))
+    conn.commit()
+    return doc, path
+
+
+class TestCopyForEditingRefuses:
+    """The gate (PHASE5_PLAN 5.2). It sits here because this is the last
+    action the pipeline owns before a human touches the file."""
+
+    def test_when_there_is_no_letter_at_all(self, conn, tmp_path):
+        from mcp.server.mcpserver.exceptions import ToolError
+        pid = seed(conn)
+        with pytest.raises(ToolError, match="no cover letter to copy"):
+            mcp_server.copy_for_editing(conn, pid)
+
+    def test_when_the_draft_was_never_checked(self, conn, tmp_path):
+        """An absent verdict is not a pass. This is the fail-closed case: an
+        errored grounding call leaves NULL, and NULL must refuse."""
+        from mcp.server.mcpserver.exceptions import ToolError
+        pid = seed(conn)
+        letter(conn, pid, tmp_path, ok=None)
+        with pytest.raises(ToolError, match="no grounding verdict"):
+            mcp_server.copy_for_editing(conn, pid)
+
+    def test_when_the_draft_failed_its_check(self, conn, tmp_path):
+        from mcp.server.mcpserver.exceptions import ToolError
+        pid = seed(conn)
+        letter(conn, pid, tmp_path, ok=0, accuracy=0.5)
+        with pytest.raises(ToolError) as caught:
+            mcp_server.copy_for_editing(conn, pid)
+        assert "FAILED its grounding check" in str(caught.value)
+        # The claims travel with the refusal, or the failure is unarguable.
+        assert "unsupported" in str(caught.value)
+
+    def test_when_a_copy_already_exists(self, conn, tmp_path):
+        """Overwriting destroys human edits - the same class of loss as the
+        rename that destroyed the Sierra baseline."""
+        from mcp.server.mcpserver.exceptions import ToolError
+        pid = seed(conn)
+        _, path = letter(conn, pid, tmp_path)
+        mcp_server.copy_for_editing(conn, pid)
+        with pytest.raises(ToolError, match="would overwrite your edits"):
+            mcp_server.copy_for_editing(conn, pid)
+
+    def test_when_the_existing_copy_predates_the_draft(self, conn, tmp_path):
+        """A stale .sent.md beside a fresh draft is an edit of an EARLIER
+        generation. Prose regenerates at ~0.53 distance from itself, so
+        measuring that pair reports model variance as human editing."""
+        import os
+        from mcp.server.mcpserver.exceptions import ToolError
+        pid = seed(conn)
+        doc, path = letter(conn, pid, tmp_path)
+        sent = tmp_path / "cover_letter.sent.md"
+        sent.write_text("an older edit", encoding="utf-8")
+        os.utime(sent, (0, 0))
+        with pytest.raises(ToolError, match="PREDATES the current draft"):
+            mcp_server.copy_for_editing(conn, pid)
+
+
+class TestCopyForEditingSucceeds:
+    def test_it_copies_byte_identical(self, conn, tmp_path):
+        pid = seed(conn)
+        body = "Dear Abridge Hiring Team,\n\nSomething specific.\n"
+        letter(conn, pid, tmp_path, content=body)
+        out = mcp_server.copy_for_editing(conn, pid)
+        assert Path(out["sent_path"]).read_text(encoding="utf-8") == body
+
+    def test_it_copies_from_the_database_when_the_file_is_gone(
+            self, conn, tmp_path):
+        """The destroyed-baseline case. A path is not a record: the first real
+        edit renamed the file and the baseline was simply gone. A row cannot
+        be renamed, so the copy still works."""
+        pid = seed(conn)
+        _, path = letter(conn, pid, tmp_path, content="stored in the row")
+        path.unlink()
+        out = mcp_server.copy_for_editing(conn, pid)
+        assert Path(out["sent_path"]).read_text(encoding="utf-8") == \
+            "stored in the row"
+
+    def test_it_does_not_claim_a_sent_path_on_the_row(self, conn, tmp_path):
+        """measure sets sent_path together with edit_distance. Setting it here
+        would recreate the inconsistent state already in jobpipe.db: one row
+        asserting a .sent.md that does not exist, with no distance."""
+        pid = seed(conn)
+        doc, _ = letter(conn, pid, tmp_path)
+        mcp_server.copy_for_editing(conn, pid)
+        row = conn.execute("SELECT * FROM documents WHERE id = ?",
+                           (doc,)).fetchone()
+        assert row["sent_path"] is None
+        assert row["edit_distance"] is None
+
+
+class TestAdvanceStatus:
+    def test_it_records_a_transition(self, conn):
+        pid = seed(conn, status="not_applied")
+        out = mcp_server.advance_status(conn, pid, "applied",
+                                        letter_required=True)
+        assert out["previous"] == "not_applied"
+        assert out["status"] == "applied"
+        assert out["recorded"] is True
+        assert db.current_statuses(conn)[pid] == "applied"
+
+    def test_letter_required_is_stored(self, conn):
+        pid = seed(conn)
+        mcp_server.advance_status(conn, pid, "applied", letter_required=False)
+        row = conn.execute("SELECT letter_required FROM status_events "
+                           "WHERE posting_id = ? ORDER BY id DESC LIMIT 1",
+                           (pid,)).fetchone()
+        assert row["letter_required"] == 0
+
+    def test_applying_without_the_flag_says_why_it_matters(self, conn):
+        pid = seed(conn)
+        out = mcp_server.advance_status(conn, pid, "applied")
+        assert "letter-required applications only" in out["reminder"]
+
+    def test_a_repeat_writes_no_event(self, conn):
+        """The log stores transitions, not repeated readings."""
+        pid = seed(conn, status="applied")
+        before = conn.execute("SELECT COUNT(*) FROM status_events").fetchone()[0]
+        out = mcp_server.advance_status(conn, pid, "applied")
+        assert out["recorded"] is False
+        assert conn.execute(
+            "SELECT COUNT(*) FROM status_events").fetchone()[0] == before
+
+    def test_a_regression_is_recorded_but_flagged(self, conn):
+        """Not an error - a genuine re-open happens. Much more often it is a
+        typo that would quietly corrupt advance rates months later."""
+        pid = seed(conn, status="interview")
+        out = mcp_server.advance_status(conn, pid, "applied")
+        assert out["recorded"] is True
+        assert "moves backwards" in out["warning"]
+
+    def test_it_is_not_gated_on_grounding(self, conn, tmp_path):
+        """The asymmetry in 5.2. copy_for_editing refuses a failed draft;
+        advance_status records what actually happened regardless, because a
+        tool that cannot record reality is a tool that gets worked around."""
+        pid = seed(conn)
+        letter(conn, pid, tmp_path, ok=0, accuracy=0.2)
+        out = mcp_server.advance_status(conn, pid, "applied",
+                                        letter_required=True)
+        assert out["recorded"] is True
+
+    def test_unknown_status_raises(self, conn):
+        from mcp.server.mcpserver.exceptions import ToolError
+        pid = seed(conn)
+        with pytest.raises(ToolError, match="not a known status"):
+            mcp_server.advance_status(conn, pid, "banana")
+
+    def test_unknown_posting_raises(self, conn):
+        from mcp.server.mcpserver.exceptions import ToolError
+        with pytest.raises(ToolError, match="no posting with id"):
+            mcp_server.advance_status(conn, 99999, "applied")
+
+    def test_it_writes_to_sqlite_not_the_sheet(self, conn):
+        """6.2: SQLite is the source of truth, the sheet a rendered view. The
+        source column on the event says where it came from."""
+        pid = seed(conn)
+        mcp_server.advance_status(conn, pid, "applied")
+        row = conn.execute("SELECT source FROM status_events "
+                           "WHERE posting_id = ? ORDER BY id DESC LIMIT 1",
+                           (pid,)).fetchone()
+        assert row["source"] == "mcp"

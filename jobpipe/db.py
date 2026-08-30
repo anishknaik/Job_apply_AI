@@ -659,19 +659,29 @@ def current_statuses(conn: sqlite3.Connection) -> dict[int, str]:
 
 def record_status(conn: sqlite3.Connection, posting_id: int, status: str,
                   previous: str | None = None,
-                  source: str = "sheet") -> bool:
+                  source: str = "sheet",
+                  letter_required: bool | None = None) -> bool:
     """Append a status transition. Returns False if nothing changed.
 
     No-op transitions are dropped rather than stored: the sheet is re-read
     every morning, so recording each unchanged reading would bury the handful
     of real transitions under thousands of duplicates.
+
+    `letter_required` records whether the form actually asked for a letter.
+    Skipping a letter where there is no field for one is correct, so the
+    population `measure` reports on is not random — it skews toward smaller
+    companies and more deliberate applications, which are the ones edited
+    hardest. Storing the flag makes that population inspectable instead of
+    implicit, which is what lets the metric narrow its claim honestly rather
+    than pretending to describe all applications.
     """
     if previous == status:
         return False
     conn.execute(
         "INSERT INTO status_events (posting_id, status, previous, noted_at, "
-        "source) VALUES (?, ?, ?, ?, ?)",
-        (posting_id, status, previous, utcnow(), source))
+        "source, letter_required) VALUES (?, ?, ?, ?, ?, ?)",
+        (posting_id, status, previous, utcnow(), source,
+         None if letter_required is None else int(letter_required)))
     return True
 
 

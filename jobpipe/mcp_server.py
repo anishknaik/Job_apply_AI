@@ -37,7 +37,9 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-from . import db, measure as _measure, states
+from pathlib import Path
+
+from . import db, letters, measure as _measure, states
 from .targets import load_targets
 
 log = logging.getLogger(__name__)
@@ -50,11 +52,23 @@ TOOL_ALLOWLIST = (
     "status",
     "stats",
     "measure",
+    # Slice 2 - the first writes. Neither destroys anything: copy_for_editing
+    # refuses to overwrite, and status is an append-only log.
+    "copy_for_editing",
+    "advance_status",
 )
+
+# Which of the above write. Declared rather than inferred, so the annotation
+# test asserts the split instead of asserting "everything is read-only" and
+# being edited to agree every time a write tool is added - which would make it
+# a record of what happened rather than a check on it.
+WRITE_TOOLS = ("copy_for_editing", "advance_status")
 
 # snake_case: mcp 2.x accepts the camelCase aliases but exposes the fields as
 # read_only_hint / destructive_hint, and mixing the two reads like a bug.
 READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False)
+WRITES = ToolAnnotations(read_only_hint=False, destructive_hint=False,
+                         idempotent_hint=False)
 
 
 def _conn(db_path: str | None = None):
@@ -221,6 +235,142 @@ def measure(conn) -> dict[str, Any]:
     return {"summary": summary, "letters": measured}
 
 
+def copy_for_editing(conn, posting_id: int) -> dict[str, Any]:
+    """The cp, done so it cannot be done wrong.
+
+    This is the whole business case for the MCP surface. The instruction
+    "COPY cover_letter.md to cover_letter.sent.md, never rename" has failed 22
+    times out of 22 - which is why edit distance has no data after 22
+    applications, and why one Sierra baseline is gone for good. Prose
+    regenerates at ~0.53 distance from itself at temperature 0, so a fresh
+    draft is not a substitute for a destroyed original.
+
+    Three refusals, each for a failure that has actually happened here:
+
+      * no passing grounding check -> refuse (PHASE5_PLAN 5.2). The gate sits
+        here because this is the last action the pipeline owns before a human
+        touches the file. A verdict that never arrived must not read as a pass.
+      * a .sent.md already there -> refuse. Overwriting it destroys human
+        edits, which is the same class of loss as the rename.
+      * that file is older than the current draft -> refuse and say so. It is
+        an edit of an EARLIER generation, and measuring it reports model
+        variance as human editing.
+    """
+    row = db.current_document(conn, posting_id, "cover_letter")
+    if row is None:
+        raise ToolError(
+            f"posting {posting_id} has no cover letter to copy. Generate one "
+            f"first: python -m jobpipe.cli tailor --cover-letter {posting_id} "
+            f"--yes")
+
+    if row["grounding_ok"] != 1:
+        if row["grounding_ok"] is None:
+            raise ToolError(
+                f"draft {row['id']} has no grounding verdict, so it cannot be "
+                f"released for editing. An absent check is not a pass. "
+                f"Regenerate the letter so the check runs.")
+        raise ToolError(
+            f"draft {row['id']} FAILED its grounding check (accuracy "
+            f"{row['grounding_accuracy']}). Unsupported claims get fixed in "
+            f"the draft, never copied forward. Claims: "
+            f"{(row['grounding_claims'] or '[]')[:600]}")
+
+    generated = Path(row["generated_path"] or "")
+    if not generated.name:
+        raise ToolError(f"draft {row['id']} has no generated_path on record")
+    sent = _measure.sent_path_for(generated)
+
+    if sent.exists():
+        # The same staleness rule measure applies, called rather than restated.
+        if _measure._is_stale(sent, row["generated_at"]):
+            raise ToolError(
+                f"{sent} already exists and PREDATES the current draft "
+                f"(generated {row['generated_at']}). It is an edit of an "
+                f"earlier version, and measuring it would report generation "
+                f"variance as human editing. Delete it deliberately, then "
+                f"copy again.")
+        raise ToolError(
+            f"{sent} already exists and matches the current draft. Keep "
+            f"editing that file - copying again would overwrite your edits.")
+
+    # The database first, the file only as a fallback: the generated file is
+    # the one a human works on, so it gets renamed, overwritten and deleted.
+    # A row cannot be renamed.
+    body = row["content"]
+    if not body:
+        if not generated.exists():
+            raise ToolError(
+                f"draft {row['id']} has neither stored content nor a file at "
+                f"{generated}; there is nothing to copy")
+        body = generated.read_text(encoding="utf-8")
+
+    sent.parent.mkdir(parents=True, exist_ok=True)
+    sent.write_text(body, encoding="utf-8")
+
+    return {
+        "sent_path": str(sent),
+        "generated_path": str(generated),
+        "revision": row["revision"],
+        "words": len(body.split()),
+        "grounding_accuracy": row["grounding_accuracy"],
+        "next": ("Edit the .sent.md copy, never the original - the original "
+                 "is the baseline measure compares against. Run measure "
+                 "afterwards to record the distance."),
+        "slots": list(letters.BLOCK_NAMES),
+    }
+
+
+def advance_status(conn, posting_id: int, status: str,
+                   letter_required: bool | None = None) -> dict[str, Any]:
+    """Append a status transition to the event log.
+
+    Deliberately NOT gated on grounding (5.2). This records a fact about the
+    world, and a tool that cannot record what actually happened is a tool that
+    gets worked around - which would put status back in the sheet by hand and
+    lose the transition history that makes advance rate answerable at all.
+
+    Writes to SQLite, not to the sheet: SQLite is the source of truth and the
+    sheet is a rendered view, so cli sync carries it across.
+    """
+    try:
+        wanted = states.normalise(status)
+    except ValueError as exc:
+        raise ToolError(str(exc)) from exc
+
+    if conn.execute("SELECT 1 FROM postings WHERE id = ?",
+                    (posting_id,)).fetchone() is None:
+        raise ToolError(f"no posting with id {posting_id}")
+
+    previous = db.current_statuses(conn).get(posting_id)
+    changed = db.record_status(conn, posting_id, wanted, previous=previous,
+                               source="mcp", letter_required=letter_required)
+    conn.commit()
+
+    result = {
+        "posting_id": posting_id,
+        "previous": previous,
+        "status": wanted,
+        "recorded": changed,
+        "letter_required": letter_required,
+    }
+    if not changed:
+        result["note"] = (f"already at {wanted}; no event written. The log "
+                          f"stores transitions, not repeated readings.")
+    elif previous and states.is_regression(previous, wanted):
+        # Not an error - a genuine re-open happens and the human owns this.
+        # Much more often it is a typo that would quietly corrupt advance-rate
+        # numbers months from now, so it is surfaced rather than swallowed.
+        result["warning"] = (f"{previous} -> {wanted} moves backwards through "
+                             f"the lifecycle. Recorded as asked; confirm it "
+                             f"was intended.")
+    if wanted == "applied" and letter_required is None:
+        result["reminder"] = ("letter_required was not given. measure reports "
+                              "on letter-required applications only, and "
+                              "without this flag that population stays "
+                              "implicit.")
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -295,6 +445,34 @@ def build_server(db_path: str | None = None) -> MCPServer:
         conn = _conn(db_path)
         try:
             return measure(conn)
+        finally:
+            conn.close()
+
+    @server.tool(name="copy_for_editing", annotations=WRITES,
+                 description="Copy the current cover letter draft to "
+                             "cover_letter.sent.md so it can be edited "
+                             "without destroying the baseline. Refuses if the "
+                             "draft has no passing grounding check, or if a "
+                             "copy already exists.")
+    def _copy_for_editing(posting_id: int) -> dict:
+        conn = _conn(db_path)
+        try:
+            return copy_for_editing(conn, posting_id)
+        finally:
+            conn.close()
+
+    @server.tool(name="advance_status", annotations=WRITES,
+                 description="Record a status transition in the append-only "
+                             "log. Pass letter_required when moving to "
+                             "applied, so the measure population stays "
+                             "inspectable. Writes to SQLite; run `cli sync` "
+                             "to render it to the sheet.")
+    def _advance_status(posting_id: int, status: str,
+                        letter_required: bool | None = None) -> dict:
+        conn = _conn(db_path)
+        try:
+            return advance_status(conn, posting_id, status,
+                                  letter_required=letter_required)
         finally:
             conn.close()
 
