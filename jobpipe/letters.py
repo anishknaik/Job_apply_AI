@@ -118,6 +118,41 @@ class LetterError(RuntimeError):
     """Generation failed or produced something unusable."""
 
 
+# --- letter structure: ONE definition -------------------------------------
+#
+# The four body slots appeared in three places — LETTER_SCHEMA below,
+# body_text()'s ordering, and measure.SLOT_NAMES — and the copies drifted.
+# SLOT_NAMES listed only the four body slots, but assemble() also emits a
+# header, a salutation and a sign-off, and measure splits on blank lines. So a
+# real letter is SEVEN blocks and every per-slot label was two positions off:
+# block 0 is the name/contact/date header, not "why this role". The CLI calls
+# that number "the number that says which instruction is wrong" — it named the
+# wrong instruction.
+#
+# Everything derives from here, and test_letters asserts the assembled shape
+# matches BLOCK_NAMES, so adding a block without naming it fails the suite.
+
+BODY_SLOTS = (
+    ("why_this_role", "why this role"),
+    ("primary_evidence", "primary evidence"),
+    ("secondary_evidence", "secondary evidence"),
+    ("closing", "closing"),
+)
+BODY_KEYS = tuple(key for key, _ in BODY_SLOTS)
+
+# Scaffolding assemble() wraps around the body. These are real blocks, so they
+# shift the body's indices — that offset is the whole bug above.
+LEADING_BLOCK_NAMES = ("header", "salutation")
+TRAILING_BLOCK_NAMES = ("sign-off",)
+
+# Every block of an ASSEMBLED letter, in the order measure splits them. A bare
+# body (assemble() with no row and no meta) has only the four body blocks.
+BLOCK_NAMES = (LEADING_BLOCK_NAMES
+               + tuple(name for _, name in BODY_SLOTS)
+               + TRAILING_BLOCK_NAMES)
+BODY_OFFSET = len(LEADING_BLOCK_NAMES)
+
+
 LETTER_SCHEMA = {
     "type": "object",
     "properties": {
@@ -146,8 +181,7 @@ LETTER_SCHEMA = {
                            "above as a three-item list.",
         },
     },
-    "required": ["why_this_role", "primary_evidence", "secondary_evidence",
-                 "closing"],
+    "required": list(BODY_KEYS),
     "additionalProperties": False,
 }
 
@@ -315,9 +349,7 @@ def banned_used(text: str) -> list[str]:
 
 def body_text(payload: dict) -> str:
     """The four generated paragraphs, with no scaffolding."""
-    parts = [payload.get(k, "").strip() for k in
-             ("why_this_role", "primary_evidence", "secondary_evidence",
-              "closing")]
+    parts = [payload.get(k, "").strip() for k in BODY_KEYS]
     return "\n\n".join(p for p in parts if p)
 
 

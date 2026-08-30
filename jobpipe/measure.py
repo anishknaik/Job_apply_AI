@@ -21,6 +21,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import letters
+
 log = logging.getLogger(__name__)
 
 SENT_SUFFIX = ".sent.md"
@@ -247,5 +249,7 @@ def summarise(measured: list[dict]) -> dict:
     }
 
 
-SLOT_NAMES = ("why this role", "primary evidence", "secondary evidence",
-              "closing")
+# Derived, never restated — see letters.BLOCK_NAMES for why. These label an
+# ASSEMBLED letter, which is what collect() ever measures: both sides come from
+# disk or documents.content, and both are assembled.
+SLOT_NAMES = letters.BLOCK_NAMES

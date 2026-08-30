@@ -282,3 +282,58 @@ class TestLetterScaffolding:
         """An alias silently changes model under a calibrated prompt."""
         from jobpipe.providers import DEFAULT_PROSE_MODELS
         assert "latest" not in DEFAULT_PROSE_MODELS["gemini"]
+
+
+class TestBlockNamesMatchTheAssembledLetter:
+    """The per-slot label must name the block it actually points at.
+
+    `measure.SLOT_NAMES` used to be a second, hand-written copy of the body
+    slots. It listed four names while `assemble()` emits seven blocks, so
+    every label was two positions off — `[0]` was reported as "why this role"
+    when it is the name/contact/date header, and `[5]` came out as an
+    unnamed "slot 5" when it is the closing. `cli measure` calls that number
+    "the number that says which instruction is wrong", so it named the wrong
+    instruction on every line.
+
+    These tests fail if anyone adds, removes or reorders a block in
+    `assemble()` without updating `BLOCK_NAMES` beside it.
+    """
+
+    ROW = {"company": "Abridge", "title": "SWE"}
+    META = {"name": "Jane Q. Example", "email": "a@b.com",
+            "phone": "(555) 010-0000"}
+
+    def _blocks(self):
+        from jobpipe import measure
+        return measure.paragraphs(
+            letters.assemble(PARAS, row=self.ROW, meta=self.META,
+                             today="August 14, 2026"))
+
+    def test_every_block_has_a_name_and_every_name_a_block(self):
+        assert len(self._blocks()) == len(letters.BLOCK_NAMES)
+
+    def test_each_body_slot_lands_under_its_own_label(self):
+        blocks = self._blocks()
+        for offset, (key, name) in enumerate(letters.BODY_SLOTS):
+            index = letters.BODY_OFFSET + offset
+            assert blocks[index] == PARAS[key], f"{name} is not at [{index}]"
+            assert letters.BLOCK_NAMES[index] == name
+
+    def test_the_scaffolding_blocks_are_named_too(self):
+        blocks = self._blocks()
+        assert letters.BLOCK_NAMES[0] == "header"
+        assert blocks[0].startswith("Jane Q. Example")
+        assert letters.BLOCK_NAMES[1] == "salutation"
+        assert blocks[1] == "Dear Abridge Hiring Team,"
+        assert letters.BLOCK_NAMES[-1] == "sign-off"
+        assert blocks[-1].startswith("Sincerely,")
+
+    def test_measure_labels_are_the_same_object_not_a_copy(self):
+        """A copy is what drifted in the first place."""
+        from jobpipe import measure
+        assert measure.SLOT_NAMES is letters.BLOCK_NAMES
+
+    def test_the_schema_requires_exactly_the_body_slots(self):
+        assert letters.LETTER_SCHEMA["required"] == list(letters.BODY_KEYS)
+        assert (tuple(letters.LETTER_SCHEMA["properties"])
+                == letters.BODY_KEYS)
