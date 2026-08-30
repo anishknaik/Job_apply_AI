@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "jobpipe": {
+      "command": "python",
+      "args": ["-m", "jobpipe.mcp_server"],
+      "cwd": "D:\Job_apply_AI"
+    }
+  }
+}

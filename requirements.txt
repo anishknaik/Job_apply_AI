@@ -21,3 +21,9 @@ google-auth>=2.35
 # Chromium is a separate download: `python -m playwright install chromium`.
 playwright>=1.40
 pypdf>=4.0
+
+# Phase 5 - jobpipe over MCP (local stdio only; a custom connector is reached
+# from Anthropic's cloud, which cannot see this machine's SQLite file, its
+# Chromium, or a gitignored master_profile.md).
+# 2.x renamed FastMCP to MCPServer, so this is not compatible with 1.x code.
+mcp>=2.1
