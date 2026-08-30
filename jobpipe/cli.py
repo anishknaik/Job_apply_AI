@@ -811,6 +811,16 @@ def cmd_daily(args) -> int:
     print(f"=== jobpipe daily {started} ===\n")
     degraded: list[str] = []
 
+    # `runs` was empty and `cli stats`' recent-runs section permanently blank.
+    # run_daily.py is the only caller of start_run/finish_run, but daily.ps1
+    # invokes `cli daily`, so run_daily.py is orphaned and nothing ever
+    # recorded a run. That matters more once the cadence stops being uniform:
+    # with scoring moving off the schedule, "when did the last fetch actually
+    # run" becomes a question with no other answer.
+    run_conn = db.connect(args.db)
+    db.init_schema(run_conn)
+    run_id = db.start_run(run_conn)
+
     def stage(name: str, fn) -> None:
         print(f"--- {name} ---")
         try:
@@ -830,6 +840,28 @@ def cmd_daily(args) -> int:
     else:
         print("--- score ---\n  skipped: pass --yes to authorise spending\n")
     stage("sync", lambda: cmd_sync(args))
+
+    # Counts come from timestamps, not from the stage functions, which return
+    # exit codes. `last_seen_at` is rewritten for every posting the fetch saw,
+    # so counting rows touched since `started` measures the run without
+    # threading a stats object through four separate commands.
+    def since(sql: str) -> int:
+        try:
+            return run_conn.execute(sql, (started,)).fetchone()[0]
+        except Exception:                                 # noqa: BLE001
+            return 0
+
+    db.finish_run(
+        run_conn, run_id,
+        fetched=since("SELECT COUNT(*) FROM postings WHERE last_seen_at >= ?"),
+        new_postings=since(
+            "SELECT COUNT(*) FROM postings WHERE first_seen_at >= ?"),
+        stage_a_pass=since(
+            "SELECT COUNT(*) FROM postings WHERE stage_a_passed = 1 "
+            "AND last_seen_at >= ?"),
+        scored=since("SELECT COUNT(*) FROM scores WHERE scored_at >= ?"),
+        errors=", ".join(degraded))
+    run_conn.close()
 
     print(f"=== finished {db.utcnow()} ===")
     if degraded:

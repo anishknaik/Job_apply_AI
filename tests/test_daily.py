@@ -69,3 +69,47 @@ class TestSpendGate:
     def test_the_free_stages_still_run_without_yes(self, stages):
         cli.cmd_daily(args(yes=False))
         assert "fetch" in stages and "sync" in stages
+
+
+class TestRunIsRecorded:
+    """`runs` was empty and `cli stats`' recent-runs section permanently blank.
+
+    run_daily.py calls start_run/finish_run but daily.ps1 invokes `cli daily`,
+    so run_daily.py is orphaned and nothing ever wrote a row. With scoring
+    moving off the schedule the cadence stops being uniform, and "when did the
+    last fetch actually run" becomes a question with no other answer.
+    """
+
+    @pytest.fixture
+    def dbfile(self, tmp_path):
+        return str(tmp_path / "runs.db")
+
+    def test_a_clean_run_writes_a_finished_row(self, stages, dbfile):
+        from jobpipe import db
+        assert cli.cmd_daily(args(db=dbfile)) == 0
+        conn = db.connect(dbfile)
+        rows = conn.execute("SELECT * FROM runs").fetchall()
+        assert len(rows) == 1
+        assert rows[0]["started_at"] and rows[0]["finished_at"]
+        assert not rows[0]["errors"]
+
+    def test_a_degraded_run_records_which_stage_failed(self, stages, dbfile,
+                                                       monkeypatch):
+        def boom(_a):
+            raise RuntimeError("greenhouse 503")
+        monkeypatch.setattr(cli, "cmd_fetch", boom)
+
+        assert cli.cmd_daily(args(db=dbfile)) == 1
+        from jobpipe import db
+        row = db.connect(dbfile).execute("SELECT * FROM runs").fetchone()
+        # The row still closes: a degraded run is a run, and a run with no
+        # finished_at is indistinguishable from one that is still going.
+        assert row["finished_at"]
+        assert "fetch" in row["errors"]
+
+    def test_each_invocation_is_its_own_row(self, stages, dbfile):
+        for _ in range(3):
+            cli.cmd_daily(args(db=dbfile))
+        from jobpipe import db
+        assert db.connect(dbfile).execute(
+            "SELECT COUNT(*) FROM runs").fetchone()[0] == 3
