@@ -148,8 +148,13 @@ class TestListQueue:
 
 
 class TestGetPosting:
-    def test_unknown_id_raises(self, conn):
-        with pytest.raises(ValueError, match="no posting with id"):
+    def test_unknown_id_raises_an_anticipated_error(self, conn):
+        """ToolError, not a bare exception. An anticipated failure returns
+        is_error with the message intact for the model to correct from; a
+        crash gives it only "Error executing tool get_posting" and withholds
+        the reason, which is how a recoverable mistake becomes a dead end."""
+        from mcp.server.mcpserver.exceptions import ToolError
+        with pytest.raises(ToolError, match="no posting with id 99999"):
             mcp_server.get_posting(conn, 99999)
 
     def test_the_description_is_labelled_untrusted(self, conn):
@@ -163,6 +168,15 @@ class TestGetPosting:
 
     def test_the_score_comes_along(self, conn):
         assert mcp_server.get_posting(conn, seed(conn))["score"]["overall"] == 8
+
+
+class TestUnknownStatus:
+    def test_it_names_the_statuses_that_would_have_worked(self, conn):
+        from mcp.server.mcpserver.exceptions import ToolError
+        with pytest.raises(ToolError) as caught:
+            mcp_server.list_queue(conn, status="banana")
+        message = str(caught.value)
+        assert "banana" in message and "not_applied" in message
 
 
 class TestMeasure:

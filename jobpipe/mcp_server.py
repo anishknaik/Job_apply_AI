@@ -34,6 +34,7 @@ import logging
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
 from . import db, measure as _measure, states
@@ -89,7 +90,16 @@ def _tier_map() -> dict[str, int]:
 def list_queue(conn, status: str = "not_applied",
                limit: int = 25) -> dict[str, Any]:
     """Postings at one status, ordered tier then apply_score."""
-    wanted = states.normalise(status)
+    # ToolError, not ValueError: an anticipated failure returns is_error with
+    # the message intact for the model to read and correct from, and is logged
+    # at INFO. Anything else is treated as a crash - the model sees only
+    # "Error executing tool list_queue" and the reason is withheld.
+    try:
+        wanted = states.normalise(status)
+    except ValueError as exc:
+        # states.UnknownStatus already names every valid id; re-raising as a
+        # ToolError is only about how it travels, not what it says.
+        raise ToolError(str(exc)) from exc
     current = db.current_statuses(conn)
     ids = [pid for pid, value in current.items() if value == wanted]
 
@@ -137,7 +147,7 @@ def get_posting(conn, posting_id: int) -> dict[str, Any]:
     row = conn.execute("SELECT * FROM postings WHERE id = ?",
                        (posting_id,)).fetchone()
     if row is None:
-        raise ValueError(f"no posting with id {posting_id}")
+        raise ToolError(f"no posting with id {posting_id}")
 
     score = conn.execute("SELECT * FROM scores WHERE posting_id = ?",
                          (posting_id,)).fetchone()
