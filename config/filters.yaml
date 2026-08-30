@@ -83,6 +83,32 @@ title_exclude:
   # matters for the one near-miss in the calibration set: Abridge's "Senior
   # Software Engineer, Data", scored 3 with "would be an 8 at mid-level —
   # watch for an I/II req".
+  #
+  # `lead` AUDITED 2026-08-30 (POST_PHASE2_FIXES 1.1 action 2 asked for this).
+  # Verdict: keep it, unchanged. What the data says, over the 835 postings and
+  # 813 distinct titles it has killed:
+  #
+  #   * It never over-matches. Zero of the 813 titles contain `lead` inside
+  #     another word, so it is not silently eating "leader" or "leadership".
+  #   * 750 of 813 have `lead` as the ONLY seniority marker, so it is doing
+  #     real work rather than duplicating `senior` or `manager`. Of those, 131
+  #     are technical titles - "Engineering Lead", "AI Engineering Lead",
+  #     "Compute Engineering Lead", "Applied Perception Engineering Lead" -
+  #     and every one reads as genuine ownership. None is new-grad shaped.
+  #   * Exactly one title uses `lead` as a non-seniority noun, "Lead
+  #     Generation Strategy and Operations", which is sales and is excluded on
+  #     other grounds anyway.
+  #
+  # One caveat worth writing down rather than rediscovering. The justification
+  # above - "all 9 senior/lead/manager titled postings scored 1-3" - can no
+  # longer be reproduced: calibration.csv holds no seniority-titled rows at
+  # all, and the apparent hits in the notes and holdout sets are all "Member
+  # of Technical Staff", which is not a seniority title. That is exactly what
+  # you would expect, because once these terms are in title_exclude the
+  # postings never reach scoring, so a hand-scored set drawn from scored
+  # postings cannot contain them. The claim is not wrong; it is just no longer
+  # falsifiable from the current data, and re-auditing it needs postings
+  # pulled from the killed rows rather than the scored ones.
   - senior
   - sr
   - lead

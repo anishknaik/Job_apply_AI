@@ -57,8 +57,15 @@ as if it were human editing.
 then edit. `measure` refuses stale pairs and says so.
 
 **Do not hand-edit `resume.pdf`.** It is assembled from the bullet bank, and
-that traceability is the whole fabrication guarantee. If a resume is wrong, fix
-the bank, a bullet's `rank`, or its `skills` tags — then regenerate.
+that traceability is the whole fabrication guarantee *for bullet text*. If a
+resume is wrong, fix the bank, a bullet's `rank`, or its `skills` tags — then
+regenerate.
+
+The guarantee stops at the header. Name, contact, degree, coursework and each
+role's company, title and dates are trusted YAML that nothing validates. Their
+source of truth is `master_profile.md` §12; edit there, and `pytest
+tests/test_bullets.py -k Header` will tell you if the bank has drifted from
+it.
 
 ## Do not run anything that scores
 

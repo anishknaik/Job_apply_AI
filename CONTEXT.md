@@ -133,11 +133,21 @@ skills, not enough years — and one number cannot carry both.
 **Rank, not threshold.** Scores pile onto 6, so a fixed cutoff swung the sheet
 between 3 and 12 rows. Top 25, floor 4, 3 per company.
 
-**The bullet bank is a structural firewall.** Bullet ids are compiled into the
-response schema as an `enum`, so the API rejects an invented id before it
-reaches the code; `Bank.select` re-checks anyway. **A resume literally cannot
-fabricate.** Only the cover letter writes prose, which is why grounding exists
-for that module alone.
+**The bullet bank is a structural firewall — over bullet text.** Bullet ids
+are compiled into the response schema as an `enum`, so the API rejects an
+invented id before it reaches the code; `Bank.select` re-checks anyway. **No
+model can put a sentence in the experience section that a human did not
+write.** Only the cover letter writes prose, which is why grounding exists for
+that module alone.
+
+**The header block is NOT covered, and this used to be stated too broadly.**
+`meta:`, `education:` and each role's company, title and dates are trusted
+YAML — hard-required by `load_bank()` at `bullets.py:162` and read straight
+into the PDF at `resume.py:213-219`. Nothing validates them. A model cannot
+reach them either, so MCP does not widen the gap; the exposure is that a stale
+or mistyped hand edit reaches every generated resume with nothing in between.
+`master_profile.md` §12 is now the source of truth for those fields and
+`TestHeaderMatchesTheProfile` fails when the two drift.
 
 **Status is an append-only event log, not a column.** "Advance rate" is a
 question about transitions; overwriting `interview` with `rejected` destroys
