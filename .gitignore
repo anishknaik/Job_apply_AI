@@ -1,7 +1,11 @@
-# Secrets — never commit
-.env
-config/service_account.json
-config/master_profile.md
+# Secrets — never commit.
+# Globbed, not exact: a backup or timestamped copy (master_profile.md.bak,
+# .env.old) would not match an exact name and would be committed silently.
+# .env.example is re-included below because it is a template, not a secret.
+.env*
+!.env.example
+config/service_account.json*
+config/master_profile.md*
 
 # Personal documents (Phase 2 inputs). Real name, address, employment history
 # and things written to specific companies. The README stays; nothing else does.
