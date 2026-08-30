@@ -588,6 +588,25 @@ Gemini. Run them in parallel.
    Nothing writes. This proves the transport and settles §9.6.7 — how Cowork
    registers MCP servers in the current build, checked in the app, not from
    memory — against something that cannot damage state.
+
+   **DONE 2026-08-30, and §9.6.7 is settled.** A local stdio server registered
+   through a project `.mcp.json` loads and is callable. Confirmed by calling
+   all five from a live session, not by reading docs: `stats` returned 16,600
+   postings, `list_queue` came back ordered tier then apply_score, and a bad
+   id returned `is_error` carrying `no posting with id 999999`.
+
+   Two things the standing-up found that offline tests could not. mcp 2.x
+   renamed `FastMCP` to `MCPServer` and exposes annotations as
+   `read_only_hint`, so the API had to be read off the installed package.
+   And anything that is not a `ToolError` is treated as a crash: the model
+   receives only "Error executing tool X" with the reason stripped, so every
+   anticipated failure must raise `ToolError` or a recoverable mistake becomes
+   a dead end.
+
+   The transport question is therefore closed in favour of **stdio, local
+   desktop session**. A custom connector is reached from Anthropic's cloud,
+   which cannot see this machine's SQLite file, its Chromium, or a gitignored
+   `master_profile.md`.
 2. **The §8.3 fix.** `copy_for_editing` and `advance_status`. No refactor
    needed, and it is the entire business case. **Then stop and use it for two
    or three real applications** before building further. That produces the
