@@ -1,0 +1,7 @@
+# Line endings are normalised to LF in the repository.
+#
+# The baseline commit was made with core.autocrlf=true, so every blob is LF
+# while several working files were left CRLF. Editing one then rendered as a
+# whole-file rewrite — jobpipe/cli.py showed 1,075 deleted lines for a 32-line
+# change. Pinning it here means the question never comes up again.
+* text=auto eol=lf
