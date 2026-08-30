@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{NAME}}</title>
+<style>
+/* ATS safety is the whole design brief here (Phase 2 spec 3.3). Single
+   column, no tables, no text boxes, no headers or footers, no images, and
+   standard section headings. Anything that renders prettily but extracts to
+   mush is worse than something plain. */
+
+@page {
+  size: Letter;
+  /* 0.5in is the floor the spec allows. The one-page loop drops a bullet
+     rather than going below it, because tighter margins are a parse risk. */
+  margin: 0.5in;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  /* Calibri (and its metric-compatible open twin Carlito) is what the
+     hand-built resume uses, and it is materially narrower than Arial: the
+     same 16 bullets measured 1059px in Arial against 1015px here, purely
+     from less line wrapping. Arial stays last as a fallback. Nothing
+     decorative — a font the extractor lacks maps to vector outlines, which
+     extract to nothing at all. */
+  font-family: Calibri, Carlito, "Segoe UI", Arial, sans-serif;
+  font-size: {{FONT_SIZE}}pt;
+  line-height: 1.16;
+  color: #000;
+
+  /* THE non-obvious one. Without this, "verification" renders with an fi
+     ligature, which is the single codepoint U+FB01. PDF text extractors
+     decode it back to that codepoint, so the ATS sees "veri<fi>cation" and
+     the keyword never matches. Lifted from career-ops' template, which is
+     where this problem is documented. */
+  font-variant-ligatures: none;
+  -webkit-font-variant-ligatures: none;
+  font-kerning: normal;
+}
+
+/* --- header ------------------------------------------------------------ */
+.name {
+  font-size: {{NAME_SIZE}}pt;
+  font-weight: bold;
+  letter-spacing: 0.02em;
+  text-align: center;
+  margin: 0 0 2pt;
+}
+
+.contact, .headline {
+  text-align: center;
+  font-size: {{SMALL_SIZE}}pt;
+  margin: 0 0 1pt;
+}
+
+.headline {
+  font-style: italic;
+  margin-bottom: 5pt;
+}
+
+/* --- sections ----------------------------------------------------------- */
+h2 {
+  font-size: {{FONT_SIZE}}pt;
+  font-weight: bold;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  border-bottom: 0.7pt solid #000;
+  margin: 6.5pt 0 3pt;
+  padding-bottom: 1pt;
+  /* A heading alone at the foot of a page is the classic orphan. */
+  page-break-after: avoid;
+}
+
+.entry {
+  margin-bottom: 4pt;
+  /* Deliberately NOT page-break-inside: avoid.
+     The obvious instinct is to keep a role and its bullets together, and on a
+     multi-page document that is right. Here the output is enforced to one
+     page, so there is never a break to avoid — and the rule actively harms:
+     an entry that will not fit the remaining space is ejected whole, so 2% of
+     overflow costs a full block. With it on, a selection measuring 23px over
+     lost six bullets before it fit. Without it, measured height and actual
+     pagination agree and the loop drops the minimum. */
+}
+
+.entry-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12pt;
+}
+
+/* DOM order is reading order. Flex is used only to push dates right; it
+   never reorders, because extraction follows the DOM, not the paint. */
+.entry-title { font-weight: bold; }
+.entry-meta  { white-space: nowrap; font-size: {{SMALL_SIZE}}pt; }
+.entry-sub   { font-style: italic; font-size: {{SMALL_SIZE}}pt; margin: 0; }
+
+/* A named workstream inside a role (e.g. the three projects under Gradient
+   Tensor). Bold name, italic stack — the stack line is where most of an
+   experience section's ATS keywords actually live. */
+.group-head {
+  margin: 2.5pt 0 0;
+  font-size: {{SMALL_SIZE}}pt;
+  font-weight: bold;
+}
+.group-head em { font-weight: normal; font-style: italic; }
+
+ul {
+  margin: 2pt 0 0;
+  padding-left: 15pt;
+}
+
+li {
+  margin-bottom: 1pt;
+}
+
+.skills p {
+  margin: 0 0 2pt;
+}
+
+.edu-line { margin: 0; }
+.coursework { font-size: {{SMALL_SIZE}}pt; margin: 1pt 0 0; }
+</style>
+</head>
+<body>
+
+<div class="name">{{NAME}}</div>
+<p class="contact">{{CONTACT}}</p>
+<p class="headline">{{HEADLINE}}</p>
+
+<h2>Education</h2>
+<div class="entry">
+  <div class="entry-head">
+    <span class="entry-title">{{SCHOOL}}</span>
+    <span class="entry-meta">{{EDU_DATE}}</span>
+  </div>
+  <p class="entry-sub">{{DEGREE}}</p>
+  <p class="coursework">Relevant coursework: {{COURSEWORK}}</p>
+</div>
+
+<h2>Experience</h2>
+{{EXPERIENCE}}
+
+<h2>Projects</h2>
+{{PROJECTS}}
+
+<h2>Skills</h2>
+<div class="skills">
+{{SKILLS}}
+</div>
+
+</body>
+</html>

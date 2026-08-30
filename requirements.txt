@@ -1,0 +1,16 @@
+# Phase 1 runtime
+requests>=2.32
+PyYAML>=6.0
+python-dotenv>=1.0
+
+# Stage B scoring (pinned once the master profile lands)
+anthropic>=0.69
+
+# Google Sheets sync — service account auth
+gspread>=6.1
+google-auth>=2.35
+
+# Phase 2 — resume rendering (HTML -> PDF) and ATS parse verification.
+# Chromium is a separate download: `python -m playwright install chromium`.
+playwright>=1.40
+pypdf>=4.0

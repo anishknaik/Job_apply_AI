@@ -1,0 +1,432 @@
+# Stage A: deterministic filters. No LLM, no cost.
+#
+# Every posting killed here is one you never pay to score. The spec's target is
+# ~70% kill rate; pushing it to 90% cuts the recurring API bill by two-thirds
+# for free. Tune this file rather than the scoring prompt.
+#
+# All matching is case-insensitive substring matching on the lowercased field.
+# Rules are evaluated in the order below; the FIRST failing rule is recorded in
+# `stage_a_reason` so you can audit exactly what is being thrown away:
+#     python -m jobpipe.cli audit --limit 40
+
+# ---------------------------------------------------------------------------
+# 1. Title allowlist. A posting must match at least one of these to survive.
+#
+# This is the single highest-leverage rule in the file. Companies like OpenAI
+# and Databricks post hundreds of roles across sales, recruiting, legal,
+# marketing and finance; without an allowlist you pay to score all of them.
+# Leave empty ([]) to disable the allowlist entirely.
+# ---------------------------------------------------------------------------
+title_require_any:
+  - engineer
+  - engineering
+  - developer
+  - scientist
+  - researcher
+  - research
+  - machine learning
+  - deep learning
+  # Matching is word-boundary, not substring, so short terms are safe:
+  # "ml" will not match "html", "ai" will not match "email".
+  - ml
+  - ai
+  - llm
+  - nlp
+  - data
+  - database
+  - analytics
+  - analyst
+  - backend
+  - back-end
+  - full stack
+  - fullstack
+  - full-stack
+  - platform
+  - infrastructure
+  - software
+  - sre
+  - devops
+  - mlops
+  # "Member of Technical Staff" is the standard IC engineering title at most
+  # AI labs (Perplexity, Cohere, OpenAI, Cockroach Labs). Without these the
+  # allowlist drops all of them. Matched on "technical staff" rather than the
+  # full phrase so the "Member of *the* Technical Staff" variant is caught too.
+  - technical staff
+  - mle
+
+# ---------------------------------------------------------------------------
+# 2. Title blocklist. Any match kills the posting, even if it passed the
+#    allowlist above. Blocklist wins over allowlist.
+#
+# The seniority terms encode "mid-level IC": they strip both the too-junior
+# (intern, new grad) and the too-senior / non-IC (staff, principal, director).
+# Comment out any line you want back.
+# ---------------------------------------------------------------------------
+title_exclude:
+  # too junior — note that new-grad and early-career postings are NOT excluded.
+  # They are the highest-value postings in the dataset for a recent grad, and
+  # excluding them cost real roles: Snowflake's "AI Research Scientist, New
+  # Grad", Sentry's "Software Engineer, New Grad (2027)" and Sigma's "Software
+  # Engineer (New Grad Program)" were all being deleted before scoring.
+  - intern
+  - internship
+  #
+  # Seniority. These were briefly removed on the argument that a Stage A false
+  # positive costs a fraction of a cent while a false negative is permanent.
+  # The hand-scored calibration set settled it: all 9 senior/lead/manager
+  # titled postings scored 1-3, with no exception. Seniority is functioning as
+  # a gate in the human judgement, not as one dimension among three, so it
+  # belongs in Stage A where it costs nothing.
+  #
+  # Nothing is lost from the database — killed rows keep their reason, so
+  # `cli audit --rule title_exclude` still surfaces them on demand. That
+  # matters for the one near-miss in the calibration set: Abridge's "Senior
+  # Software Engineer, Data", scored 3 with "would be an 8 at mid-level —
+  # watch for an I/II req".
+  - senior
+  - sr
+  - lead
+  - manager
+  - principal
+  - director
+  - vp
+  - vice president
+  - head of
+  - staff
+  - distinguished
+  - fellow
+  - chief
+  # adjacent functions that slip past the allowlist
+  - sales engineer
+  - solutions engineer
+  - solution engineer
+  - support engineer
+  - customer engineer
+  - field engineer
+  - forward deployed
+  - technical account
+  - recruiter
+  - recruiting
+  # non-engineering roles that slipped through the allowlist on a single word
+  # ("data" in Data Center, "analyst" in Risk Analyst, "infrastructure" in
+  # Capital Markets - Infrastructure Financing)
+  - account executive
+  - solutions architect
+  - solution architect
+  - technical architect
+  - counsel
+  - executive assistant
+  - developer relations
+  - developer advocate
+  - devrel
+  - curriculum
+  - instructor
+  - data center
+  - capital markets
+  - sourcing
+  - demand planning
+  - enforcement analyst
+  - risk analyst
+  - product designer
+  - deployment strategist
+
+# ---------------------------------------------------------------------------
+# 2b. Phrases that are masked out of the title BEFORE the blocklist runs.
+#
+# Purely to stop one high-cost collision: "Member of Technical Staff" is the
+# standard IC engineering title at most AI labs, and the bare `staff` entry
+# above would otherwise delete every one of them (81 postings on the first
+# real run, 65 of them in an allowed location). Masking rather than
+# whitelisting keeps the rest of the blocklist live for these titles.
+# ---------------------------------------------------------------------------
+title_exclude_unless:
+  - member of technical staff
+  - technical staff
+
+# ---------------------------------------------------------------------------
+# 3. Location.
+#
+# Location strings are frequently multi-valued:
+#     "San Francisco, CA | New York City, NY"
+#     "United Kingdom; Dublin; United States; New York; Sofia"
+# so they are split on ; | / , and each location is judged on its own. A
+# posting is kept if ANY single location it names is one you'd work in.
+#
+# Judging the whole string at once is what made an OpenAI role open in
+# San Francisco, New York AND London fail on "london". Postings with no
+# location at all pass through to Stage B.
+# ---------------------------------------------------------------------------
+# US-wide, because relocation is on the table. The previous NYC-metro-only
+# list was discarding 272 US roles — including Anthropic's Research Engineer,
+# Interpretability — purely for being in San Francisco. Only 7 of the 279 it
+# killed were actually foreign, so as a filter it was almost entirely wrong.
+#
+# Still an allowlist rather than an empty rule: emptying it would let
+# city-only foreign locations ("Gurugram", "Sydney") through, since they match
+# nothing in location_exclude.
+#
+# `us` is safe with word-boundary matching — it catches "US", "US-CA-Menlo
+# Park" and "US Timezones" without firing inside "Austin" or "Houston".
+location_allow:
+  - remote
+  - anywhere
+  - distributed
+  - united states
+  - usa
+  - u.s.
+  - us
+  - us timezones
+  # NYC metro
+  - new york
+  - nyc
+  - ny
+  - brooklyn
+  - manhattan
+  - newark
+  - jersey city
+  - hoboken
+  - new jersey
+  # Bay Area
+  - san francisco
+  - sf
+  - bay area
+  - palo alto
+  - mountain view
+  - menlo park
+  - sunnyvale
+  - san jose
+  - oakland
+  - santa clara
+  # Pacific Northwest
+  - seattle
+  - bellevue
+  - redmond
+  - portland
+  # Southern California
+  - los angeles
+  - san diego
+  - irvine
+  - santa monica
+  # Northeast
+  - boston
+  - cambridge
+  - philadelphia
+  - pittsburgh
+  # Texas / South
+  - austin
+  - dallas
+  - houston
+  - atlanta
+  - miami
+  - nashville
+  - raleigh
+  - charlotte
+  # Mountain / Midwest
+  - denver
+  - boulder
+  - salt lake city
+  - phoenix
+  - chicago
+  - minneapolis
+  - detroit
+  - madison
+  # Capital region
+  - washington
+  - dc
+  - arlington
+  - reston
+  - bethesda
+
+# Applied per-location, not to the whole string. Catches "Remote - India"
+# and "Netherlands (remote)", which would otherwise pass on the word "remote".
+#
+# Foreign locations stay excluded regardless of relocation: STEM OPT requires
+# US employment, so a role outside the US is not actionable whatever the fit.
+location_exclude:
+  - india
+  - emea
+  - apac
+  - latam
+  - poland
+  - germany
+  - berlin
+  - ireland
+  - dublin
+  - netherlands
+  - amsterdam
+  - spain
+  - france
+  - paris
+  - sofia
+  - bulgaria
+  - portugal
+  - sweden
+  - switzerland
+  - zurich
+  - united kingdom
+  - uk               # "UK (remote)" otherwise passes on the word "remote"
+  - scotland
+  - wales
+  - london
+  - toronto
+  - canada
+  - brazil
+  - mexico
+  - japan
+  - tokyo
+  - korea
+  - china
+  - israel
+  - tel aviv
+  - singapore
+  - australia
+  - new zealand
+  - philippines
+  - vietnam
+  - argentina
+  - colombia
+  - costa rica
+
+# ---------------------------------------------------------------------------
+# 4. Posting age. Postings older than this are skipped. Postings with no date
+#    survive (many boards omit it) and are left to Stage B.
+#
+# Raised from the spec's 30 to 60: new-grad and early-career programmes are
+# posted early and stay open for months, so a 30-day window silently drops
+# them. Notion's "Software Engineer, Early Career (AI)" was killed at 36 days.
+# ---------------------------------------------------------------------------
+max_age_days: 60
+
+# Titles exempt from the age rule entirely. New-grad and campus programmes are
+# posted many months ahead and stay open the whole time — Sigma's "Software
+# Engineer (New Grad Program)", open in New York, was 127 days old and being
+# discarded on age alone.
+max_age_exempt_titles:
+  - new grad
+  - new graduate
+  - early career
+  - university grad
+  - campus
+  - graduate program
+  - graduate programme
+  - rotational
+
+# ---------------------------------------------------------------------------
+# 5. Years of experience. Kills a posting whose stated minimum is above this.
+#
+# The only seniority judgement made from the description in Stage A; everything
+# more nuanced belongs in Stage B, which reads the whole posting. Detection
+# requires the number to sit near the word "experience", so "10 years of
+# company history" does not trigger it, and takes the LOWEST requirement found
+# — a posting asking "3-5 years required, 8+ preferred" has a real bar of 3.
+#
+# Set to null to disable.
+# ---------------------------------------------------------------------------
+max_years_experience: 4
+
+# ---------------------------------------------------------------------------
+# 6. Sponsorship. The candidate is on STEM OPT and will need sponsorship, so a
+#    posting that rules it out is disqualifying regardless of fit.
+#
+# This is its own rule rather than another description_exclude entry so that
+# `cli histogram` reports it separately and its output can be audited on its
+# own — a false positive here is invisible and permanent.
+#
+# CRITICAL: match only the NEGATIVE phrasings. The bare word "sponsor" appears
+# just as often in postings that DO sponsor ("we are happy to sponsor",
+# "visa sponsorship available"), and matching it would delete exactly the
+# postings this candidate most needs.
+# ---------------------------------------------------------------------------
+# Checked FIRST. An explicit positive declaration anywhere in the posting
+# disables the sponsorship rule entirely for that posting.
+#
+# This exists because of one specific, verified near-miss. Anthropic — a tier-1
+# target — puts this on every single posting:
+#
+#   "Visa sponsorship: We do sponsor visas! However, we aren't able to
+#    successfully sponsor visas for every role and every candidate"
+#
+# It is lexically almost identical to a genuine refusal ("we are not currently
+# able to sponsor visas for fellows") and semantically the opposite. Any
+# pattern loose enough to catch the refusal also matches this and would delete
+# Anthropic's entire board without a trace.
+# EVERY phrase here must be negation-safe: it must not appear as a substring
+# inside a refusal. Two shipped bugs of exactly this kind:
+#   "able to sponsor visas for" matched inside "not currently able to sponsor
+#       visas for fellows"
+#   "sponsorship is available"  matched inside "No sponsorship is available"
+# Both silently cancelled a genuine refusal. Anchoring each phrase to an
+# explicit subject ("we <verb>") makes negation break the match instead:
+# "we do not offer sponsorship" does not contain "we offer sponsorship".
+#
+# tests/test_filters_addendum.py asserts this property against a list of real
+# refusal sentences — add new phrases there first.
+sponsorship_allow:
+  - we do sponsor
+  - we sponsor visas
+  - we will sponsor
+  - we can sponsor
+  - we offer sponsorship
+  - we offer visa sponsorship
+  - we provide sponsorship
+  - we provide visa sponsorship
+  - happy to sponsor
+  - glad to sponsor
+  - willing to sponsor
+
+sponsorship_exclude:
+  - unable to sponsor
+  - not able to sponsor
+  - not currently able to sponsor
+  - not currently sponsoring
+  - unable to offer sponsorship
+  - unable to offer visa sponsorship
+  - do not offer visa sponsorship
+  - does not offer visa sponsorship
+  - not considering candidates who require sponsorship
+  - must not require sponsorship
+  - cannot sponsor
+  - can not sponsor
+  - do not sponsor
+  - does not sponsor
+  - will not sponsor
+  - not sponsor visas
+  - no sponsorship
+  - without sponsorship
+  - no visa sponsorship
+  - sponsorship is not available
+  - sponsorship not available
+  - not offer sponsorship
+  - not offer visa sponsorship
+  - not provide sponsorship
+  - not provide visa sponsorship
+  - unable to provide sponsorship
+  - unable to provide visa sponsorship
+  - not eligible for sponsorship
+  - ineligible for sponsorship
+  - permanent work authorization
+  - permanent work authorisation
+  - authorized to work in the united states without
+  - authorised to work in the united states without
+  - legally authorized to work without
+  - work authorization without sponsorship
+  - not require sponsorship now or in the future
+  - now or in the future require sponsorship
+  - require sponsorship now or in the future
+
+# ---------------------------------------------------------------------------
+# 7. Description blocklist. Catches the dealbreaker buried in paragraph nine.
+#    Matched against the plain-text description.
+# ---------------------------------------------------------------------------
+description_exclude:
+  - security clearance
+  - ts/sci
+  - top secret
+  - polygraph
+  - must be a us citizen
+  - u.s. citizenship is required
+  - on-site 5 days
+  - onsite 5 days
+  - 5 days a week in office
+  - fully on-site
+  - fully onsite

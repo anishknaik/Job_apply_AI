@@ -1,0 +1,90 @@
+"""Provider registry. Swapping models is a config change, not a code change.
+
+    JOBPIPE_PROVIDER=gemini
+    JOBPIPE_SCORING_MODEL=gemini-3.1-flash-lite
+"""
+from __future__ import annotations
+
+import os
+
+from .base import ProviderError, ProviderResponse, ScoringProvider
+
+DEFAULT_PROVIDER = "gemini"
+
+# Sensible primary model per provider, used when JOBPIPE_SCORING_MODEL is
+# unset. Note gemini-2.5-flash-lite is deliberately NOT here: it is no longer
+# available to new API keys (verified live 2026-08-12), despite being the
+# model addendum §2 names.
+DEFAULT_MODELS = {
+    "gemini": "gemini-3.1-flash-lite",
+    "anthropic": "claude-haiku-4-5",
+}
+
+# Addendum §2's escalation ladder: escalate the model, not the provider.
+DEFAULT_ESCALATION_MODELS = {
+    "gemini": "gemini-3.5-flash-lite",
+    "anthropic": "claude-sonnet-5",
+}
+
+# Phase 2 §5: cover letter prose is quality-sensitive and explicitly must not
+# be cost-optimised, so it gets its own tier rather than inheriting the
+# scoring model. Selection and the grounding check stay on Flash-Lite; only
+# the ~30 letters a month that follow a human's decision to apply run here.
+#
+# §5 names `gemini-3.1-flash`. It does not exist — verified against
+# ListModels, the 3.1 generation ships only flash-lite (plus image and TTS
+# variants). Same trap as addendum §2's `gemini-2.5-flash-lite` in Phase 1:
+# the spec named a plausible model that the API does not have. The nearest
+# faithful reading of "one tier above Flash-Lite for prose" is the cheapest
+# non-lite flash on offer.
+#
+# Deliberately NOT `gemini-flash-latest`: an alias silently changes model
+# underneath a calibrated prompt, and this is the one call whose output
+# quality is the entire deliverable.
+DEFAULT_PROSE_MODELS = {
+    "gemini": "gemini-3.5-flash",
+    "anthropic": "claude-sonnet-5",
+}
+
+
+def default_prose_model(provider: str | None = None) -> str:
+    provider = (provider or os.environ.get("JOBPIPE_PROVIDER")
+                or DEFAULT_PROVIDER).strip().lower()
+    return (os.environ.get("JOBPIPE_PROSE_MODEL")
+            or DEFAULT_PROSE_MODELS.get(provider,
+                                        DEFAULT_PROSE_MODELS[DEFAULT_PROVIDER]))
+
+
+def get_provider(name: str | None = None, **kwargs) -> ScoringProvider:
+    name = (name or os.environ.get("JOBPIPE_PROVIDER")
+            or DEFAULT_PROVIDER).strip().lower()
+
+    if name == "gemini":
+        from .gemini_provider import GeminiProvider
+        return GeminiProvider(**kwargs)
+    if name == "anthropic":
+        from .anthropic_provider import AnthropicProvider
+        return AnthropicProvider(**kwargs)
+
+    raise ProviderError(
+        f"unknown provider {name!r}. Set JOBPIPE_PROVIDER to one of: "
+        f"{', '.join(sorted(DEFAULT_MODELS))}")
+
+
+def default_model(provider: str | None = None) -> str:
+    provider = (provider or os.environ.get("JOBPIPE_PROVIDER")
+                or DEFAULT_PROVIDER).strip().lower()
+    return DEFAULT_MODELS.get(provider, DEFAULT_MODELS[DEFAULT_PROVIDER])
+
+
+def default_escalation_model(provider: str | None = None) -> str:
+    provider = (provider or os.environ.get("JOBPIPE_PROVIDER")
+                or DEFAULT_PROVIDER).strip().lower()
+    return DEFAULT_ESCALATION_MODELS.get(
+        provider, DEFAULT_ESCALATION_MODELS[DEFAULT_PROVIDER])
+
+
+__all__ = ["ProviderError", "ProviderResponse", "ScoringProvider",
+           "get_provider", "default_model", "default_escalation_model",
+           "DEFAULT_MODELS", "DEFAULT_ESCALATION_MODELS",
+           "DEFAULT_PROSE_MODELS", "default_prose_model"]

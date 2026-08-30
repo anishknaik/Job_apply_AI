@@ -1,0 +1,108 @@
+# Application status taxonomy (addendum 4.2).
+#
+# Adapted from templates/states.yml in github.com/santifer/career-ops (MIT),
+# per 5A.1 — lifted rather than invented so there is no vocabulary migration
+# later. Three deliberate changes from the source:
+#
+#   * Spanish and Turkish aliases dropped. The source serves a multilingual
+#     user base; this sheet is English-only and the extra aliases would only
+#     widen the surface for a typo to silently resolve to the wrong state.
+#   * `evaluated` renamed to `surfaced`. In career-ops it means "evaluated
+#     with a report, pending decision", which here is exactly what the
+#     pipeline does when it puts a row on the sheet. The source name reads as
+#     a human judgement; this one is honest about who did it.
+#   * `not_applied` added as the resting state. The source assumes a row
+#     exists because someone decided something; here rows appear on their own
+#     every morning, so "nobody has looked at this yet" is the common case and
+#     needs a name of its own.
+#
+# `terminal: true` marks a state the lifecycle does not progress out of.
+# Non-terminal states are ordered by their position in this list, so a status
+# may only ever move forward — used to spot a sheet edit that moves a row
+# backwards, which is nearly always a typo.
+
+states:
+  - id: not_applied
+    label: Not applied
+    aliases: [new, "", none, todo, "-"]
+    description: On the sheet, no decision made yet
+    terminal: false
+
+  - id: surfaced
+    label: Surfaced
+    aliases: [evaluated, reviewing, hold, considering, maybe]
+    description: Read and under consideration, not yet applied
+    terminal: false
+
+  # The three states below are Phase 2's handshake (addendum 2 §3). They sit
+  # between `surfaced` and `applied` because that is exactly the stretch Phase
+  # 2 automates: you pick a role, a resume is generated, you commit, a cover
+  # letter is generated, you send. Each is a trigger, so the ordering here is
+  # load-bearing — `is_regression` uses list position, and a status moving
+  # backwards through these would re-fire generation.
+
+  - id: queued
+    label: Queued
+    aliases: [selected, queue, generate]
+    description: You have chosen it — triggers resume generation
+    terminal: false
+
+  - id: drafted
+    label: Drafted
+    aliases: [draft, resume ready, generated]
+    description: Resume generated and waiting for your review
+    terminal: false
+
+  - id: applying
+    label: Applying
+    aliases: [committing, in progress, writing]
+    description: You have committed — triggers cover letter generation
+    terminal: false
+
+  - id: applied
+    label: Applied
+    aliases: [sent, submitted]
+    description: Application submitted
+    terminal: false
+
+  - id: responded
+    label: Responded
+    aliases: [replied, screening, recruiter]
+    description: Company has responded, not yet an interview
+    terminal: false
+
+  - id: interview
+    label: Interview
+    aliases: [interviewing, onsite, phone screen, technical]
+    description: Active interview process
+    terminal: false
+
+  - id: offer
+    label: Offer
+    aliases: []
+    description: Offer received
+    terminal: true
+
+  - id: hired
+    label: Hired
+    aliases: [accepted, accept]
+    description: Offer accepted
+    terminal: true
+
+  - id: rejected
+    label: Rejected
+    aliases: [declined by company, no]
+    description: Rejected by the company
+    terminal: true
+
+  - id: discarded
+    label: Discarded
+    aliases: [withdrawn, closed, cancelled, canceled, expired]
+    description: Withdrawn by you, or the req closed
+    terminal: true
+
+  - id: skip
+    label: Skip
+    aliases: [do not apply, dont apply, "don't apply", not a fit, pass]
+    description: Does not fit, deliberately not applying
+    terminal: true

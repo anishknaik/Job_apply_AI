@@ -1,0 +1,56 @@
+# Secrets — never commit
+.env
+config/service_account.json
+config/master_profile.md
+
+# Personal documents (Phase 2 inputs). Real name, address, employment history
+# and things written to specific companies. The README stays; nothing else does.
+samples/**
+!samples/README.md
+
+# Hand-scored calibration data — contains personal judgements about employers
+config/calibration*.csv
+config/calibration*_result.json
+
+# Database (source of truth, but local and large)
+*.db
+*.db-wal
+*.db-shm
+
+# Logs
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# --- added 2026-08-30, before the repo's first commit -------------------
+# The rule applied here: this tree is expected to split into a public half
+# and a private one later. Anything that would be a problem in a public repo
+# is excluded NOW, because removing it from history afterwards is far harder
+# than never committing it.
+
+# Generated applications — real resumes and letters addressed to named
+# companies, carrying name, contact and employment history. Same category as
+# samples/**. The authoritative copy is documents.content in SQLite, so this
+# is data rather than source.
+output/
+
+# Hand verification of the sponsorship rule: judgements about named
+# employers, the same class as the calibration data above.
+config/sponsorship_review.md
+
+# Conversation transcripts and planning notes kept in the tree for reference.
+# Personal content throughout; the .md docs are the maintained record.
+MCP_change_job_apply_claude_convo.txt
+mcp-job-application-pipeline-chat.txt
+open_questions_answered..txt
+
+# Orphaned SQLite -shm files left behind by a FUSE mount. Harmless, not ours.
+.fuse_hidden*
