@@ -211,7 +211,14 @@ def conn():
     connection.close()
 
 
-def add(conn, company, title, overall, apply_score, seen="2026-08-13T00:00:00+00:00"):
+def add(conn, company, title, overall, apply_score, seen=None):
+    # `seen` defaults to now, never to a literal. get_sheet_rows filters on
+    # max_stale_days=7, so a hardcoded timestamp is a time bomb: every row it
+    # seeds is silently filtered out seven days after the date is written and
+    # ten tests below start failing on an empty result set rather than on
+    # anything they actually assert. That is exactly what happened — the old
+    # literal was 2026-08-13 and the suite went red on 2026-08-20.
+    seen = seen or db.utcnow()
     posting = Posting(ats_type="ashby", source_id=f"{company}-{title}",
                       company=company, title=title, location="New York",
                       remote_flag=False, description="", url=f"https://x/{title}",

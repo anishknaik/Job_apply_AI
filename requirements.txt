@@ -6,6 +6,13 @@ python-dotenv>=1.0
 # Stage B scoring (pinned once the master profile lands)
 anthropic>=0.69
 
+# Gemini — the actual Stage B provider. This was the one runtime dependency
+# missing from this file: the code has imported it since Phase 1 and a fresh
+# checkout would have failed at the first score with an ImportError that
+# GeminiProvider.__init__ catches and reports. 2.x speaks both backends, the
+# Developer API and Vertex, which is what Track A's port relies on.
+google-genai>=2.18
+
 # Google Sheets sync — service account auth
 gspread>=6.1
 google-auth>=2.35
