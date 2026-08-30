@@ -99,14 +99,26 @@ def generate_cover_letter(provider, bank, row, letter_system, ground_system,
     folder = application_dir(row, root)
     path = letters.save_letter(result["text"], folder / "cover_letter.md")
 
+    # The row is written and committed BEFORE the check runs. `grounding.check`
+    # raises on a refusal and on zero extracted claims — both deliberately
+    # treated as failures — and this function's caller commits only on the way
+    # out, so under the old order a raised check discarded the document row
+    # entirely. A missing row and a row with a NULL verdict both refuse at
+    # copy_for_editing, but only the second says a draft exists and was never
+    # cleared. It is also the order the MCP tools use, where save_cover_letter
+    # and check_grounding are separate calls.
+    document_id = db.insert_document(conn, row["id"], "cover_letter",
+                                     generated_path=str(path),
+                                     model=prose_model,
+                                     content=result["text"])
+    conn.commit()
+
     check = grounding.check(provider, bank, result["text"],
                             _description(row), ground_system)
+    db.record_grounding(conn, document_id, check)
 
-    db.insert_document(conn, row["id"], "cover_letter",
-                       generated_path=str(path), model=prose_model,
-                       content=result["text"])
     return {"letter": result, "grounding": check, "path": path,
-            "folder": folder}
+            "folder": folder, "document_id": document_id}
 
 
 def _description(row) -> str:

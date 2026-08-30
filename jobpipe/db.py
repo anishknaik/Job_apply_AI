@@ -163,6 +163,43 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     # §7 measures against — was simply gone. Content in the database survives
     # renames, moves, overwrites and deletions.
     ("documents", "content", "TEXT"),
+
+    # --- Phase 5 Slice 0 -------------------------------------------------
+    # Which draft this is, per posting and doc_type. PHASE5_PLAN §5.4 wants
+    # two distances, not one: first save -> final save says how good the
+    # first draft was, final save -> .sent.md says what is still changed
+    # afterwards. One column answers both, and §8.3 has zero rows either way,
+    # so there is no historical continuity to protect.
+    ("documents", "revision", "INTEGER"),
+
+    # The grounding verdict, stored against the draft it was run on. NULL is
+    # meaningful: it is "never checked", which copy_for_editing refuses. A
+    # regenerated letter gets a NEW row via insert_document's supersede, so a
+    # fresh draft cannot inherit its predecessor's pass — the fail-closed
+    # property comes from the schema, not from remembering to invalidate.
+    ("documents", "grounding_ok", "INTEGER"),
+    ("documents", "grounding_accuracy", "REAL"),
+    # Which model checked it. The independence claim in §5.1 is only worth
+    # anything if it is recorded: writer and checker must not be the same.
+    ("documents", "grounding_model", "TEXT"),
+    # The full claim list, not just the flag — a failure has to be readable
+    # after the fact or the gate is unarguable.
+    ("documents", "grounding_claims", "TEXT"),
+    ("documents", "grounding_checked_at", "TEXT"),
+
+    # Whether the form asked for a letter. §5.3 accepts that `measure`'s
+    # population is letter-required applications only; this is what makes
+    # that population inspectable rather than implicit.
+    ("status_events", "letter_required", "INTEGER"),
+
+    # Score provenance. `model` already records the model id and `scored_at`
+    # the time; these add the backend (dev API vs Vertex) and the rubric the
+    # score was produced under, so a corpus mixing 3.1 and 2.5 Flash scores
+    # stays inspectable rather than silently comparable. `domain` is the
+    # company's field, which selects the resume variant downstream.
+    ("scores", "scorer", "TEXT"),
+    ("scores", "rubric_version", "TEXT"),
+    ("scores", "domain", "TEXT"),
 ]
 
 
@@ -521,6 +558,8 @@ def get_sheet_rows(conn: sqlite3.Connection, min_score: int = 4,
 _DOCUMENT_COLUMNS = (
     "posting_id", "doc_type", "archetype", "bullet_ids", "generated_path",
     "sent_path", "model", "generated_at", "edit_distance", "content",
+    "revision", "grounding_ok", "grounding_accuracy", "grounding_model",
+    "grounding_claims", "grounding_checked_at",
 )
 
 _DOCUMENT_INSERT = (
@@ -547,6 +586,21 @@ def insert_document(conn: sqlite3.Connection, posting_id: int, doc_type: str,
     values["posting_id"] = posting_id
     values["doc_type"] = doc_type
     values.setdefault("generated_at", utcnow())
+    if values.get("revision") is None:
+        # Monotonic per posting+doc_type, counting superseded rows too — the
+        # supersede below hides the previous draft from `current_document`
+        # but does not delete it, which is what makes revision 1 -> N a real
+        # sequence rather than a count of what happens to be live.
+        # COALESCE(MAX, COUNT), not MAX alone: the 52 documents that predate
+        # this column have revision NULL, so MAX returns NULL and the next
+        # draft for one of those postings would restart at 1 and collide with
+        # its own history. Counting them instead numbers the new draft after
+        # the drafts that actually exist. Safe because nothing is ever deleted
+        # from this table (§6), so the count only grows.
+        values["revision"] = 1 + (conn.execute(
+            "SELECT COALESCE(MAX(revision), COUNT(*)) FROM documents "
+            "WHERE posting_id = ? AND doc_type = ?",
+            (posting_id, doc_type)).fetchone()[0] or 0)
     if isinstance(values.get("bullet_ids"), (list, tuple)):
         values["bullet_ids"] = json.dumps(list(values["bullet_ids"]))
 
@@ -559,6 +613,26 @@ def insert_document(conn: sqlite3.Connection, posting_id: int, doc_type: str,
         "AND superseded_at IS NULL",
         (utcnow(), posting_id, doc_type, new_id))
     return new_id
+
+
+def record_grounding(conn: sqlite3.Connection, document_id: int,
+                     result) -> None:
+    """Store a grounding verdict against the draft it was run on.
+
+    Committed here rather than left to the caller. `grounding.check` raises on
+    a refusal and on zero extracted claims — both deliberately treated as
+    failures — so a verdict that never arrives must still leave the draft on
+    record as uncleared, and an uncommitted row would vanish with the raise.
+    """
+    import json
+
+    conn.execute(
+        "UPDATE documents SET grounding_ok = ?, grounding_accuracy = ?, "
+        "grounding_model = ?, grounding_claims = ?, grounding_checked_at = ? "
+        "WHERE id = ?",
+        (1 if result.ok else 0, result.accuracy, result.model,
+         json.dumps(result.claims), utcnow(), document_id))
+    conn.commit()
 
 
 def current_document(conn: sqlite3.Connection, posting_id: int,

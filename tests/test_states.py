@@ -234,3 +234,114 @@ class TestAdvanceRates:
         db.record_status(conn, tracked, "applied", None)
         conn.commit()
         assert db.advance_rates(conn)[0]["surfaced"] == 1
+
+
+class TestGroundingVerdictIsStoredAgainstItsDraft:
+    """PHASE5_PLAN §5.2 gates `copy_for_editing` on a passing grounding check.
+
+    The verdict used to be computed and discarded — `generate_cover_letter`
+    returned it in a dict and nothing wrote it down — so there was nothing for
+    a gate to read. Storing it on the document row rather than in a table of
+    its own is what makes the gate fail closed by construction: a regenerated
+    letter is a NEW row via insert_document's supersede, so it starts with a
+    NULL verdict and cannot inherit its predecessor's pass. Nobody has to
+    remember to invalidate anything.
+    """
+
+    @staticmethod
+    def _verdict(*supported):
+        from jobpipe.grounding import GroundingResult
+        return GroundingResult(
+            claims=[{"claim": f"c{i}", "supported": s}
+                    for i, s in enumerate(supported)],
+            model="gemini-2.5-flash-lite")
+
+    def test_a_fresh_draft_has_no_verdict(self, conn):
+        pid = seed(conn)
+        doc = db.insert_document(conn, pid, "cover_letter", content="draft")
+        row = conn.execute("SELECT * FROM documents WHERE id = ?",
+                           (doc,)).fetchone()
+        assert row["grounding_ok"] is None, "unchecked must not read as passed"
+        assert row["grounding_checked_at"] is None
+
+    def test_a_pass_is_recorded_with_its_checker(self, conn):
+        pid = seed(conn)
+        doc = db.insert_document(conn, pid, "cover_letter", content="draft")
+        db.record_grounding(conn, doc, self._verdict("supported", "supported"))
+        row = conn.execute("SELECT * FROM documents WHERE id = ?",
+                           (doc,)).fetchone()
+        assert row["grounding_ok"] == 1
+        assert row["grounding_accuracy"] == 1.0
+        # §5.1's independence claim is only worth something if it is recorded.
+        assert row["grounding_model"] == "gemini-2.5-flash-lite"
+        assert row["grounding_checked_at"]
+
+    def test_a_partial_claim_fails_the_draft(self, conn):
+        pid = seed(conn)
+        doc = db.insert_document(conn, pid, "cover_letter", content="draft")
+        db.record_grounding(conn, doc, self._verdict("supported", "partial"))
+        row = conn.execute("SELECT * FROM documents WHERE id = ?",
+                           (doc,)).fetchone()
+        assert row["grounding_ok"] == 0
+        assert row["grounding_accuracy"] == 0.5
+
+    def test_the_claims_survive_for_inspection(self, conn):
+        """A bare flag makes a failure unarguable after the fact."""
+        import json
+        pid = seed(conn)
+        doc = db.insert_document(conn, pid, "cover_letter", content="draft")
+        db.record_grounding(conn, doc, self._verdict("unsupported"))
+        row = conn.execute("SELECT * FROM documents WHERE id = ?",
+                           (doc,)).fetchone()
+        assert json.loads(row["grounding_claims"])[0]["supported"] \
+            == "unsupported"
+
+    def test_a_regenerated_draft_does_not_inherit_the_pass(self, conn):
+        """The property the whole gate rests on."""
+        pid = seed(conn)
+        first = db.insert_document(conn, pid, "cover_letter", content="v1")
+        db.record_grounding(conn, first, self._verdict("supported"))
+
+        second = db.insert_document(conn, pid, "cover_letter", content="v2")
+        live = db.current_document(conn, pid, "cover_letter")
+        assert live["id"] == second
+        assert live["grounding_ok"] is None, \
+            "a fresh draft inherited the previous draft's pass"
+        # The superseded row keeps its verdict — nothing is ever destroyed.
+        old = conn.execute("SELECT * FROM documents WHERE id = ?",
+                           (first,)).fetchone()
+        assert old["grounding_ok"] == 1
+
+
+class TestRevisionIndex:
+    """§5.4 wants two distances: first save -> final save, and final save ->
+    .sent.md. One monotonic index per posting and doc_type answers both."""
+
+    def test_it_counts_up_from_one(self, conn):
+        pid = seed(conn)
+        ids = [db.insert_document(conn, pid, "cover_letter", content=f"v{i}")
+               for i in range(3)]
+        got = [conn.execute("SELECT revision FROM documents WHERE id = ?",
+                            (i,)).fetchone()[0] for i in ids]
+        assert got == [1, 2, 3]
+
+    def test_doc_types_are_numbered_independently(self, conn):
+        pid = seed(conn)
+        db.insert_document(conn, pid, "cover_letter", content="a")
+        resume = db.insert_document(conn, pid, "resume", generated_path="r")
+        assert conn.execute("SELECT revision FROM documents WHERE id = ?",
+                            (resume,)).fetchone()[0] == 1
+
+    def test_it_does_not_restart_over_rows_that_predate_the_column(self, conn):
+        """The 52 documents already in jobpipe.db have revision NULL. MAX()
+        alone returns NULL there, so the next draft would restart at 1 and
+        collide with a posting's own history."""
+        pid = seed(conn)
+        for content in ("legacy1", "legacy2"):
+            db.insert_document(conn, pid, "cover_letter", content=content)
+        conn.execute("UPDATE documents SET revision = NULL WHERE posting_id = ?",
+                     (pid,))
+        conn.commit()
+        fresh = db.insert_document(conn, pid, "cover_letter", content="new")
+        assert conn.execute("SELECT revision FROM documents WHERE id = ?",
+                            (fresh,)).fetchone()[0] == 3
