@@ -74,7 +74,18 @@ DOMAINS = ["ai_infra", "ai_saas", "data_infra", "product_saas",
 #                 full-stack AI roles. The qualifier is now the rule, and
 #                 full-stack-where-AI-is-the-product moved to actively
 #                 positive.
-RUBRIC_VERSION = "2026-08-31.2"
+#   2026-08-31.3  both rules above restated ON THE FIELD that applies them.
+#                 With escalation working for the first time, 2.5 Pro scored
+#                 71% of a 56-posting set and reverted both fixes: it marked
+#                 Ramp down for "deep frontend expertise" (.1 forbids exactly
+#                 that) and classified an "AI Advisory Consultant" as
+#                 non_technical (.0 names that role as the counterexample).
+#                 Both rules were stated only in prose far from the field.
+#                 archetype is filled FIRST, before any reasoning, and its
+#                 description carried no test at all; skills_match had the
+#                 bare description "0-10". Relocation, not new rules -
+#                 7917ada showed a fourth attempt at prose does not stick.
+RUBRIC_VERSION = "2026-08-31.3"
 
 LEGITIMACY = ["ok", "suspicious", "likely_ghost"]
 
@@ -111,7 +122,16 @@ SCORE_SCHEMA = {
             "type": "string",
             "enum": ARCHETYPES,
             "description": "The lane this posting belongs to. Decided first, "
-                           "because the rubric branches on it.",
+                           "because the rubric branches on it - which means "
+                           "the non_technical test is applied HERE, before "
+                           "any reasoning has been written. non_technical is "
+                           "for work that is not engineering or analysis at "
+                           "its core. A role that scopes, designs or builds "
+                           "ML solutions is ai_ml_engineer even when the "
+                           "title reads Consultant, Advisory, Solutions or "
+                           "Strategy; set engagement=consulting instead. "
+                           "Classify on the responsibilities, never on a "
+                           "business word in the title.",
         },
         "domain": {
             "type": "string",
@@ -162,7 +182,14 @@ SCORE_SCHEMA = {
                            "from both the profile and the posting.",
         },
         "skills_match": {"type": "integer", "minimum": 0, "maximum": 10,
-                         "description": "0-10"},
+                         "description": "0-10 coverage of what the posting "
+                                        "requires. Do NOT reduce it because "
+                                        "a role is frontend-heavy or "
+                                        "full-stack when the posting also "
+                                        "describes AI or ML work: the "
+                                        "profile's negative is the ABSENCE "
+                                        "of ML, never the presence of "
+                                        "frontend."},
         "seniority_fit": {"type": "integer", "minimum": 0, "maximum": 10,
                           "description": "0-10"},
         "domain_relevance": {"type": "integer", "minimum": 0, "maximum": 10,
@@ -349,6 +376,8 @@ systems. A posting that names a tool the candidate has used in a project is a \
 partial match, not a full one, when the posting expects that tool operated at \
 production scale, on-call, or across a large team. Score the overlap the \
 posting actually asks for, not the presence of a keyword in the profile.
+
+**Frontend and full-stack work do not lower this score.** The profile lists general SWE with *no ML at all* as a negative; the qualifier is the rule. When a posting describes AI or ML work, score the overlap on that work. A posting asking for frontend or full-stack skill ALONGSIDE AI work is a full-stack AI role, which the profile marks actively positive - do not read "deep frontend expertise" or "frontend-leaning" as a gap in the candidate.
 
 seniority_fit — how far the posting's stated experience bar sits above the \
 candidate's. This is a DISCOUNT, not a gate. The candidate is early-career \

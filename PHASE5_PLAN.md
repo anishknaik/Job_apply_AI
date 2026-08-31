@@ -26,7 +26,7 @@ sheet sync -> top 25 by rank, human reads
       |
       v
 Cowork session, MCP tools
-  list_queue -> get_posting -> render_resume (pick 1 of 6 fixed variants)
+  list_queue -> get_posting -> render_resume (pick 1 of 7 fixed variants)
               -> save_cover_letter (Claude writes, if the form asks for one)
               -> check_grounding (routes to Gemini, off-session)
               -> copy_for_editing
@@ -185,11 +185,28 @@ does not need one — implicit works. **The 403 on
 `aiplatform.endpoints.predict` therefore stays unsolved, deliberately**, per
 §3.3's own condition: solve only if implicit fails.
 
-**3. `thinking_budget=0` is accepted on both models**, and
+**3. `thinking_budget=0` is accepted on both probed models**, and
 `thoughts_token_count` comes back 0. §3.2 asks for thinking off on the scoring
 call because it is a distinct and more expensive SKU; that is achievable
 cleanly rather than by hoping the default is sensible. Set it explicitly and
 record it in the rubric version.
+
+**Corrected 2026-08-31 — "both models" means Flash and Flash Lite only.**
+`scripts/probe_vertex.py` loops over exactly those two, so the probe never
+covered the escalation model. `gemini-2.5-pro` **rejects** `thinking_budget=0`
+with a 400 — "The model does not support setting thinking_budget to 0" — and
+`VertexGeminiProvider` set the field unconditionally, so escalation never ran.
+It failed silently across all three 2.5 calibration runs, because
+`score_posting` treats a failed escalation as non-fatal and the run reported
+"escalated 0, failed 0". Fixed in `6e42d7b` by omitting `thinking_config` for
+Pro models.
+
+Two consequences for reading the rest of this document. **Every 2.5-vs-3.1
+comparison below is confounded** — 3.1 escalated and worked, 2.5 did not.
+Comparisons *between* the three 2.5 runs stand, since all three shared the same
+broken escalation. And the probe's scope is now part of its result: it answers
+for the models it loops over, which were the two candidates for the scoring
+call and not the one configured to escalate.
 
 One number to carry forward: the probe measured the profile alone at 7,125
 tokens. The production prefix is larger — profile plus rubric plus calibration
@@ -226,7 +243,7 @@ inspectable. Add them in Slice 0, before the first 2.5 score is written.
 
 ---
 
-## 4. Resume variants: six fixed, not per-application
+## 4. Resume variants: seven fixed, not per-application
 
 ### 4.1 The fabrication firewall does not cover the header block
 
@@ -723,6 +740,11 @@ Gemini. Run them in parallel.
    escalation ladder (both `3.1-flash-lite` and `3.5-flash-lite` resolve on
    Vertex at `global`), and populated token counts. 17 offline tests cover the
    usage mapping, refusal handling and the switch.
+
+   **The ladder has since moved.** That verification predates the model swap
+   and records the 3.x rung it ran against. Live `.env` escalates to
+   `gemini-2.5-pro`, which is the rung `6e42d7b` had to fix — see §3.3.
+   Resolution on Vertex was never the problem; the request body was.
 3. Demote `non_technical` to a flag; update the rubric to say what the flag
    means. **DONE 2026-08-30**, `RUBRIC_VERSION = 2026-08-30.1`.
 
@@ -754,7 +776,66 @@ Gemini. Run them in parallel.
    will flip, which is why Claude proposes the variant and Anish confirms.
 4. Rescore the holdout with 2.5 Flash. **Gate:** if it does not fix Scale AI
    and Ramp, stop and diagnose before backfilling.
+
+   **Passed, then falsified, then passed again — 2026-08-31.** The profile fix
+   cleared it on Flash (Ramp 7, Scale AI 6). It was then measured for the first
+   time with escalation actually working, and **both roles regressed** — Ramp
+   5, Scale AI 3, each scored by `gemini-2.5-pro`. The two fixes this gate
+   tests had been developed and validated against Flash alone, because
+   escalation was silently broken for the whole period they were written (see
+   §3.3). Pro had never seen them.
+
+   Pro's reasoning named the cause. On Ramp: "deep frontend expertise ... a
+   stated weakness in the candidate's profile" — the exact inference
+   `master_profile.md` §10 forbids in as many words. On Scale AI:
+   "a non-technical advisory role", which the rubric names as its worked
+   counterexample.
+
+   Fixed in `RUBRIC_VERSION = 2026-08-31.3` by **restating both rules on the
+   field that applies them**, not by adding prose. `archetype` gates the
+   `non_technical` cap, is the first field in the schema and is therefore
+   filled before any reasoning exists, yet its description carried no test at
+   all; `skills_match` had the bare description `"0-10"` while the frontend
+   rule lived only in a profile section about overall fit. Relocation rather
+   than repetition, because `7917ada` had already shown a fourth attempt at
+   rubric prose does not stick.
+
+   Gate now passes with all three diagnostic roles within 1 of the hand score.
+   Note what actually moved: Ramp and Scale AI are now scored by **Flash**,
+   because the corrected `skills_match` lifted Ramp out of the 5-7 escalation
+   band entirely. Pro's own rows improved too, and the escalation rate fell
+   from 71% to 67%.
 5. Rebuild the hand-scored set, record MAE and bias against a rubric version.
+
+   **DONE 2026-08-31**, against `2026-08-31.3`, over a merged 56-posting set —
+   the union of `calibration.csv`, `calibration_holdout.csv` and
+   `calibration_notes.csv`, deduplicated newest-wins because the 6 overlapping
+   rows disagree and the newer sheet is both later and two-axis. `calibrate`
+   takes one `--path`, so the merge is a file: `calibration_merged56.csv`,
+   59 rows of which 56 carry a usable hand score. FIT reports n=43 and APPLY
+   n=55, because the legacy single-column sheet maps onto `my_apply` and
+   leaves fit unknown rather than guessing it.
+
+   ```
+   set                  ver   n   fMAE   fBias   aMAE   aBias   rank    p@5
+   ALL                  .2   55  1.233  +0.256  1.691  +0.345  +0.655   40%
+   ALL                  .3   55  1.279  +0.814  1.436  +0.418  +0.808   40%
+   UNSEEN by .3         .2   36  1.167  -0.250  1.583  +0.083  +0.604   40%
+   UNSEEN by .3         .3   36  1.208  +0.458  1.444  +0.278  +0.743   60%
+   ```
+
+   The second pair is the one that matters: 36 of the 55 were never involved
+   in tuning `.3`, and rank agreement improves on them from +0.604 to +0.743.
+   The gain generalises rather than being fitted. Rank at **+0.808 overall is
+   the best any configuration has measured**, against +0.258 for the 3.1
+   baseline, and the last false negative is gone — recall 100%.
+
+   The cost is real and is accepted on the same grounds §8.5 already settled:
+   fit bias worsens (+0.256 to +0.814) and precision at the cutoff falls from
+   45% to 38%, surfacing 16 roles where 6 are wanted. A sheet that shows the
+   top 25 pays nothing for ten extra rows and pays permanently for one missed
+   one. **Rank is the metric; MAE and bias measure a decision the sheet does
+   not make.**
 6. Backfill the ~67 live rows.
 
 ### Track B — MCP slices
@@ -791,7 +872,7 @@ Gemini. Run them in parallel.
 3. **`render_resume`.** Split `pipeline_tailor.generate_resume` into selection
    and render — the pieces are already separable (`bank.select`,
    `resume.render`, `db.insert_document`), so this is decomposition, not
-   rewrite. Build the six variants.
+   rewrite. Build the seven variants (§4.2).
 4. **`save_cover_letter` + `check_grounding`, shipped together, never
    separately.** The letter path has an independent checker today; a write
    tool without one is the only configuration worse than the status quo.

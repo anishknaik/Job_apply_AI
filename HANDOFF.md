@@ -17,8 +17,8 @@ of the three: §7's Vertex question is settled, and §9 is superseded by
 ## 1. State
 
 ```
-32 commits, 685 tests passing, branch master (phase5/slice-0 is identical)
-16,628 postings | 625 past Stage A | 635 scored | 1 letter measured
+33 commits, 688 tests passing, branch master (phase5/slice-0 trails at 8d3deee)
+16,668 postings | 625 past Stage A | 635 scored | 1 letter measured
 ```
 
 Shipped configuration:
@@ -26,7 +26,7 @@ Shipped configuration:
 ```
 JOBPIPE_GEMINI_BACKEND=vertex        scoring   gemini-2.5-flash
 GOOGLE_CLOUD_LOCATION=global         escalation gemini-2.5-pro
-RUBRIC_VERSION=2026-08-31.2          grounding  gemini-2.5-flash-lite
+RUBRIC_VERSION=2026-08-31.3          grounding  gemini-2.5-flash-lite
 ```
 
 Scheduled run is 11:30, S4U, **fetch/filter/sync only — it scores nothing.**
@@ -63,13 +63,17 @@ Verified means observed, not inferred:
 
 ## 3. Open
 
-**Track A step 5** — record calibration figures against `2026-08-31.2`. Worth
-more than it was: it is the first measurement with escalation actually working
-(see §5), and the n=19 holdout is too small to steer by. Do it over the
-**56-posting hand-scored set**. ~50¢.
+**Track A step 5 — DONE 2026-08-31**, against `2026-08-31.3` over the merged
+56-posting set. Rank agreement +0.808, the best any configuration has
+measured, and zero false negatives. The gain generalises: on the 36 postings
+never used to tune `.3`, rank goes +0.604 to +0.743. Figures and the cost side
+are in `PHASE5_PLAN` Track A step 5. It cost three runs rather than one — see
+§5 for why.
 
 **Track A step 6** — backfill the ~67 live rows so the queue carries `domain`.
-Only 3 scores have it. Slice 3's variant grid is unexercised until this runs.
+Only 3 scores have it, and those three are on the superseded `.2` rubric, so
+they get redone regardless. Slice 3's variant grid is unexercised until this
+runs. **Now unblocked:** step 4's gate is passing again.
 
 **Track B slice 3** — `render_resume`: split `pipeline_tailor.generate_resume`,
 build the seven variant orderings, add the header generator from
@@ -130,6 +134,17 @@ Off by default.
 **`overall: 0` was not out of range.** Reported as a schema violation; the
 scale is documented 0–10 in five places. The real gap was that the range was
 never *enforced* — now bounded.
+
+**Escalation working made things worse before it made them better.** Fixing
+`6e42d7b` was assumed to be a pure gain. Measured, it regressed both roles the
+holdout exists to test — Ramp 7 to 5, Scale AI 6 to 3, both scored by Pro. The
+profile fix and the `non_technical` demotion had been developed and validated
+against Flash alone, because escalation was broken for the entire period they
+were written. **A fix validated on one model in a two-model ladder is
+validated on half the system**, and the half that was untested went on to
+decide 71% of scores. `2026-08-31.3` restates both rules on the schema field
+that applies them; the gate passes again, and rank agreement is the best
+measured.
 
 **The pattern behind three of those:** having demoted MAE and bias as measuring
 the wrong decision, I kept optimising them anyway. Every intervention aimed at
