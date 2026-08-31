@@ -12,15 +12,38 @@ from jobpipe.providers import (DEFAULT_ESCALATION_MODELS, DEFAULT_MODELS,
                                default_model, get_provider)
 
 
+@pytest.fixture
+def clean_env(monkeypatch):
+    """No model pinned in the environment.
+
+    `default_model` and `default_escalation_model` read .env directly as of
+    2026-08-30, so a test asserting the BUILT-IN default has to say that it
+    means the built-in one. Before that change these tests passed by accident:
+    the functions ignored .env entirely, which was the bug.
+    """
+    for var in ("JOBPIPE_SCORING_MODEL", "JOBPIPE_ESCALATION_MODEL",
+                "JOBPIPE_GROUNDING_MODEL", "JOBPIPE_PROSE_MODEL"):
+        monkeypatch.delenv(var, raising=False)
+
+
 class TestRegistry:
-    def test_gemini_is_the_default_provider(self, monkeypatch):
+    def test_gemini_is_the_default_provider(self, monkeypatch, clean_env):
         monkeypatch.delenv("JOBPIPE_PROVIDER", raising=False)
         assert default_model() == "gemini-3.1-flash-lite"
 
-    def test_env_selects_the_provider(self, monkeypatch):
+    def test_env_selects_the_provider(self, monkeypatch, clean_env):
         monkeypatch.setenv("JOBPIPE_PROVIDER", "anthropic")
         assert default_model() == "claude-haiku-4-5"
         assert default_escalation_model() == "claude-sonnet-5"
+
+    def test_env_pins_the_model_over_the_built_in_default(self, monkeypatch):
+        """The bug this closes: every caller that did not go through the CLI -
+        grounding, the escalation ladder, calibrate - ignored .env and ran the
+        hardcoded default. The run succeeds, on a model nobody chose."""
+        monkeypatch.setenv("JOBPIPE_SCORING_MODEL", "gemini-2.5-flash")
+        monkeypatch.setenv("JOBPIPE_ESCALATION_MODEL", "gemini-2.5-pro")
+        assert default_model("gemini") == "gemini-2.5-flash"
+        assert default_escalation_model("gemini") == "gemini-2.5-pro"
 
     def test_unknown_provider_names_itself_clearly(self, monkeypatch):
         monkeypatch.setenv("JOBPIPE_PROVIDER", "hotdog")

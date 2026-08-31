@@ -124,16 +124,37 @@ def gemini_backend() -> str:
 
 
 def default_model(provider: str | None = None) -> str:
+    """The scoring model: .env first, then the built-in default.
+
+    Reading the environment here rather than only in `cli._resolve_model` is
+    deliberate. Every caller that resolved a model WITHOUT going through the
+    CLI - grounding, the escalation ladder, calibrate - silently ignored
+    .env and used the hardcoded default. That is invisible: the run
+    succeeds, on a model nobody chose. It bit twice, both found by reading
+    rather than by a failure.
+
+    `_resolve_model` still layers a CLI flag on top, and its precedence is
+    unchanged: flag beats .env beats this.
+    """
     provider = (provider or os.environ.get("JOBPIPE_PROVIDER")
                 or DEFAULT_PROVIDER).strip().lower()
-    return DEFAULT_MODELS.get(provider, DEFAULT_MODELS[DEFAULT_PROVIDER])
+    return (os.environ.get("JOBPIPE_SCORING_MODEL")
+            or DEFAULT_MODELS.get(provider, DEFAULT_MODELS[DEFAULT_PROVIDER]))
 
 
 def default_escalation_model(provider: str | None = None) -> str:
+    """The escalation model: .env first, then the built-in default.
+
+    Same reasoning as `default_model`. This one mattered concretely: with
+    JOBPIPE_ESCALATION_MODEL=gemini-2.5-pro set, `calibrate` would still have
+    escalated to gemini-3.5-flash-lite - a 3.x model the GCP credit does not
+    cover - and nothing would have said so.
+    """
     provider = (provider or os.environ.get("JOBPIPE_PROVIDER")
                 or DEFAULT_PROVIDER).strip().lower()
-    return DEFAULT_ESCALATION_MODELS.get(
-        provider, DEFAULT_ESCALATION_MODELS[DEFAULT_PROVIDER])
+    return (os.environ.get("JOBPIPE_ESCALATION_MODEL")
+            or DEFAULT_ESCALATION_MODELS.get(
+                provider, DEFAULT_ESCALATION_MODELS[DEFAULT_PROVIDER]))
 
 
 __all__ = ["ProviderError", "ProviderResponse", "ScoringProvider",
