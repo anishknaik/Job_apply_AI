@@ -74,7 +74,7 @@ class TestRequestShape:
         scoring.score_posting(provider, row, SYSTEM, scoring.ScoreRun())
         schema = provider.calls[0]["schema"]
         assert set(schema["required"]) == {
-            "archetype", "domain", "engagement", "legitimacy",
+            "archetype", "domain", "engagement", "seniority_gap", "legitimacy",
             "legitimacy_reason", "reasoning", "skills_match", "seniority_fit",
             "domain_relevance", "dealbreakers", "overall",
             "apply_score", "apply_reason"}
@@ -405,3 +405,89 @@ class TestScoringGate:
             db.set_stage_a(conn, pid, True, "passed")
         gate = pipeline.check_scoring_gate(conn, cap=3, enabled=True)
         assert not gate.allowed and gate.queued == 5
+
+
+class TestScopeCeilingIsEnforced:
+    """The rubric has asked for this since Phase 1 and the model does not do
+    it: on 2026-08-31 it scored a "Founding Data Scientist" apply 6 while its
+    own reasoning read "the seniority bar is high due to the founding nature
+    and strategic scope". Naming the rule and not applying it.
+
+    That is §8.5's finding for the second time — the text is right, the model
+    does not follow it. So the model reports which KIND of gap it is, a fact
+    it gets right, and the consequence is enforced here. Same shape as
+    banned_used() and Bank.select: checked, never instructed.
+    """
+
+    def payload(self, gap, apply_score, overall=6):
+        return {"reasoning": "r", "skills_match": 8, "seniority_fit": 4,
+                "domain_relevance": 9, "dealbreakers": [], "overall": overall,
+                "apply_score": apply_score, "apply_reason": "worth a shot",
+                "seniority_gap": gap, "archetype": "ai_ml_engineer",
+                "domain": "ai_infra", "engagement": "direct",
+                "legitimacy": "ok", "legitimacy_reason": ""}
+
+    @pytest.fixture(autouse=True)
+    def _enable(self, monkeypatch):
+        """Opt-in since 2026-08-31 — it collapsed 11 of 19 holdout postings
+        onto 5 and cost more rank agreement than it bought. The mechanism is
+        kept and tested; only the default changed."""
+        monkeypatch.setenv("JOBPIPE_SCOPE_CEILING", "1")
+
+    def score(self, row, gap, apply_score):
+        provider = FakeProvider([ok(self.payload(gap, apply_score))])
+        run = scoring.ScoreRun()
+        # overall 6 sits in the escalation band, so queue a second identical
+        # reply rather than let the fake run dry.
+        provider._results.append(ok(self.payload(gap, apply_score)))
+        return scoring.score_posting(provider, row, SYSTEM, run), run
+
+    def test_a_scope_gap_caps_apply_at_five(self, row):
+        score, run = self.score(row, "scope", 8)
+        assert score["apply_score"] == 5
+        assert run.scope_capped == 1
+
+    def test_both_counts_as_scope(self, row):
+        """A role with a years bar AND a scope bar is not rescued by the
+        years half being negotiable."""
+        assert self.score(row, "both", 9)[0]["apply_score"] == 5
+
+    def test_a_years_gap_is_untouched(self, row):
+        """Rule 3's canonical shape: right skills, not enough years. Capping
+        it would be the costliest mistake this system can make."""
+        score, run = self.score(row, "years", 8)
+        assert score["apply_score"] == 8
+        assert run.scope_capped == 0
+
+    def test_no_gap_is_untouched(self, row):
+        assert self.score(row, "none", 9)[0]["apply_score"] == 9
+
+    def test_it_only_ever_lowers(self, row):
+        """A scope gap cannot make a posting more attractive."""
+        score, run = self.score(row, "scope", 3)
+        assert score["apply_score"] == 3
+        assert run.scope_capped == 0, "nothing was capped, so nothing to count"
+
+    def test_the_cap_is_recorded_not_silent(self, row):
+        """A score nobody can explain later is a score nobody can calibrate
+        against."""
+        score, _ = self.score(row, "scope", 8)
+        assert "scope cap: 8 -> 5" in score["apply_reason"]
+        assert "worth a shot" in score["apply_reason"], "original reason kept"
+
+    def test_the_field_is_required_so_it_cannot_be_omitted(self):
+        assert "seniority_gap" in scoring.SCORE_SCHEMA["required"]
+        assert scoring.SCORE_SCHEMA["properties"]["seniority_gap"]["enum"] \
+            == scoring.SENIORITY_GAP
+
+    def test_it_is_off_unless_asked_for(self, row, monkeypatch):
+        monkeypatch.delenv("JOBPIPE_SCOPE_CEILING", raising=False)
+        score, run = self.score(row, "scope", 8)
+        assert score["apply_score"] == 8, "the default must not cap"
+        assert run.scope_capped == 0
+
+    def test_the_ceiling_matches_what_the_rubric_promises(self):
+        """The rubric says "let apply_score fall to 3-5". The ceiling is the
+        top of that range, not a new policy invented in code."""
+        assert scoring.SCOPE_GAP_APPLY_CEILING == 5
+        assert "fall to 3-5" in scoring.RUBRIC

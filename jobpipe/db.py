@@ -200,6 +200,11 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     ("scores", "scorer", "TEXT"),
     ("scores", "rubric_version", "TEXT"),
     ("scores", "domain", "TEXT"),
+    # Why the seniority bar sits above him: none | years | scope | both. The
+    # scope ceiling in scoring._apply_scope_ceiling fires on this, so without
+    # the column a capped score cannot be told from one the model simply
+    # scored low - and the cap becomes unauditable the moment it matters.
+    ("scores", "seniority_gap", "TEXT"),
 ]
 
 
@@ -405,7 +410,7 @@ _SCORE_COLUMNS = (
     # Provenance (PHASE5_PLAN 3.5). `model` alone does not say which backend
     # served it or which rubric produced it, and a corpus that mixes rubrics
     # silently is a corpus whose calibration numbers describe nothing.
-    "domain", "scorer", "rubric_version",
+    "domain", "seniority_gap", "scorer", "rubric_version",
 )
 
 _SCORE_INSERT = (

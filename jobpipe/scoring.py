@@ -65,14 +65,38 @@ DOMAINS = ["ai_infra", "ai_saas", "data_infra", "product_saas",
 #
 #   2026-08-30.1  non_technical demoted from a short-circuit to a cap;
 #                 `domain` added; score fields bounded 0-10.
+#   2026-08-31.2  seniority_gap added and ENFORCED: a scope-based bar caps
+#                 apply_score at 5 in code, because the rubric has asked
+#                 for exactly this since Phase 1 and the model does not
+#                 comply.
 #   2026-08-31.1  profile 10 rewritten: "frontend-heavy or general SWE with no
 #                 ML" was being read as "frontend-heavy", marking down
 #                 full-stack AI roles. The qualifier is now the rule, and
 #                 full-stack-where-AI-is-the-product moved to actively
 #                 positive.
-RUBRIC_VERSION = "2026-08-31.1"
+RUBRIC_VERSION = "2026-08-31.2"
 
 LEGITIMACY = ["ok", "suspicious", "likely_ghost"]
+
+# WHY the seniority bar sits above the candidate, which decides whether
+# apply_score is allowed to rescue the posting. The rubric has drawn this
+# distinction since Phase 1 and the model does not act on it: on 2026-08-31 it
+# scored a "Founding Data Scientist" apply 6 while writing "the seniority bar
+# is high due to the founding nature and strategic scope" - naming the rule
+# and then not applying it. Asking a fourth time in prose would not work
+# either.
+#
+# So the model reports a FACT it is good at - which kind of gap is this - and
+# the consequence is enforced in code. Same shape as banned_used() and
+# Bank.select: checked, never instructed.
+SENIORITY_GAP = ["none", "years", "scope", "both"]
+
+#: apply_score ceiling when the gap is one of scope. The rubric already says
+#: "let apply_score fall to 3-5, or below that when the scope gap is wide", so
+#: this is its upper bound rather than new policy. A role that asks you to own
+#: a domain is not one you grow into by applying to it, however well the stack
+#: matches.
+SCOPE_GAP_APPLY_CEILING = 5
 
 # Orthogonal to archetype, deliberately. A consulting role can be genuine ML
 # engineering, so folding "consultant" into ARCHETYPES would force a choice
@@ -107,6 +131,19 @@ SCORE_SCHEMA = {
                            "role building the employer's own product, "
                            "including forward-deployed and deployed engineer "
                            "roles that install it inside customers.",
+        },
+        "seniority_gap": {
+            "type": "string",
+            "enum": SENIORITY_GAP,
+            "description": "WHY the bar sits above the candidate. `years` = a "
+                           "stated experience figure and nothing else. "
+                           "`scope` = what the role asks them to OWN: a "
+                           "product area, strategy, leading others, external "
+                           "representation, a research track record, founding "
+                           "or first-hire framing - whether or not any number "
+                           "appears. `both` when both are true, `none` when "
+                           "the bar is not above them. Judge on the "
+                           "responsibilities, not the title.",
         },
         "legitimacy": {
             "type": "string",
@@ -156,7 +193,8 @@ SCORE_SCHEMA = {
     },
     # archetype first: the rubric branches on it, and the schema order is the
     # order the model fills the fields in.
-    "required": ["archetype", "domain", "engagement", "legitimacy", "legitimacy_reason",
+    "required": ["archetype", "domain", "engagement", "seniority_gap",
+                 "legitimacy", "legitimacy_reason",
                  "reasoning", "skills_match", "seniority_fit",
                  "domain_relevance", "dealbreakers", "overall",
                  "apply_score", "apply_reason"],
@@ -443,11 +481,20 @@ apply_score is usually equal to or higher than overall. It is lower when a \
 dealbreaker applies, when the function is wrong, or when the seniority gap is \
 one of scope rather than years.
 
-**Calibration note.** Measured against the candidate's own scores, this axis \
-runs about 0.7 too high and never goes below 6, while their scores span 2 to \
-10. A set of postings should produce apply_scores across the whole range: if \
-nothing in a batch scores below 6, the scope check above is not being \
-applied. Scoring 2 or 3 is a normal outcome, not a failure of nerve.
+**Report `seniority_gap` honestly; it is enforced, not advisory.** Set it to \
+`scope` or `both` whenever the bar is about what the role asks the candidate \
+to OWN rather than about a stated number of years. When you do, apply_score is \
+capped at 5 in code after you answer, whatever you put there. Reporting \
+`years` on a role that is really about scope does not preserve the score you \
+had in mind - it removes the only signal that would have made the cap fire. \
+Score the field on the responsibilities and let the cap do its own work.
+
+**Calibration note.** Re-measured 2026-08-31 on the n=19 holdout: this axis \
+now spans 1 to 9 against the candidate's 1 to 8, and the spread matches theirs \
+almost exactly. What it still gets wrong is the low band - roles the candidate \
+scores 1 come back 6 to 8, and every one of those is a role whose bar is about \
+scope rather than years. A set of postings should produce apply_scores across \
+the whole range. Scoring 2 or 3 is a normal outcome, not a failure of nerve.
 
 === WORKED EXAMPLES ===
 
@@ -526,6 +573,11 @@ class ScoreRun:
     scored: int = 0
     escalated: int = 0
     failed: int = 0
+    #: How many scores the scope ceiling lowered. Counted rather than left
+    #: implicit: if this is 0 across a whole run the model has stopped
+    #: reporting seniority_gap honestly, and the cap has quietly stopped
+    #: working - which looks exactly like the cap not being needed.
+    scope_capped: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read_tokens: int = 0
@@ -698,8 +750,57 @@ def score_posting(provider: ScoringProvider, row, system_prompt: str,
             run.escalated += 1
             score = escalated
 
+    _apply_scope_ceiling(score, row, run)
     run.scored += 1
     return score
+
+
+def _apply_scope_ceiling(score: dict, row, run) -> None:
+    """Cap apply_score when the model reports a scope-based seniority gap.
+
+    The rubric has said this since Phase 1 - "rule 3 does not apply and there
+    is no floor at all", "let apply_score fall to 3-5" - and the model reads
+    it, restates it in its own reasoning, and scores 6 anyway. That is 8.5's
+    finding for the second time: the text is right and the model does not
+    follow it. Instruction has been tried three ways; this is the check.
+
+    Deliberately a ceiling, not a rewrite. The model still picks the number
+    below it, so a scope role with a weak stack can still land at 2. And it
+    only ever lowers - a scope gap cannot make a posting more attractive.
+
+    Recorded in apply_reason rather than applied silently, because a score
+    nobody can explain later is a score nobody can calibrate against.
+    """
+    # OFF by default, on the evidence. Measured on the n=19 holdout
+    # 2026-08-31: the ceiling did lower the six over-scored roles, and
+    # collapsed ELEVEN of nineteen postings onto exactly 5 doing it. Apply
+    # spread fell from 2.401 - which matched Anish's 2.43 almost exactly - to
+    # 1.742, rank agreement from +0.309 to +0.160, precision@5 from 80% to
+    # 60%, and recall@8 from 50% to 0% because the cap caught one of the two
+    # roles he wanted.
+    #
+    # A cap does not lower scores, it collapses them, and a ranked sheet needs
+    # spread more than it needs accuracy. If this is worth revisiting, the
+    # shape to try is a SUBTRACTION, which shifts without collapsing.
+    #
+    # The seniority_gap field stays and is still recorded: knowing WHY a bar
+    # is high is useful even when nothing acts on it automatically.
+    if not os.environ.get("JOBPIPE_SCOPE_CEILING"):
+        return
+    gap = score.get("seniority_gap")
+    if gap not in ("scope", "both"):
+        return
+    before = score.get("apply_score")
+    if not isinstance(before, int) or before <= SCOPE_GAP_APPLY_CEILING:
+        return
+
+    score["apply_score"] = SCOPE_GAP_APPLY_CEILING
+    run.scope_capped += 1
+    score["apply_reason"] = (
+        f"[scope cap: {before} -> {SCOPE_GAP_APPLY_CEILING}, "
+        f"seniority_gap={gap}] " + (score.get("apply_reason") or ""))
+    log.info("  posting %s: apply %d -> %d (%s seniority gap)",
+             row["id"], before, SCOPE_GAP_APPLY_CEILING, gap)
 
 
 def scorer_id(provider: ScoringProvider) -> str:
