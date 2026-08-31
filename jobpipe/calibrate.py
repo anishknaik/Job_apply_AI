@@ -346,9 +346,26 @@ def run(conn, provider, path: Path = DEFAULT_PATH,
     fp = sum(1 for h, m in pairs if h < threshold and m >= threshold)
     wanted = tp + fn
 
+    rank = rank_agreement(comparisons)
+    if rank:
+        print()
+        print("=== RANKING — what the sheet actually does ===")
+        print(f"  rank agreement        spearman {rank['spearman']:+.3f}"
+              f"   (1 = same order, 0 = unrelated)")
+        for k in (3, 5, 10):
+            key = f"precision_at_{k}"
+            if key in rank:
+                print(f"  precision@{k:<2}          {rank[key]:.0%}"
+                      f"   of your top {k}, the model surfaces "
+                      f"{round(rank[key] * k)}")
+        print(f"  your top 5            {', '.join(rank['human_top'])}")
+        print(f"  model top 5           {', '.join(rank['model_top'])}")
+
     print()
     source = ("the live top-20 cutoff" if derived else "--threshold")
-    print(f"=== sheet decision, on APPLY at >= {threshold} ({source}) ===")
+    print(f"=== threshold view (DIAGNOSTIC — the sheet ranks, it does not "
+          f"threshold) ===")
+    print(f"    on APPLY at >= {threshold} ({source})")
     print(f"  you would want        {wanted}")
     print(f"  model surfaces        {tp + fp}")
     print(f"  correctly surfaced    {tp}")
@@ -380,12 +397,17 @@ def run(conn, provider, path: Path = DEFAULT_PATH,
                   "skills gaps, not just years gaps.")
 
     print()
-    if wanted and tp / wanted < 0.7:
-        print(f"Recall below 70%: {fn} of {wanted} roles you would apply to "
-              f"never reach the sheet. Fix this before worrying about MAE.")
+    if rank and rank["spearman"] < 0.3:
+        print(f"Rank agreement {rank['spearman']:+.2f}: the model's ordering "
+              f"barely relates to yours, so the sheet is close to arbitrary. "
+              f"This matters more than MAE — a well-calibrated average over a "
+              f"random order still puts the wrong roles in front of you.")
     elif app and app["stdev"] < 1.5:
         print("Apply scores are clustered, which carries no information even "
-              "if MAE looks fine.")
+              "if MAE looks fine — ranking needs spread, not accuracy.")
+    elif rank and rank["spearman"] < 0.6:
+        print(f"Rank agreement {rank['spearman']:+.2f}: usable but weak. The "
+              f"top of the list is roughly right; the middle is not.")
     else:
         print("Calibration looks usable. Re-run monthly and after any change "
               "to the rubric or the master profile.")
@@ -404,13 +426,76 @@ def run(conn, provider, path: Path = DEFAULT_PATH,
         print(f"    {(c['apply_reason'] or c['reasoning'])[:180]}")
 
     _write_result(path, comparisons, {
-        "fit": fit, "apply": app, "threshold": threshold,
+        "fit": fit, "apply": app, "rank": rank, "threshold": threshold,
         "true_pos": tp, "false_neg": fn, "false_pos": fp,
         "recall": (tp / wanted) if wanted else None,
         "precision": (tp / (tp + fp)) if (tp + fp) else None,
         "model": model, "provider": provider.name,
     })
     return 0
+
+
+def spearman(a: list[int], b: list[int]) -> float:
+    """Rank correlation. 1.0 same order, 0 unrelated, -1 reversed.
+
+    Written out rather than pulled from scipy: one function against a
+    dependency the project does not otherwise need, on datasets of ~20.
+
+    Ties are ranked by position, which is crude. On a set this small with
+    scores clustered on a few integers that adds noise, so read the number as
+    a direction rather than a measurement.
+    """
+    def ranks(values):
+        order = sorted(range(len(values)), key=lambda i: values[i])
+        out = [0] * len(values)
+        for position, index in enumerate(order):
+            out[index] = position
+        return out
+
+    if len(a) < 3:
+        return 0.0
+    ra, rb = ranks(a), ranks(b)
+    mean_a, mean_b = sum(ra) / len(ra), sum(rb) / len(rb)
+    num = sum((x - mean_a) * (y - mean_b) for x, y in zip(ra, rb))
+    den = (sum((x - mean_a) ** 2 for x in ra)
+           * sum((y - mean_b) ** 2 for y in rb)) ** 0.5
+    return (num / den) if den else 0.0
+
+
+def rank_agreement(comparisons: list[dict]) -> dict | None:
+    """How well the model's ORDER matches the human's.
+
+    This is the metric that matches production. §5 settled it in Phase 1:
+    "Rank, not threshold. Scores pile onto 6, so a fixed cutoff swung the
+    sheet between 3 and 12 rows. Top 25, floor 4." The sheet takes the top N.
+    It does not threshold. So a change that improves absolute scores while
+    scrambling their order is a regression, and a recall figure computed at a
+    fixed cutoff can look catastrophic while the ranking is fine — or look
+    acceptable while the ranking is random.
+
+    precision@k asks the question the sheet asks: of the k roles the model
+    would put in front of you, how many are in the k you actually wanted?
+    """
+    scored = [c for c in comparisons if c["my_apply"] is not None]
+    if len(scored) < 3:
+        return None
+
+    by_human = sorted(scored, key=lambda c: -c["my_apply"])
+    by_model = sorted(scored, key=lambda c: -c["model_apply"])
+    out = {
+        "n": len(scored),
+        "spearman": round(spearman([c["my_apply"] for c in scored],
+                                   [c["model_apply"] for c in scored]), 3),
+        "human_top": [c["company"] for c in by_human[:5]],
+        "model_top": [c["company"] for c in by_model[:5]],
+    }
+    for k in (3, 5, 10):
+        if k > len(scored):
+            continue
+        wanted = {c["posting_id"] for c in by_human[:k]}
+        hit = sum(1 for c in by_model[:k] if c["posting_id"] in wanted)
+        out[f"precision_at_{k}"] = round(hit / k, 3)
+    return out
 
 
 def _stdev(values: list[int]) -> float:

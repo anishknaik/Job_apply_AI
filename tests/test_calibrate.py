@@ -305,3 +305,57 @@ class TestHandScoreLoading:
                         "2,Co,Eng2,other,https://y,,\n", encoding="utf-8")
         hand = calibrate.load_hand_scores(path)
         assert len(hand) == 1 and hand[0]["my_apply"] == 7
+
+
+class TestRankIsTheMetricThatMatters:
+    """§5 settled this in Phase 1: "Rank, not threshold. Scores pile onto 6,
+    so a fixed cutoff swung the sheet between 3 and 12 rows. Top 25, floor 4."
+
+    The sheet takes the top N. Measuring recall at a fixed cutoff therefore
+    scores the pipeline on a decision it does not make — and it can read 0%
+    while the ordering is fine, or look acceptable while the ordering is
+    random. The 2026-08-31 calibration runs showed both failure modes.
+    """
+
+    def test_identical_orders_correlate_perfectly(self):
+        assert calibrate.spearman([1, 2, 3, 4, 5], [1, 2, 3, 4, 5]) == 1.0
+
+    def test_reversed_orders_anticorrelate(self):
+        assert calibrate.spearman([1, 2, 3, 4, 5], [5, 4, 3, 2, 1]) == -1.0
+
+    def test_a_shifted_scale_still_correlates_perfectly(self):
+        """The point of rank: a model that is uniformly 3 points generous
+        still orders correctly, and the sheet would be right."""
+        assert calibrate.spearman([1, 2, 3, 4], [4, 5, 6, 7]) == 1.0
+
+    def test_too_few_points_returns_zero_rather_than_dividing_by_zero(self):
+        assert calibrate.spearman([1, 2], [2, 1]) == 0.0
+
+    @staticmethod
+    def _rows(pairs):
+        return [{"posting_id": i, "company": f"C{i}", "my_apply": h,
+                 "model_apply": m} for i, (h, m) in enumerate(pairs)]
+
+    def test_precision_at_k_asks_the_question_the_sheet_asks(self):
+        """Of the k roles the model puts in front of you, how many are in the
+        k you wanted?"""
+        # Model agrees on the top 3, disagrees below.
+        rows = self._rows([(10, 9), (9, 8), (8, 7), (1, 6), (2, 5)])
+        rank = calibrate.rank_agreement(rows)
+        assert rank["precision_at_3"] == 1.0
+
+    def test_a_perfectly_calibrated_but_randomly_ordered_model_is_caught(self):
+        """The failure the old metric could not see. Mean error is zero and
+        the ordering is inverted, so every number looks fine and the sheet is
+        exactly wrong."""
+        rows = self._rows([(1, 5), (2, 4), (4, 2), (5, 1)])
+        assert calibrate.rank_agreement(rows)["spearman"] == -1.0
+
+    def test_it_declines_rather_than_reporting_noise_on_a_tiny_set(self):
+        assert calibrate.rank_agreement(self._rows([(1, 1), (2, 2)])) is None
+
+    def test_unscored_rows_are_excluded(self):
+        rows = self._rows([(10, 9), (9, 8), (8, 7)])
+        rows.append({"posting_id": 99, "company": "X", "my_apply": None,
+                     "model_apply": 5})
+        assert calibrate.rank_agreement(rows)["n"] == 3

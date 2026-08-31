@@ -57,11 +57,20 @@ ARCHETYPES = ["ai_ml_engineer", "data_scientist", "ml_platform",
 DOMAINS = ["ai_infra", "ai_saas", "data_infra", "product_saas",
            "healthcare", "robotics_cv", "fintech", "other"]
 
-# Bump whenever RUBRIC changes. A score is only comparable to another score
-# produced under the same rubric, and a corpus that mixes them silently is a
-# corpus whose calibration numbers mean nothing. test_scoring pins the rubric
-# hash against this, so changing the text without bumping fails the suite.
-RUBRIC_VERSION = "2026-08-30.1"
+# Bump whenever the SYSTEM PROMPT changes - and that is the rubric below, the
+# master profile, and the calibrated examples, because build_system_prompt
+# concatenates all three. A score is comparable only to scores produced under
+# the same prompt, and a corpus that mixes them silently is a corpus whose
+# calibration figures describe nothing.
+#
+#   2026-08-30.1  non_technical demoted from a short-circuit to a cap;
+#                 `domain` added; score fields bounded 0-10.
+#   2026-08-31.1  profile 10 rewritten: "frontend-heavy or general SWE with no
+#                 ML" was being read as "frontend-heavy", marking down
+#                 full-stack AI roles. The qualifier is now the rule, and
+#                 full-stack-where-AI-is-the-product moved to actively
+#                 positive.
+RUBRIC_VERSION = "2026-08-31.1"
 
 LEGITIMACY = ["ok", "suspicious", "likely_ghost"]
 
