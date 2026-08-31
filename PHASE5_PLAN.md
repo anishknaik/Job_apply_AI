@@ -134,19 +134,67 @@ structured object. If thinking measurably improves rubric adherence, turn it
 on deliberately and record that in the rubric version — do not leave it at
 whatever the default is.
 
-### 3.3 Unverified, verify before building
+### 3.3 Verified 2026-08-30 — all three answered
 
-Per §9.9 — verify against the API, not the docs:
+Probed live against the API rather than read from docs, per §9.9.
+`scripts/probe_vertex.py` re-runs it. **Every answer supports §3.2's choice of
+Flash over Flash Lite**, one of them for a different reason than expected.
 
-- **Does `gemini-2.5-flash` resolve on Vertex, and in which region?** The
-  probe covered `2.5-flash-lite` (global + us-central1) and
-  `3.1-flash-lite` (global only). Flash is untested. If it is global-only,
-  `GOOGLE_CLOUD_LOCATION=global` is required, not preferred.
-- **Does implicit caching fire on the profile prefix with 2.5 Flash?** Six
-  calls settled it for Flash Lite. Repeat for Flash before assuming.
-- **If not, does explicit caching work?** The probe hit a 403 on
-  `aiplatform.endpoints.predict` — a different resource path needing more IAM.
-  Solve only if implicit fails.
+**1. `gemini-2.5-flash` resolves at BOTH `global` and `us-central1`.**
+
+```
+gemini-2.5-flash         global       OK
+gemini-2.5-flash         us-central1  OK
+gemini-2.5-flash-lite    global       OK
+gemini-2.5-flash-lite    us-central1  OK
+```
+
+So location is a choice here, not a constraint. That is a real difference from
+`gemini-3.1-flash-lite`, which 404s regionally and forces
+`GOOGLE_CLOUD_LOCATION=global`. Dropping 3.x removes that pin.
+
+**2. Implicit caching FIRES on 2.5 Flash, against the real profile prefix.**
+
+Probed with `master_profile.md` itself as `system_instruction` — 29,988 chars,
+7,125 prompt tokens — rather than synthetic padding, because "does caching
+fire" is only useful as an answer about the bytes production actually sends.
+
+```
+gemini-2.5-flash @ global          gemini-2.5-flash-lite @ global
+ call   prompt   cached             call   prompt   cached
+    1     7125     6982                1     7125        0
+    2     7125        0                2     7125        0
+    3     7125     6982                3     7125        0
+    4     7125        0                4     7125        0
+    5     7125        0                5     7125        0
+```
+
+Two hits in five calls, 98% of the prefix cached when it lands — 39% of all
+prompt tokens across the run, which bills at roughly 65% of uncached. That sits
+inside the 40–79% band the AI Studio key already achieves in production, so
+caching behaviour does not regress with the move.
+
+**Flash Lite returned zero across five calls.** That now corroborates the
+earlier six-call finding from a second direction and against the real prefix,
+so it is the model, not warm-up and not the padding. §3.2 inferred this from
+the missing storage SKU; it is confirmed.
+
+The consequence is better than §3.2 anticipated. Its third reason for choosing
+Flash was that Flash *has* an explicit-cache fallback if implicit fails. It
+does not need one — implicit works. **The 403 on
+`aiplatform.endpoints.predict` therefore stays unsolved, deliberately**, per
+§3.3's own condition: solve only if implicit fails.
+
+**3. `thinking_budget=0` is accepted on both models**, and
+`thoughts_token_count` comes back 0. §3.2 asks for thinking off on the scoring
+call because it is a distinct and more expensive SKU; that is achievable
+cleanly rather than by hoping the default is sensible. Set it explicitly and
+record it in the rubric version.
+
+One number to carry forward: the probe measured the profile alone at 7,125
+tokens. The production prefix is larger — profile plus rubric plus calibration
+examples, ~10,204 tokens — so it clears the 2,048-token floor for 2.5 models
+with room to spare.
 
 ### 3.4 Recalibration is mandatory
 
