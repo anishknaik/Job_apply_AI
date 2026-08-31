@@ -1,0 +1,144 @@
+company,ats_type,board_token,tier,notes
+Anthropic,greenhouse,anthropic,2,ai-native | 400 live postings | DRAFT tier: core lane
+OpenAI,ashby,openai,2,ai-native | 737 live postings | DRAFT tier: core lane
+Scale AI,greenhouse,scaleai,1,ai-native | 210 live postings
+Cursor (Anysphere),ashby,cursor,2,ai-native | 117 live postings | DRAFT tier: core lane
+Perplexity,ashby,perplexity,1,ai-native | 93 live postings
+LangChain,ashby,langchain,1,ai-native | 105 live postings
+ElevenLabs,ashby,elevenlabs,2,ai-native | 242 live postings | DRAFT tier: core lane
+Sierra,ashby,sierra,1,ai-native | 192 live postings
+Cohere,ashby,cohere,1,ai-native | 144 live postings
+Harvey,ashby,harvey,2,ai-native legal AI | 382 live postings | DRAFT tier: core lane
+Decagon,ashby,decagon,1,ai-native | 130 live postings
+Modal,ashby,modal,2,ai-native infra | 31 live postings | DRAFT tier: core lane
+Abridge,ashby,abridge,1,ai-native healthcare | 44 live postings
+Databricks,greenhouse,databricks,2,data-infra | 814 live postings | DRAFT tier: adjacent lane
+Snowflake,ashby,snowflake,2,data-infra | 389 live postings | DRAFT tier: adjacent lane
+Fivetran,greenhouse,fivetran,2,data-infra | 206 live postings | DRAFT tier: adjacent lane
+ClickHouse,greenhouse,clickhouse,2,data-infra | 176 live postings (also on ashby - do not add both) | DRAFT tier: adjacent lane
+Confluent,ashby,confluent,2,data-infra streaming | 29 live postings | DRAFT tier: adjacent lane
+Hex,ashby,hex,2,data-infra analytics | 30 live postings | DRAFT tier: adjacent lane
+Supabase,ashby,supabase,2,data-infra | 56 live postings | DRAFT tier: adjacent lane
+Sigma Computing,greenhouse,sigmacomputing,2,data-infra BI | 68 live postings | DRAFT tier: adjacent lane
+Datadog,greenhouse,datadog,3,nyc observability | 441 live postings | DRAFT tier: unclassified - review
+MongoDB,greenhouse,mongodb,3,nyc database | 410 live postings | DRAFT tier: unclassified - review
+Ramp,ashby,ramp,3,nyc fintech | 133 live postings | DRAFT tier: unclassified - review
+Plaid,ashby,plaid,3,nyc fintech | 102 live postings | DRAFT tier: unclassified - review
+Cockroach Labs,greenhouse,cockroachlabs,3,nyc database | 32 live postings | DRAFT tier: unclassified - review
+Betterment,greenhouse,betterment,3,nyc fintech | 32 live postings | DRAFT tier: unclassified - review
+Alloy,greenhouse,alloy,3,nyc fintech | 21 live postings (also on lever - do not add both) | DRAFT tier: unclassified - review
+Squarespace,greenhouse,squarespace,3,nyc | 21 live postings | DRAFT tier: unclassified - review
+Justworks,greenhouse,justworks,3,nyc hr-tech | 99 live postings | DRAFT tier: unclassified - review
+Stripe,greenhouse,stripe,3,product | 566 live postings
+Figma,greenhouse,figma,3,product | 164 live postings
+Notion,ashby,notion,1,product | 128 live postings
+Vercel,greenhouse,vercel,2,product devtools | 84 live postings | DRAFT tier: adjacent lane
+Linear,ashby,linear,2,product devtools | 31 live postings | DRAFT tier: adjacent lane
+Sentry,ashby,sentry,2,product devtools | 47 live postings
+Affirm,greenhouse,affirm,3,fintech | 196 live postings | DRAFT tier: unclassified - review
+Airbyte,ashby,airbyte,2,data-infra | 10 live postings | DRAFT tier: adjacent lane
+Airtable,greenhouse,airtable,3,product | 19 live postings
+Ambience Healthcare,ashby,ambiencehealthcare,2,ai-native healthcare | 21 live postings | DRAFT tier: core lane
+Amplitude,greenhouse,amplitude,2,data-infra product-analytics | 33 live postings | DRAFT tier: adjacent lane
+Arize AI,greenhouse,arizeai,2,ai-native mlops | 27 live postings | DRAFT tier: core lane
+Asana,greenhouse,asana,3,product | 132 live postings
+AssemblyAI,greenhouse,assemblyai,2,ai-native voice | 9 live postings | DRAFT tier: core lane
+Astronomer,ashby,astronomer,2,data-infra | 25 live postings | DRAFT tier: adjacent lane
+Atlan,ashby,atlan,2,data-infra catalog | 5 live postings | DRAFT tier: adjacent lane
+Baseten,ashby,baseten,2,ai-native infra | 70 live postings | DRAFT tier: core lane
+Brex,greenhouse,brex,3,fintech | 291 live postings | DRAFT tier: unclassified - review
+Cartesia,ashby,cartesia,2,ai-native voice | 34 live postings | DRAFT tier: core lane
+Chai Discovery,ashby,chaidiscovery,2,ai-native biotech | 14 live postings | DRAFT tier: core lane
+Character AI,ashby,character,2,ai-native | 13 live postings | DRAFT tier: core lane
+Checkr,greenhouse,checkr,3,product hr-tech | 46 live postings
+Chime,greenhouse,chime,3,fintech | 59 live postings | DRAFT tier: unclassified - review
+Cohere Health,greenhouse,coherehealth,2,ai-native healthcare | 74 live postings | DRAFT tier: core lane
+Coinbase,greenhouse,coinbase,3,fintech crypto | 165 live postings
+Column,ashby,column,3,fintech | 23 live postings | DRAFT tier: unclassified - review
+Cradle Bio,ashby,cradlebio,2,ai-native biotech | 7 live postings | DRAFT tier: core lane
+Cresta,greenhouse,cresta,2,ai-native agents | 95 live postings | DRAFT tier: core lane
+Deepgram,ashby,deepgram,2,ai-native voice | 80 live postings | DRAFT tier: core lane
+Discord,greenhouse,discord,3,product | 49 live postings
+Drata,ashby,drata,3,fintech compliance | 54 live postings | DRAFT tier: unclassified - review
+Dremio,greenhouse,dremio,2,data-infra | 2 live postings | DRAFT tier: adjacent lane
+Duolingo,greenhouse,duolingo,3,product | 70 live postings
+Eve,greenhouse,eve,2,ai-native legal | 30 live postings | DRAFT tier: core lane
+Figure AI,greenhouse,figureai,2,ai-native robotics | 125 live postings | DRAFT tier: core lane
+Galileo,greenhouse,galileo,2,ai-native mlops | 9 live postings | DRAFT tier: core lane
+Gemini,greenhouse,gemini,3,fintech crypto | 40 live postings
+Grafana Labs,greenhouse,grafanalabs,2,devtools observability | 147 live postings | DRAFT tier: adjacent lane
+Gusto,greenhouse,gusto,3,product hr-tech | 90 live postings
+Hightouch,greenhouse,hightouch,2,data-infra reverse-etl | 72 live postings | DRAFT tier: adjacent lane
+Honeycomb,greenhouse,honeycomb,2,devtools observability | 16 live postings | DRAFT tier: adjacent lane
+Imbue,greenhouse,imbue,2,ai-native | 2 live postings | DRAFT tier: core lane
+Imply,greenhouse,imply,2,data-infra | 5 live postings | DRAFT tier: adjacent lane
+Instacart,greenhouse,instacart,3,product | 112 live postings
+Isomorphic Labs,greenhouse,isomorphiclabs,2,ai-native biotech | 21 live postings | DRAFT tier: core lane
+LlamaIndex,ashby,llamaindex,2,ai-native | 15 live postings | DRAFT tier: core lane
+Luma AI,ashby,lumaai,2,ai-native | 51 live postings | DRAFT tier: core lane
+Lyft,greenhouse,lyft,3,product | 170 live postings
+Marqeta,greenhouse,marqeta,3,fintech | 43 live postings | DRAFT tier: unclassified - review
+Materialize,ashby,materialize,2,data-infra | 5 live postings | DRAFT tier: adjacent lane
+Mercury,greenhouse,mercury,3,fintech | 59 live postings | DRAFT tier: unclassified - review
+Middesk,ashby,middesk,3,fintech | 21 live postings | DRAFT tier: unclassified - review
+Miro,ashby,miro,3,product | 43 live postings
+Mixpanel,greenhouse,mixpanel,2,data-infra product-analytics | 60 live postings | DRAFT tier: adjacent lane
+Modern Treasury,ashby,moderntreasury,3,fintech | 7 live postings | DRAFT tier: unclassified - review
+Monte Carlo,ashby,montecarlodata,2,data-infra observability | 6 live postings | DRAFT tier: adjacent lane
+Nabla,ashby,nabla,2,ai-native healthcare | 13 live postings | DRAFT tier: core lane
+Neon,ashby,neon,2,data-infra | 6 live postings | DRAFT tier: adjacent lane
+Netlify,greenhouse,netlify,2,devtools | 3 live postings | DRAFT tier: adjacent lane
+Nuro,greenhouse,nuro,2,ai-native av | 107 live postings | DRAFT tier: core lane
+Observe AI,greenhouse,observeai,2,ai-native agents | 19 live postings | DRAFT tier: core lane
+OpenEvidence,ashby,openevidence,2,ai-native healthcare | 7 live postings | DRAFT tier: core lane
+Parloa,greenhouse,parloa,2,ai-native agents | 52 live postings | DRAFT tier: core lane
+Physical Intelligence,ashby,physicalintelligence,2,ai-native robotics | 30 live postings | DRAFT tier: core lane
+Pinecone,ashby,pinecone,2,ai-native vectordb | 8 live postings | DRAFT tier: core lane
+Pinterest,greenhouse,pinterest,3,product | 217 live postings
+PlanetScale,greenhouse,planetscale,2,data-infra | 9 live postings | DRAFT tier: adjacent lane
+PostHog,ashby,posthog,2,data-infra product-analytics | 13 live postings | DRAFT tier: adjacent lane
+Postman,greenhouse,postman,2,devtools | 106 live postings | DRAFT tier: adjacent lane
+Prefect,ashby,prefect,2,data-infra | 6 live postings | DRAFT tier: adjacent lane
+Railway,ashby,railway,2,devtools | 8 live postings | DRAFT tier: adjacent lane
+Rasa,ashby,rasa,2,ai-native agents | 2 live postings | DRAFT tier: core lane
+Recursion,greenhouse,recursionpharmaceuticals,2,ai-native biotech | 16 live postings | DRAFT tier: core lane
+Reddit,greenhouse,reddit,3,product | 154 live postings
+Reflection AI,ashby,reflectionai,2,ai-native | 56 live postings | DRAFT tier: core lane
+Render,ashby,render,2,devtools | 35 live postings | DRAFT tier: adjacent lane
+Replit,ashby,replit,2,devtools | 74 live postings | DRAFT tier: adjacent lane
+Robinhood,greenhouse,robinhood,3,fintech | 124 live postings | DRAFT tier: unclassified - review
+Rogo,ashby,rogo,2,ai-native fintech | 78 live postings | DRAFT tier: core lane
+Samsara,greenhouse,samsara,3,product iot | 267 live postings
+Sardine,ashby,sardine,3,fintech risk | 36 live postings | DRAFT tier: unclassified - review
+SingleStore,greenhouse,singlestore,2,data-infra | 41 live postings | DRAFT tier: adjacent lane
+Speechmatics,greenhouse,speechmatics,2,ai-native voice | 12 live postings | DRAFT tier: core lane
+StarTree,greenhouse,startree,2,data-infra | 2 live postings | DRAFT tier: adjacent lane
+Suno,ashby,suno,2,ai-native | 59 live postings | DRAFT tier: core lane
+Synthesia,ashby,synthesia,2,ai-native | 66 live postings | DRAFT tier: core lane
+Temporal,greenhouse,temporaltechnologies,2,devtools | 55 live postings | DRAFT tier: adjacent lane
+Tennr,ashby,tennr,2,ai-native healthcare | 20 live postings | DRAFT tier: core lane
+Thinking Machines Lab,ashby,thinkingmachines,2,ai-native | 35 live postings | DRAFT tier: core lane
+Together AI,greenhouse,togetherai,2,ai-native | 60 live postings | DRAFT tier: core lane
+Unit,ashby,unit,3,fintech | 5 live postings | DRAFT tier: unclassified - review
+Vanta,ashby,vanta,3,fintech compliance | 94 live postings | DRAFT tier: unclassified - review
+Vapi,ashby,vapi,2,ai-native voice | 31 live postings | DRAFT tier: core lane
+Verkada,greenhouse,verkada,3,product iot | 288 live postings
+Waymo,greenhouse,waymo,2,ai-native av | 384 live postings | DRAFT tier: core lane
+Wayve,greenhouse,wayve,2,ai-native av | 105 live postings | DRAFT tier: core lane
+Weaviate,ashby,weaviate,2,ai-native vectordb | 1 live postings | DRAFT tier: core lane
+World Labs,greenhouse,worldlabs,2,ai-native | 7 live postings | DRAFT tier: core lane
+Writer,ashby,writer,2,ai-native | 53 live postings | DRAFT tier: core lane
+Applied Intuition,ashby,applied,2,ai-native av | 272 live postings | DRAFT tier: core lane
+Braintrust,ashby,braintrust,2,ai-native evals | 23 live postings | DRAFT tier: core lane
+Chroma,ashby,trychroma,2,ai-native vectordb | 1 live postings | DRAFT tier: core lane
+Comet ML,greenhouse,comet,2,ai-native mlops | 4 live postings | DRAFT tier: core lane
+DoorDash,greenhouse,doordashusa,3,product | 467 live postings
+Fireworks AI,ashby,fireworks,2,ai-native | 58 live postings | DRAFT tier: core lane
+Omni Analytics,ashby,omni,2,data-infra BI | 26 live postings | DRAFT tier: adjacent lane
+Persona,ashby,persona,3,fintech identity | 18 live postings | DRAFT tier: unclassified - review
+Pilot,greenhouse,pilothq,3,fintech | 8 live postings | DRAFT tier: unclassified - review
+Runway,ashby,runway,2,ai-native | 4 live postings | DRAFT tier: core lane
+Starburst,greenhouse,starburst,2,data-infra | 16 live postings | DRAFT tier: adjacent lane
+Unify,ashby,unify,2,ai-native gtm | 7 live postings | DRAFT tier: core lane
+Warp,greenhouse,warp,2,devtools | 4 live postings | DRAFT tier: adjacent lane
+Canva,smartrecruiters,canva,2,product | 248 live postings | DRAFT tier: core lane

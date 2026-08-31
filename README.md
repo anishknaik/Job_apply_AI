@@ -1,364 +1,340 @@
-# jobpipe — Phase 1
+# jobpipe
 
-Daily job discovery and scoring. Pulls postings from a curated list of target
-companies' ATS boards, filters and scores them against a master profile, and
-writes a ranked shortlist to a Google Sheet.
+A personal job-search pipeline. It finds roles on company job boards, scores
+them against your profile with an LLM, puts the best on a Google Sheet, and
+generates a tailored one-page resume and cover letter for the ones you decide
+to apply to.
 
-See `PROJECT.md` for the *why* and `PHASE1_SPEC.md` for the *what*.
+It is built around one bet: **filtering quality beats application volume.**
+Forty mediocre applications lose to eight targeted ones, so almost everything
+here is machinery for throwing postings away accurately.
 
-## Status
+Built for one person originally, so you will find their name in the docs.
+Change it or don't; nothing depends on it.
 
-The spec's build order assumed Greenhouse and Lever were the primary sources.
-The verified target list is **16 Greenhouse, 20 Ashby, zero Lever**, so the
-order below is revised: Ashby takes step 4, and Lever is out of Phase 1
-entirely rather than shipping a fetcher that runs every morning and matches
-nothing.
+---
 
-| Step | State |
-|---|---|
-| 0. `verify` command | done — probes every token before any parsing runs |
-| 1. `targets.csv` | done — 36 companies, all 36 tokens return 200 with rows |
-| 2. SQLite schema + `db.py` | done |
-| 3. Greenhouse fetcher | done — second run yields 0 new postings |
-| 4. **Ashby fetcher** (was Lever) | done — 20 of 36 companies |
-| 5. Master profile | done — 3,355 words, ~6,290 tokens (clears Haiku's cache floor) |
-| 6. Stage A filters | done — 93.0% kill rate, audited against live data |
-| 7. Stage B scoring + calibration | **done** — awaiting hand-scored calibration set |
-| 8. Sheets sync | next |
-| 9. Cron | blocked on step 8 |
-| 10. SmartRecruiters | pending — N+1 fetcher, no description in list response |
-| 11. Firecrawl long tail | not started |
-| 12. Expand `targets.csv` | not started — do not scale until scoring is calibrated |
+## What it costs
 
-**Lever is dropped from Phase 1.** Its verified shape is recorded under
-"Notes carried from verifying the APIs" below, so re-adding it is cheap if a
-Lever company ever joins the list.
-
-## Cold start: nothing is scored until you say so
-
-The first run against a fresh database backfills every open req at all 36
-companies — thousands of rows. Scoring is therefore **opt-in and capped**:
-
-```bash
-JOBPIPE_ENABLE_SCORING=1 python run_daily.py    # only once you've looked
-```
-
-Without that variable the pipeline populates `postings`, runs Stage A, and
-scores nothing, so you can eyeball what survives before spending anything.
-Even once enabled, a queue above `JOBPIPE_MAX_SCORES_PER_RUN` (default 600)
-stops the run rather than working through it — a sudden jump means a filter
-was loosened or a big board was added, and the right response is to look, not
-to pay.
-
-## The `tier` column does something
-
-`tier` is read at sheet-sync time via `targets.tier_thresholds()`:
-
-| tier | meaning | minimum score to reach the sheet |
+| Stage | What runs | Cost |
 |---|---|---|
-| 1 | would accept today | 6 |
-| 2 | strong yes | 6 |
-| 3 | would consider | **8** |
+| Fetch, dedupe, Stage A filters | deterministic, no model | **$0** |
+| Stage B scoring | one LLM call per surviving posting | ~0.2¢ each, ~2.5¢/day |
+| Resume | one constrained call, no prose | ~0.4¢ |
+| Cover letter | prose, deliberately not cost-optimised | ~2¢ |
+| `measure`, `status`, `sync`, tests | local | **$0** |
 
-So ranking a company as tier 3 makes it surface only when a role is a strong
-match. Everything currently sits at tier 2; re-rank whenever you like, now
-that the column is wired to a behaviour.
+Stage A kills ~93% of postings before any model sees them. That is the whole
+reason this is affordable.
+
+---
+
+## Requirements
+
+- **Python 3.12+**
+- **Chromium**, for rendering resumes to PDF — installed via Playwright below
+- **A Google Cloud project** with a service account, for Sheets and (optionally)
+  Vertex AI
+- **A Gemini API key** *or* Vertex AI access — see [Choosing a model backend](#choosing-a-model-backend)
+- **A Google Sheet** you own
+
+An Anthropic key is optional; the provider layer supports Claude as an
+alternative to Gemini, but the rubric is calibrated on Gemini.
+
+---
 
 ## Setup
 
+### 1. Install
+
 ```bash
-python -m pip install -r requirements.txt
-cp .env.example .env        # then fill it in
-python -m jobpipe.cli init
-python -m jobpipe.cli verify   # confirm every board token before fetching
+git clone <your-fork> jobpipe && cd jobpipe
+python -m venv .venv && . .venv/bin/activate     # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+python -m playwright install chromium
 ```
+
+### 2. Copy the three config templates
+
+```bash
+cp config/master_profile.example.md config/master_profile.md
+cp config/bullets.example.yaml      config/bullets.yaml
+cp config/targets.example.csv       config/targets.csv
+cp .env.example                     .env
+```
+
+All four are gitignored. They are yours and they never get committed.
+
+### 3. Write your master profile — this is the important one
+
+`config/master_profile.md` is the source of truth for every claim any
+generated document makes, and it is the system-instruction prefix on every
+scoring call. **Its quality determines everything downstream.**
+
+Write it in the third person, and be specific. "Strong Python skills" tells the
+scorer nothing. "Built and operated an ingestion pipeline three analysts
+depended on daily" tells it a great deal. A thin profile produces scores
+clustered at 6–8, which carry no ranking information at all.
+
+The template walks through all twelve sections. The ones that do the most work
+are §10 (dealbreakers — what disqualifies you, what is merely a negative) and
+§11 (calibration examples, which stop scores clustering).
+
+### 4. Fill the bullet bank
+
+`config/bullets.yaml` is the **fabrication firewall**. Resume tailoring is
+selection and ordering, never writing: the model picks bullet ids from this
+file and may choose between pre-written short variants. It cannot author bullet
+text, so the resume literally cannot invent experience.
+
+Every bullet needs a `source` — where the claim can be checked. The loader
+refuses a bank without it, which is what makes "every claim traces to a
+document" a mechanism rather than an intention.
+
+Start from your existing resume. Fifteen to twenty-five bullets is a good size.
+
+### 5. Choose your targets
+
+`config/targets.csv` ships as an example with **143 companies and verified
+board tokens** — finding that Anthropic's Greenhouse token is `anthropic` is
+the tedious part, and it is done for you.
+
+But the list reflects one person's lanes (AI-native companies) and the `tier`
+column encodes their priorities. Edit it. Tier 1 is "drop everything", tier 3
+is "if the week is quiet"; tier drives queue order everywhere.
+
+```bash
+python -m jobpipe.cli targets    # validates the file
+python -m jobpipe.cli verify     # probes every board: does the token work?
+```
+
+`verify` is worth running after any edit. A wrong token does not raise — most
+boards return an empty list — so without it a company silently never appears.
+
+### 6. Google Cloud: service account
+
+1. Create or pick a project at <https://console.cloud.google.com>
+2. Enable the **Google Sheets API** and **Google Drive API**
+3. **IAM & Admin → Service Accounts → Create**, then **Keys → Add key → JSON**
+4. Save it as `config/service_account.json` (gitignored)
+
+If you are using Vertex for scoring, also enable `aiplatform.googleapis.com`
+and grant the service account `roles/aiplatform.user`. Filter the IAM role
+picker on the id `aiplatform` rather than the display name — Google renamed
+these and the names now collide with an unrelated product.
+
+### 7. Create the sheet — and share it
+
+Make a new Google Sheet. Take its id from the URL:
+
+```
+docs.google.com/spreadsheets/d/<THIS PART>/edit
+```
+
+> **Then share the sheet with your service account's email address, as Editor.**
+>
+> It looks like `something@your-project.iam.gserviceaccount.com` and is inside
+> the JSON key you just downloaded. **This is the step everyone misses.**
+> Sheets permissions and Cloud IAM are separate systems; granting IAM roles
+> does not give the service account access to your document.
+
+### 8. Fill in `.env`
+
+```ini
+JOBPIPE_PROVIDER=gemini
+GEMINI_API_KEY=...
+GOOGLE_SERVICE_ACCOUNT_JSON=config/service_account.json
+GOOGLE_SHEET_ID=<the id from the URL>
+GOOGLE_SHEET_TAB=roles
+```
+
+### 9. First run
+
+```bash
+python -m jobpipe.cli init      # create the database
+python -m jobpipe.cli fetch     # pull every board            (free)
+python -m jobpipe.cli filter    # Stage A                      (free)
+python -m jobpipe.cli stats     # how much survived
+python -m jobpipe.cli score --yes   # Stage B — THIS SPENDS MONEY
+python -m jobpipe.cli sync      # push the shortlist to the sheet
+```
+
+Nothing is scored until you pass `--yes`. That is deliberate: scheduling the
+job and authorising spend are separate decisions.
+
+---
+
+## Choosing a model backend
+
+Gemini runs two ways, and it is one environment variable:
+
+| | Developer API | Vertex AI |
+|---|---|---|
+| Auth | `GEMINI_API_KEY` | the service account you already made |
+| Billed to | that key's account | your GCP billing account |
+| Google Cloud credits | **cannot** be spent | can |
+| Data terms | paid tier does not train on prompts; free tier does | enterprise terms |
+
+To use Vertex:
+
+```ini
+JOBPIPE_GEMINI_BACKEND=vertex
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_LOCATION=global
+```
+
+Unset it to go back. Flipping the backend does not change which model runs, so
+you can verify the backend on its own before changing models underneath it.
+
+**If you are on a free-tier API key, move to a paid one or to Vertex.** The
+prompt is your complete career profile, and the free tier's terms permit
+training on submitted prompts.
+
+---
 
 ## Daily use
 
 ```bash
-python run_daily.py                  # what cron runs
+python -m jobpipe.cli daily --yes     # fetch, filter, score, sync
+python -m jobpipe.cli status          # where applications stand
 ```
 
-**Run `verify` after every edit to `targets.csv`.** A wrong `board_token` is
-the top silent-failure mode here: Greenhouse and Ashby both return an empty
-list rather than an error, so the company just quietly never appears. `verify`
-sends one request per token and prints the HTTP status and row count with no
-parsing in between, so a parser bug can never be mistaken for a bad token.
+To run it unattended (Windows):
 
-## Deduplication
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\register-task.ps1
+```
 
-Two layers, and the second one is subtler than it looks.
+Run that from an **elevated** shell — the task registers with an S4U principal
+so it runs whether or not you are logged in, and granting that needs admin.
+Add `-Spend` to include scoring; without it the scheduled run fetches, filters
+and syncs for free.
 
-1. **`UNIQUE (ats_type, source_id)`** — catches ordinary re-runs. On conflict
-   only `last_seen_at` is touched.
-2. **`content_hash = sha256(company + normalized_title)`** — catches reposts
-   *and* multi-location listings.
-
-`content_hash` deliberately **excludes location**. Both Greenhouse and Ashby
-return one row per location for a multi-location req: Harvey's "Technology
-Enablement Analyst" came back five times — New York, Remote, San Francisco,
-Chicago, Dallas — each with its own `source_id`. With location in the key
-those five hash differently, survive dedupe, get scored five times and land in
-the sheet five times.
-
-The worse failure is quieter: the row the pipeline keeps might be the San
-Francisco one, so a req genuinely open in New York is filtered out on location
-while its New York twin sits marked as a duplicate and never scored. To
-prevent that, a duplicate's location is **merged into the canonical row** and
-that row's Stage A verdict is cleared so it is re-evaluated against the full
-list. Harvey's five rows now collapse to one carrying
-`New York; Remote; San Francisco; Chicago; Dallas`.
-
-### Seniority is canonicalised, not stripped
-
-The spec says `normalized_title` should strip seniority prefixes. That is
-wrong in practice: "Senior Software Engineer" and "Software Engineer" are two
-different open reqs at one company, not one req written two ways, and
-collapsing them deletes one permanently.
-
-The failure that proved it: `Deployed Engineer (Early Career-NYC)`, posted 9
-days ago in New York, normalised to the same value as `Deployed Engineer
-(NYC)` from 68 days earlier, because `early career` was being treated as a
-seniority band. The older row became canonical, was discarded on posting age,
-and took the early-career role — the single best-matching posting in the
-dataset for a recent graduate — with it.
-
-Stripping only helps when a company changes the level between listings, which
-is rare. So only spelling variants are unified now: `Sr.` → `senior`,
-`Jr.` → `junior`. Everything else is left in the title.
-
-This only works if `normalized_title` is precise, and originally it was not.
-Two further bugs made it far too aggressive:
-
-* the seniority regex stripped `staff` from **"Member of Technical Staff"**,
-  turning every variant into the meaningless `member of technical`
-* *all* trailing parentheticals were stripped — but for several companies the
-  parenthetical **is** the role: `Member of Technical Staff (AI Inference
-  Engineer)`, `Senior Solutions Architect (DS/ML/GenAI/LLM)`
-
-Together those collapsed 42 distinct Perplexity engineering roles into a
-single hash. Dropping location from the key on top of that would have deleted
-41 real jobs. Now a parenthetical is dropped only when it is a level, an
-employment type, or a restatement of the posting's own location — so those 42
-rows produce 38 distinct hashes, while Harvey's 5 produce 1.
-
-On live data: 6,905 rows fetched, 1,473 collapsed as duplicates (1,188 of them
-contributing a city to a canonical row), 5,432 unique reqs.
-
-## Stage B — scoring
+### Applying to something
 
 ```bash
-python -m jobpipe.cli score --yes             # --yes is mandatory; it spends money
-python -m jobpipe.cli score --rescore --yes   # after any rubric change
-python -m jobpipe.cli sheet                   # preview what the sheet will hold
-python -m jobpipe.cli sync                    # push it to Google Sheets
-python -m jobpipe.cli calibrate --sample 20   # blank sheet to hand-score
-python -m jobpipe.cli calibrate               # compare model vs your judgement
+python -m jobpipe.cli tailor --queued --yes            # a resume per queued role
+python -m jobpipe.cli tailor --cover-letter <id> --yes # one letter, grounded
 ```
 
-### Two score axes, not one
-
-`overall` is strict fit on paper. `apply_score` is whether it is worth an
-application anyway. They diverge constantly in one direction — **right skills,
-not enough years** — and collapsing them into a single number means either
-losing those roles or inflating every score to keep them.
-
-The sheet surfaces on `apply_score` and shows `overall` beside it.
-
-Three precedence rules govern `apply_score`: a hard dealbreaker caps it at 2;
-a wrong-function role caps it at 3; otherwise a *years* bar alone can never
-drag it below 6 when `skills_match >= 7`. A low `seniority_fit` driven by
-**scope** rather than years is explicitly not covered by that floor.
-
-### Rank, not threshold
-
-The sheet takes the **top N by `apply_score`** above a low floor, rather than
-everything above a cutoff. Calibration showed the model's positives pile onto
-exactly 6, so one point of drift swung the sheet between three rows and
-twelve. Ranking gives the spec's "5–20 roles" reliably and removes a parameter
-that could not be tuned on the available sample.
-
-### Archetype and legitimacy (§3.1, §3.2)
-
-Every posting is classified into a lane — `ai_ml_engineer`, `data_scientist`,
-`ml_platform`, `swe_generalist`, `analytics`, `non_technical` — *before*
-scoring, and the rubric branches on it. A single rubric spanning AI/ML
-engineering and data science is a known cause of scores drifting to the middle.
-`non_technical` short-circuits to 1.
-
-`legitimacy` (`ok` / `suspicious` / `likely_ghost`) rides on its own axis and
-never feeds any score: a legitimate poor-fit role and a fake perfect-fit role
-need different handling. It appears in the sheet only when it is *not* `ok`,
-since an "ok" in every row trains you to stop reading the column.
-
-**Calibrate before trusting the ranking.** The first version of any scoring
-prompt clusters everything at 6–8, which looks fine in the sheet and carries
-no information. `calibrate` reports mean absolute error, directional bias, and
-— separately — whether the scores are clustered at all, because a good MAE
-with a 3-point range is still a useless ranking.
-
-Three deliberate deviations from the spec, all verified:
-
-* **No `temperature`.** Non-default sampling parameters return a 400 on
-  `claude-sonnet-5`, the escalation model — so the spec's determinism rule
-  breaks exactly on the borderline scores it matters most for. Determinism
-  comes from `output_config.format` with a JSON schema instead, which is a
-  stronger guarantee and works on both models.
-* **Prompt caching is asserted, not assumed.** Haiku 4.5 refuses to cache a
-  prefix under 4,096 tokens and says nothing when it declines —
-  `cache_read_input_tokens` just stays 0 and the bill is 10× higher forever.
-  `check_cacheable()` measures the prefix at startup and refuses to run if it
-  is short. The current profile measures ~6,290 tokens.
-* **Thinking disabled.** This is a fixed-shape classification run thousands of
-  times. Thinking is on by default on Sonnet 5, so it is turned off explicitly.
-
-## Tuning Stage A
-
-This is where the recurring API bill is won or lost — every posting killed
-here is one you never pay to score.
+Then **copy the letter before editing it**:
 
 ```bash
-python -m jobpipe.cli filter --refilter    # re-evaluate after editing filters.yaml
-python -m jobpipe.cli audit                # what was thrown away, and by which rule
-python -m jobpipe.cli audit --rule title_exclude --limit 50
-python -m jobpipe.cli audit --passed       # what survived
-python -m jobpipe.cli stats                # per-company pass rates
+cp cover_letter.md cover_letter.sent.md    # then edit the .sent.md
 ```
 
-**Stage A is deliberately loose.** At Haiku pricing a false positive costs a
-fraction of a cent, while a false negative is invisible and permanent — you
-never learn the role existed. So Stage A only filters on what is cheap and
-certain (location, obviously non-technical functions). Seniority judgement
-belongs in Stage B, where `seniority_fit` is an explicit scored dimension and
-the model has read the description.
-
-Consequences of that principle, each driven by a posting it was losing:
-
-* `manager` is **not** excluded. It killed 1,266 postings, ~405 of which also
-  matched the title allowlist. Stage A only sees a title; it should not be
-  deciding whether "Technical Lead" is an IC role.
-* `new grad`, `new graduate` and `early career` are **not** excluded. They are
-  the highest-value postings in the dataset for a recent graduate, and
-  excluding them was silently deleting Snowflake's "AI Research Scientist, New
-  Grad", Sentry's "Software Engineer, New Grad (2027)" and Sigma's "Software
-  Engineer (New Grad Program)".
-* `max_age_days` is 60, and campus programmes are exempt from it entirely via
-  `max_age_exempt_titles` — they are posted months ahead and stay open. Sigma's
-  New Grad Program, open in New York, was 127 days old.
-
-**Read the discard pile before trusting a kill rate.** Use the histogram — it
-groups rejections by the exact term that fired, which is the number that says
-whether a rule earns its place:
+The original is the baseline `measure` compares against, and prose regenerates
+at ~0.53 distance from itself, so a fresh draft is not a substitute for a
+destroyed original. If you run the MCP server, `copy_for_editing` does this
+correctly and refuses to do it wrong.
 
 ```bash
-python -m jobpipe.cli histogram --min-count 20
+python -m jobpipe.cli measure --detail   # what you changed, per paragraph slot
 ```
 
-That is how `manager` was found killing 1,266 postings, and how `intern` was
-confirmed to be killing only 18 rather than every "Internal" and
-"International" title. Auditing the first real run turned up three false
-negatives that a headline "96.7% killed" completely hid:
+The per-slot number is the actionable part: it tells you which instruction in
+the prompt is wrong.
 
-* `staff` in the title blocklist was deleting every **"Member of Technical
-  Staff"** — the standard IC engineering title at Perplexity, Cohere, OpenAI
-  and Cockroach Labs. 81 postings, 65 of them in a location you'd work in.
-* Evaluating a multi-location string as one blob killed genuine New York roles
-  because they were *also* open in London. 101 postings.
-* Plain substring matching had `intern` matching "**Intern**al Agent" and `ny`
-  matching "Germa**ny**" and "Su**nny**vale".
+---
 
-The filter engine now uses word-boundary matching, blocklist masking
-(`title_exclude_unless`) and per-location evaluation. Every one of those bugs
-is pinned by a test in `tests/test_filters.py::TestRegressions`.
+## The guardrails
 
-## Tests
+These are not suggestions. Several were written after something went wrong.
 
-```bash
-python -m pytest tests/ -q
-```
+- **It never submits an application.** It fills a form if you ask it to, then
+  stops. You click submit. Most ATS terms require a human, and the
+  twenty-second review is what stops a mis-tailored application going out.
+- **It never sends email.** Drafts only.
+- **It never fabricates.** Every claim traces to `bullets.yaml` or
+  `master_profile.md`. If a posting wants something you have not done, the
+  honest output is a document without it. If a claim is true but the profile
+  does not support it, **fix the profile first.**
+- **Nothing is ever deleted** from the database. Status is an append-only event
+  log, because "advance rate" is a question about transitions.
+- **Copy letters, never rename them.** A baseline was destroyed this way once
+  and it is unrecoverable.
 
-## Layout
+---
 
-```
-config/
-  targets.csv          company target list (verified board tokens)
-  filters.yaml         Stage A rules — tune here, not in code
-jobpipe/
-  fetchers/
-    http.py            shared retry/backoff + polite delay
-    greenhouse.py      lever.py      ashby.py
-  normalize.py         Posting dataclass, title normalization, content_hash
-  db.py                SQLite — the source of truth
-  dedupe.py            source_id (layer 1) + content_hash reposts (layer 2)
-  filters.py           Stage A
-  pipeline.py          stage orchestration, per-company error isolation
-  cli.py               init / fetch / filter / audit / stats / targets
-tests/
-run_daily.py           cron entry point
-```
-
-## Notes carried from verifying the APIs
-
-* **Greenhouse** `content` is HTML-*escaped* (`&lt;h2&gt;`), and `first_published`
-  is the real posting date — `updated_at` moves on any edit. `content=true`
-  makes the endpoint large (Stripe alone is ~4.3 MB).
-* **Lever** (out of Phase 1, recorded for later) returns a bare JSON array;
-  the title field is `text`, `createdAt` is epoch **milliseconds**, and the
-  body is split across `descriptionPlain` / `openingPlain` /
-  `descriptionBodyPlain` / `additionalPlain`. A bad token 404s, a valid empty
-  board returns `[]` — keep those distinguishable.
-* **Ashby** ships `descriptionPlain` and a real `isRemote` boolean, but
-  unlisted postings are still in the array and must be dropped on `isListed`.
-* **SmartRecruiters** returns no description in the list response — it needs a
-  second request per posting, so it is an N+1 fetcher and is deliberately last.
-
-## Provider and models (addendum §2)
-
-Scoring runs on **Gemini**, behind a provider abstraction in
-`jobpipe/providers/` — swapping is a config change:
+## How it works
 
 ```
-JOBPIPE_PROVIDER=gemini
-JOBPIPE_SCORING_MODEL=gemini-3.1-flash-lite
-JOBPIPE_ESCALATION_MODEL=gemini-3.5-flash-lite
+targets.csv → Greenhouse / Ashby / SmartRecruiters public JSON
+  → normalize → dedupe (source id, then content hash for reposts)
+  → Stage A: deterministic regex filters        ~93% killed, $0
+  → Stage B: LLM scoring against your profile
+  → SQLite (source of truth) → Google Sheet (a rendered view)
+  → queued → resume PDF → [you decide] → cover letter → grounded
 ```
 
-**`gemini-2.5-flash-lite`, the model §2 names, is unusable** — verified live,
-the API returns "no longer available to new users" for a freshly created key.
-The addendum's first escalation step is the effective primary.
+Four decisions worth knowing about:
 
-The key must belong to a **billing-enabled** project: Google's free tier
-permits training on submitted prompts, and the prompt is a full career profile.
+**Two score axes.** `overall` is fit on paper; `apply_score` is "worth applying
+anyway". They come apart on the shape that dominates an early-career search —
+right skills, not enough years — and one number cannot carry both.
 
-Three provider differences the abstraction hides:
+**Rank, not threshold.** Scores pile onto 6, so a fixed cutoff swings the sheet
+between three rows and twelve. The sheet takes the top 25, max 3 per company.
 
-1. **Caching is implicit on Gemini**, not an explicit breakpoint. There is no
-   TTL to set — keeping the profile byte-identical at the front of
-   `system_instruction` *is* the technique. Floors differ by model (2,048 on
-   2.5, 4,096 on 3.x), so `cache_minimum_tokens()` is part of the provider
-   interface. Measured hit rate: ~36% of input tokens.
-2. **Both vendors fail silently below the cache floor** — no error, the counter
-   just stays at 0 and the bill is ~10× forever. `check_cacheable()` measures
-   the prefix at startup and refuses to run if it is short.
-3. **`temperature=0` works on Gemini but 400s on `claude-sonnet-5`.**
-   Determinism comes from the JSON schema, the one mechanism both support.
+**Status is an event log, not a column.** Overwriting `interview` with
+`rejected` destroys the evidence the interview happened.
 
-Anthropic remains implemented as the last rung of §2's escalation ladder.
+**Content is stored, not pointed at.** Generated documents live in the database,
+not only on disk, because files get renamed and overwritten.
 
-## Measured cost
+`PROJECT.md` has the guardrails and why the phases are shaped as they are.
+`CONTEXT.md` has where things actually stand. `PHASE5_PLAN.md` covers the MCP
+server.
 
-| | |
-|---|---|
-| per scored posting | ~0.18¢ (incl. ~28% escalation) |
-| one-time backfill, 209 postings | ~40¢ |
-| new scoreable postings per day | 4–5 (measured over 30 days) |
-| **projected steady state** | **~30¢/month** |
+---
 
-Inside the addendum's $0.30–1.20/month estimate, at the low end.
+## Optional: the MCP server
 
-## What's needed next
+Exposes the pipeline to Claude as tools, so reviewing a resume against the real
+posting happens in a conversation. `.mcp.json` registers it for local desktop
+sessions.
 
-Write the master profile to `config/master_profile.md` (gitignored). The spec
-is right that length is a feature: 3,000+ words, every project, metric, tool
-and responsibility — including things you'd never put on a resume. Everything
-downstream inherits its quality.
+It is read-only plus two safe writes. There is deliberately **no submit tool
+and no email tool** — a tool that does not exist cannot be argued into
+existing, which is stronger than a rule a model is asked to respect. Scoring
+and calibration are kept off the surface too: they spend money and write
+corpus-wide.
+
+---
+
+## What is yours, and never committed
+
+```
+.env                          keys and ids
+config/service_account.json   your Google credentials
+config/master_profile.md      your career history
+config/bullets.yaml           your resume
+config/targets.csv            your target companies
+config/calibration*           your hand scores and judgements
+samples/                      your real cover letters
+output/                       generated applications
+jobpipe.db                    everything the pipeline knows
+```
+
+Check `git status` before your first push. If any of those appear, stop.
+
+---
+
+## Troubleshooting
+
+**`sync` fails with a permission error.** The sheet is not shared with the
+service account. See step 7 — it is almost always this.
+
+**A company never appears.** Run `cli verify`. A wrong board token returns an
+empty list rather than an error.
+
+**Scores all come back 6–8.** The profile is too thin or the calibration
+examples in §11 are still the drafted ones. Hand-score twenty real postings and
+rewrite them.
+
+**`tailor` fails on the bank.** The loader validates strictly — unknown
+archetypes, missing `source`, duplicate ids. The message names the bullet.
+
+**Resume rendering fails.** `python -m playwright install chromium`.
+
+**Everything is slow the first time.** Fetching 143 boards takes a few minutes.
