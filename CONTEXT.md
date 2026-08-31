@@ -24,7 +24,7 @@ metric is interviews per hour spent, not applications per day.
 
 | Phase | Scope | State |
 |---|---|---|
-| 1 | Discovery → dedupe → filters → LLM scoring → Google Sheet | Running unattended, daily 10:00 |
+| 1 | Discovery → dedupe → filters → LLM scoring → Google Sheet | Fetch/filter/sync unattended daily 11:30; scoring on demand |
 | 2 | Queued role → tailored resume PDF → cover letter → grounding check | Running on demand |
 | 3 | Application form fill, human clicks submit | Not started, deliberately blocked (§8.4) |
 | 4 | Recruiter research → outreach drafts | Not started |
@@ -162,7 +162,7 @@ editing. This measurement is why `documents.content` exists.
 a Playwright check is wrong on half the sources. `last_seen_at` with a 7-day
 window is free and correct.
 
-**Phase 1 is a script, not an agent.** It must run identically at 10:00 with
+**Phase 1 is a script, not an agent.** It must run identically at 11:30 with
 nobody watching. Agent-shaped tooling was always scheduled to arrive later —
 which is what §9 is.
 
@@ -184,7 +184,7 @@ These hold across every phase and are not negotiable per-task.
 - **Never hand-edit `resume.pdf`.** Fix the bank, a `rank`, or `skills` tags,
   then regenerate.
 - **Never run `cli daily`, `cli score`, or `cli calibrate`** by hand — prepaid
-  balance, ~85¢ for a full re-score. The cron already handles daily at 10:00.
+  balance, ~85¢ for a full re-score. The 11:30 cron no longer scores (§7).
 - No LinkedIn/Indeed scraping, no CAPTCHA bypass, secrets stay in `.env`.
 
 ---
@@ -383,7 +383,7 @@ That distinction decides which model does what:
 | Bullet selection | Flash-Lite, ~0.4¢ | Claude picks ids, server validates | No |
 | Cover letter prose | 3.5-flash, ~2¢ | Claude writes, server assembles | No |
 | Grounding check | Flash-Lite | **Must stay off-session** | **Yes** |
-| Daily scoring (10:00) | Flash-Lite, ~2.5¢/day | Nothing drives an MCP client at 10am | **Yes** |
+| Daily scoring (11:30) | Flash-Lite, ~2.5¢/day | Nothing drives an MCP client at 11:30 | **Yes** |
 
 So the Gemini key survives — for a smaller and better reason than it exists
 for today.
@@ -404,7 +404,7 @@ lands, at no marginal cost.
 
 ### 9.3 The scoring cron cannot move, and should not
 
-There is no session at 10:00, and an MCP server is inert without a client.
+There is no session at 11:30, and an MCP server is inert without a client.
 Scheduling a Cowork agent instead is ruled out by `PROJECT.md` deliberately:
 running the daily loop on a subscription "would consume the shared usage pool
 and leave me throttled for everything else, including the job search itself."

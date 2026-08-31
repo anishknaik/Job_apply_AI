@@ -14,7 +14,8 @@
 #>
 [CmdletBinding()]
 param(
-    [string] $Time     = '07:00',
+    # 11:30 local. Changed from 10:00 on 2026-08-31 at Anish's request.
+    [string] $Time     = '11:30',
     [string] $TaskName = 'jobpipe-daily',
     # Off by default: registering the schedule and authorising spend are two
     # separate decisions, and the default should be the one that costs nothing.
@@ -43,7 +44,7 @@ $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
 
 $trigger = New-ScheduledTaskTrigger -Daily -At $Time
 
-# StartWhenAvailable matters on a laptop: without it a machine asleep at 07:00
+# StartWhenAvailable matters on a laptop: without it a machine asleep at 11:30
 # simply skips the day, and a skipped day is postings never seen. The run is
 # idempotent, so a late start is harmless.
 $settings = New-ScheduledTaskSettingsSet `

@@ -1,7 +1,7 @@
 # Phase 1 — Summary
 
 Daily discovery → dedupe → deterministic filters → LLM scoring → Google Sheet.
-Runs unattended at 10:00 via Task Scheduler.
+Runs unattended at 11:30 via Task Scheduler (10:00 until 2026-08-31).
 
 ## What runs
 

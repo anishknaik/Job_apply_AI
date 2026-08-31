@@ -67,16 +67,33 @@ source of truth is `master_profile.md` §12; edit there, and `pytest
 tests/test_bullets.py -k Header` will tell you if the bank has drifted from
 it.
 
-## Do not run anything that scores
+## Never run these unasked
 
 ```
-DO NOT RUN:  cli daily,  cli score,  cli calibrate
+cli daily,  cli score,  cli calibrate,  cli ground
 ```
 
-Scoring runs on Gemini against a prepaid balance with **about $1.82 left**, and
-a full re-score costs ~85¢. The daily cron already handles it at 10:00 for
-~2.5¢/day. Document generation is cheap by comparison — a resume is ~0.4¢, a
-cover letter ~2¢ — so `tailor` is fine to run.
+They spend money and the first three write corpus-wide. Run one only when
+Anish asks for that specific thing, and say what it will cost before you do.
+"He approved Track A" is not approval for the next scoring run.
+
+The same four are kept off the MCP tool surface, and for a sharper reason: a
+tool that exists is a tool an agent can decide to call, and with the backlog
+now growing on purpose there is a standing invitation to clear it.
+
+This rule used to read "DO NOT RUN", which was accurate while the prepaid
+balance was $1.82 and is not any more — but the ban was doing two jobs and
+only one of them was about money.
+
+Scoring moved off the schedule on 2026-08-30 and onto Vertex, billed to
+GCP credit rather than the prepaid AI Studio balance. The **11:30 cron now
+fetches, filters and syncs only** — it scores nothing — so the unscored backlog
+grows until someone runs `cli score` deliberately. That is a temporary posture
+while Track A recalibrates; `register-task.ps1 -Spend` puts scoring back.
+
+A full re-score costs ~85¢ and `calibrate` is comparable. Document generation
+is cheap by comparison — a resume is ~0.4¢, a cover letter ~2¢ — so `tailor` is
+fine to run.
 
 `measure`, `status`, `sync` and the test suite cost nothing.
 
