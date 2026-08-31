@@ -248,6 +248,23 @@ def effective_cutoff(conn, limit: int = 20, fallback: int = 6) -> int:
     return fallback if row is None else int(row["apply_score"])
 
 
+def _hand_label(entry: dict) -> str:
+    """Render a hand score for a message, on whichever axes were supplied.
+
+    load_hand_scores emits my_fit and my_apply and never my_score, including
+    for the legacy single-column sheets it maps onto my_apply. Reading the raw
+    column back out only works when the source CSV happened to carry it, which
+    is why this stayed latent until a merged sheet without that column met a
+    posting Stage A now discards.
+    """
+    fit, apply_ = entry.get("my_fit"), entry.get("my_apply")
+    if fit is not None and apply_ is not None:
+        return f"fit={fit} apply={apply_}"
+    if apply_ is not None:
+        return f"apply={apply_}"
+    return f"fit={fit}" if fit is not None else "unscored"
+
+
 def run(conn, provider, path: Path = DEFAULT_PATH,
         model: str | None = None, threshold: int | None = None) -> int:
     """Score the hand-scored set fresh and print a side-by-side comparison."""
@@ -295,11 +312,17 @@ def run(conn, provider, path: Path = DEFAULT_PATH,
             "dealbreakers": score.get("dealbreakers", []),
         })
 
+    # The expensive part is over. Persist it before anything that formats or
+    # aggregates can raise: the print below discarded 55 scored postings and
+    # 39 escalations by reaching for a key load_hand_scores does not set.
+    if comparisons:
+        _write_result(path, comparisons, None)
+
     if skipped:
         print(f"skipped {len(skipped)} posting(s) that Stage A now discards:")
         for row, entry in skipped:
             print(f"  {row['company'][:16]:16s} | {row['title'][:38]:38s} "
-                  f"(you scored {entry['my_score']}) — {row['stage_a_reason']}")
+                  f"(you scored {_hand_label(entry)}) — {row['stage_a_reason']}")
         print()
 
     if not comparisons:
@@ -505,8 +528,15 @@ def _stdev(values: list[int]) -> float:
     return (sum((v - mean) ** 2 for v in values) / (len(values) - 1)) ** 0.5
 
 
-def _write_result(path: Path, comparisons: list[dict], summary: dict) -> None:
+def _write_result(path: Path, comparisons: list[dict],
+                  summary: dict | None) -> None:
     """Persist the run so diagnosing it does not mean paying to re-score.
+
+    Called twice: once the moment the scoring loop finishes, with summary
+    None, and again with the summary once the report has been computed. The
+    first call is what makes this docstring true. It was written before the
+    call was, and a KeyError in the skipped-postings print threw away 55
+    scored postings and 39 escalations to demonstrate the difference.
 
     Deliberately a sidecar file rather than the `scores` table: a calibration
     run is often made with an experimental rubric, and those scores must not
@@ -515,4 +545,8 @@ def _write_result(path: Path, comparisons: list[dict], summary: dict) -> None:
     out = path.with_name(path.stem + "_result.json")
     out.write_text(json.dumps({"summary": summary, "postings": comparisons},
                               indent=2), encoding="utf-8")
-    print(f"\nfull results written to {out.name}")
+    if summary is None:
+        print(f"\n{len(comparisons)} scored posting(s) saved to "
+              f"{out.name} before reporting")
+    else:
+        print(f"\nfull results written to {out.name}")

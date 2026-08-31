@@ -5,6 +5,7 @@ is a useless ranking". These tests guard the sampler that makes spread
 possible in the first place.
 """
 import csv
+import json
 from pathlib import Path
 
 import pytest
@@ -42,6 +43,7 @@ class TestEffectiveCutoff:
             self._conn_with([]), fallback=6) == 6
 
 from jobpipe import calibrate, db
+from jobpipe.providers import ProviderResponse, ScoringProvider
 from jobpipe.normalize import Posting
 
 
@@ -359,3 +361,103 @@ class TestRankIsTheMetricThatMatters:
         rows.append({"posting_id": 99, "company": "X", "my_apply": None,
                      "model_apply": 5})
         assert calibrate.rank_agreement(rows)["n"] == 3
+
+
+class TestRunSurvivesAStageADiscard:
+    """A formatting bug must not discard a paid scoring run.
+
+    Both of these come from one real failure: a merged hand-scored sheet with
+    no `my_score` column met a posting Stage A now discards, and the skipped-
+    postings print raised KeyError after 55 postings had been scored and 39
+    escalated. The results were still in memory and were never written.
+    """
+
+    class _Provider(ScoringProvider):
+        name = "gemini"
+        known_models = ("gemini-2.5-flash",)
+
+        def count_tokens(self, model, text):
+            return 11782
+
+        def cache_minimum_tokens(self, model):
+            return 2048
+
+        def score(self, *, model, system_prompt, user_text, schema):
+            payload = {"skills_match": 6, "seniority_fit": 6,
+                       "domain_relevance": 6, "overall": 6, "apply_score": 6,
+                       "archetype": "ai_ml_engineer", "domain": "ai_infra",
+                       "seniority_gap": "none", "legitimacy": "ok",
+                       "legitimacy_reason": "", "dealbreakers": [],
+                       "reasoning": "r", "apply_reason": "a"}
+            return ProviderResponse(text=json.dumps(payload),
+                                    input_tokens=100, output_tokens=50)
+
+    def _sheet(self, tmp_path, rows):
+        path = tmp_path / "merged.csv"
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=calibrate.COLUMNS)
+            writer.writeheader()
+            writer.writerows(rows)
+        return path
+
+    def _seed_one(self, conn, title, passed):
+        posting = Posting(ats_type="ashby", source_id=title, company="Co",
+                          title=title, location="NY", remote_flag=False,
+                          description="Build things.", url="https://x",
+                          posted_at=None)
+        pid, _ = db.upsert_posting(conn, posting, posting.content_hash)
+        db.set_stage_a(conn, pid, passed, "passed" if passed else "title_exclude")
+        return pid
+
+    def test_a_discarded_posting_does_not_kill_the_run(self, conn, tmp_path,
+                                                       monkeypatch):
+        kept = self._seed_one(conn, "ML Engineer", True)
+        gone = self._seed_one(conn, "Sales Lead", False)
+        # No my_score column: exactly what load_hand_scores emits, and what a
+        # merged sheet written from COLUMNS carries.
+        path = self._sheet(tmp_path, [
+            {"posting_id": kept, "company": "Co", "title": "ML Engineer",
+             "lane": "strong-lane", "url": "https://x",
+             "my_fit": 7, "my_apply": 8, "notes": ""},
+            {"posting_id": gone, "company": "Co", "title": "Sales Lead",
+             "lane": "other", "url": "https://x",
+             "my_fit": 2, "my_apply": 2, "notes": ""},
+        ])
+        monkeypatch.setattr(calibrate.scoring, "load_profile", lambda: "p")
+        assert calibrate.run(conn, self._Provider(), path) == 0
+
+    def test_scored_postings_are_on_disk_before_the_report(self, conn,
+                                                           tmp_path,
+                                                           monkeypatch):
+        """The write happens after scoring, not after reporting."""
+        kept = self._seed_one(conn, "ML Engineer", True)
+        path = self._sheet(tmp_path, [
+            {"posting_id": kept, "company": "Co", "title": "ML Engineer",
+             "lane": "strong-lane", "url": "https://x",
+             "my_fit": 7, "my_apply": 8, "notes": ""},
+        ])
+        monkeypatch.setattr(calibrate.scoring, "load_profile", lambda: "p")
+
+        boom = RuntimeError("reporting blew up")
+
+        def explode(*a, **k):
+            raise boom
+
+        monkeypatch.setattr(calibrate, "rank_agreement", explode)
+        with pytest.raises(RuntimeError):
+            calibrate.run(conn, self._Provider(), path)
+
+        result = path.with_name(path.stem + "_result.json")
+        assert result.exists(), "a paid run must survive a reporting crash"
+        saved = json.loads(result.read_text(encoding="utf-8"))
+        assert saved["summary"] is None
+        assert [p["posting_id"] for p in saved["postings"]] == [kept]
+
+    def test_hand_label_renders_whatever_axes_exist(self):
+        assert calibrate._hand_label({"my_fit": 7, "my_apply": 8}) == \
+            "fit=7 apply=8"
+        assert calibrate._hand_label({"my_fit": None, "my_apply": 8}) == \
+            "apply=8"
+        assert calibrate._hand_label({"my_fit": 7, "my_apply": None}) == "fit=7"
+        assert calibrate._hand_label({"my_fit": None,
+                                      "my_apply": None}) == "unscored"
