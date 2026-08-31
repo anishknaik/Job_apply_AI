@@ -17,17 +17,26 @@ of the three: §7's Vertex question is settled, and §9 is superseded by
 ## 1. State
 
 ```
-33 commits, 688 tests passing, branch master (phase5/slice-0 trails at 8d3deee)
+36 commits, 695 tests passing, branch phase5/track-a-step5
+  (3 ahead of master, a fast-forward; phase5/slice-0 trails at 8d3deee)
 16,668 postings | 625 past Stage A | 635 scored | 1 letter measured
 ```
 
-Shipped configuration:
+Shipped configuration — all four models resolve on Vertex:
 
 ```
-JOBPIPE_GEMINI_BACKEND=vertex        scoring   gemini-2.5-flash
+JOBPIPE_GEMINI_BACKEND=vertex        scoring    gemini-2.5-flash
 GOOGLE_CLOUD_LOCATION=global         escalation gemini-2.5-pro
-RUBRIC_VERSION=2026-08-31.3          grounding  gemini-2.5-flash-lite
+RUBRIC_VERSION=2026-08-31.4          grounding  gemini-2.5-flash-lite
+                                     prose      gemini-2.5-flash
 ```
+
+`JOBPIPE_GEMINI_BACKEND` now has **no default** — it decides which account is
+billed, so an unset value raises rather than falling back to the Developer
+API. If something suddenly refuses to start, that is the first thing to check,
+and the usual cause is a process that did not load `.env`: python-dotenv
+searches upward from the **calling file**, not the working directory, so a
+script outside the repo root silently gets nothing.
 
 Scheduled run is 11:30, S4U, **fetch/filter/sync only — it scores nothing.**
 That is a deliberate temporary posture while calibration settles;
@@ -43,7 +52,7 @@ grows about 3/day and nothing reaches the sheet until someone runs `cli score`.
 | **Slice 0** | all 9 items |
 | **Track B slice 1** | 5 read-only MCP tools, stdio, exercised from a live session |
 | **Track B slice 2** | `copy_for_editing` + `advance_status`, used on a real application |
-| **Track A 1–4** | probe, `VertexGeminiProvider`, rubric + `domain`, holdout gate |
+| **Track A, all 6** | probe, `VertexGeminiProvider`, rubric + `domain`, holdout gate, recalibration, queue backfill |
 
 Verified means observed, not inferred:
 
@@ -70,10 +79,19 @@ never used to tune `.3`, rank goes +0.604 to +0.743. Figures and the cost side
 are in `PHASE5_PLAN` Track A step 5. It cost three runs rather than one — see
 §5 for why.
 
-**Track A step 6** — backfill the ~67 live rows so the queue carries `domain`.
-Only 3 scores have it, and those three are on the superseded `.2` rubric, so
-they get redone regardless. Slice 3's variant grid is unexercised until this
-runs. **Now unblocked:** step 4's gate is passing again.
+**Track A step 6 — DONE 2026-08-31.** 67 scored, 56 escalated (84%), 0 failed.
+All 67 queued postings now carry `domain`, `archetype`, `seniority_gap`,
+`scorer` and `rubric_version`; the 565 untouched rows keep their 3.1
+provenance per `PHASE5_PLAN` §3.5. The queue spans six of the seven variants
+(`ai_infra` 31, `ai_saas` 15, `product_saas` 7, `robotics_cv` 5, `fintech` 5,
+`healthcare` 2, `data_infra` 2), so **slice 3's grid is exercisable.**
+
+`data_infra` at 2 is worth watching: §4.2 sized it at 29% of the target list
+and gave it a variant on that basis. Two live postings is not yet evidence
+against it — but if it stays at 2 after a few more fetches, the variant's
+priority is wrong.
+
+Track A is complete. **Next is Track B slice 3.**
 
 **Track B slice 3** — `render_resume`: split `pipeline_tailor.generate_resume`,
 build the seven variant orderings, add the header generator from
@@ -146,11 +164,63 @@ decide 71% of scores. `2026-08-31.3` restates both rules on the schema field
 that applies them; the gate passes again, and rank agreement is the best
 measured.
 
+**One rule, correct in prose, wrong at the point of use — three times in one
+day.** This is the most transferable thing in this document.
+
+  1. **Grounding** called `default_model()`, which ignores
+     `JOBPIPE_SCORING_MODEL` (`574fdd4`).
+  2. **The rubric's field descriptions.** `archetype` gates the
+     `non_technical` cap and is filled FIRST, before any reasoning exists, yet
+     carried no test; `skills_match` had the bare description `"0-10"` while
+     the frontend rule sat in a profile section about overall fit. Pro read
+     the prose and did the forbidden thing anyway (`015236f`).
+  3. **`dealbreakers` said "mandatory relocation"** unqualified, while the
+     rubric says "relocation the candidate has ruled out" and the profile says
+     he relocates anywhere in the US. Verkada's CV posting: every axis 9,
+     reasoning positive, apply capped to 2 on a five-days-onsite line, which
+     put it below the sheet's floor of 4 and removed it entirely (`1bb0f0a`).
+  4. **`DEFAULT_PROSE_MODELS`** was provider-keyed, so cover letters were
+     pointed at `gemini-3.5-flash` on Vertex — a model Vertex does not serve
+     (`1bb0f0a`).
+
+The fix each time was **relocation, not more prose**: state the rule on the
+field the model fills, or key the value by the backend that will receive it.
+`7917ada` had already shown a fourth attempt at rubric prose does not stick.
+**When a scoring result looks wrong, check where the rule is written before
+rewriting it.**
+
 **The pattern behind three of those:** having demoted MAE and bias as measuring
 the wrong decision, I kept optimising them anyway. Every intervention aimed at
 absolute scores degraded rank. **The profile fix was the only change that
 helped, and it worked by removing a rule the model was misreading rather than
 by adding one.**
+
+---
+
+## 5a. Start here next session
+
+Track B slice 3, `render_resume`. Three pieces, in order:
+
+1. **Split `pipeline_tailor.generate_resume`** into selection and render. The
+   parts are already separable — `bank.select`, `resume.render`,
+   `db.insert_document` — so this is decomposition, not rewrite.
+2. **Build the seven variant orderings** from `PHASE5_PLAN` §4.2. A variant is
+   an ORDERING over the whole bank plus a headline and skill-section order,
+   never a subset. **This is the part that needs Anish's review**, because a
+   wrong ordering makes every resume in that lane wrong the same way and
+   nothing will report it as an error.
+3. **The header generator** from `master_profile.md` §12, emitted to its own
+   file and merged at `load_bank()` — never written into `bullets.yaml`, which
+   stays entirely hand-edited.
+
+The queue now carries `domain` on all 67, so `(lane, domain)` resolves without
+the fallback and the grid can actually be exercised. Tests stay offline: call
+the tool functions directly, do not stand up a transport.
+
+`cli score --queue` is the tool for a rubric change from here — it rescores
+only queued postings off the current rubric, deletes nothing, and is safe to
+re-run. `--rescore` still means "delete all 635 scores"; it is almost never
+what you want.
 
 ---
 

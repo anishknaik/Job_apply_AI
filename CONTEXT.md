@@ -1,11 +1,22 @@
 # jobpipe — Context
 
-> Written 2026-08-29. Every number in §2 and §8 was read from the live system
-> on that date rather than copied from an earlier document, because several
-> figures in `PHASE1_SUMMARY.md` and `POST_PHASE2_FIXES.md` have drifted.
+> Written 2026-08-29, **§2 and §7 remeasured 2026-08-31.** Every number in §2
+> was read from the live system on that date rather than copied forward,
+> because several figures in `PHASE1_SUMMARY.md` and `POST_PHASE2_FIXES.md`
+> had drifted.
 >
-> Read order for a new session: `PROJECT.md` (why) → this file (where things
-> actually stand) → `CLAUDE.md` (what you may and may not run).
+> **Read order for a new session:** `PROJECT.md` (why) → `HANDOFF.md` (where
+> things stand right now, and what the transcripts get wrong) →
+> `PHASE5_PLAN.md` (the decisions and the build order) → this file (the
+> standing design, §1–§6) → `CLAUDE.md` (what you may and may not run).
+>
+> **This file is no longer the front door.** §1–§6 still hold — they are the
+> design and the guardrails, and nothing has overturned them. §7's Vertex
+> question is **settled** (answered inline below). §8's defect list is mostly
+> **closed** — each item now carries its resolution. §9 is **superseded by
+> `PHASE5_PLAN.md`**, which was written from it; §9's architecture survived,
+> its open decisions did not. Where §9 and the plan disagree, the plan wins.
+>
 > `PHASE1_SUMMARY.md` and `PHASE2_SUMMARY.md` hold the bug archaeology worth
 > not rediscovering.
 
@@ -32,26 +43,36 @@ metric is interviews per hour spent, not applications per day.
 
 ---
 
-## 2. Where it stands today (2026-08-29, measured)
+## 2. Where it stands today (2026-08-31, remeasured)
 
 | | |
 |---|---|
-| Postings ingested | 16,600 |
-| Stage A survivors / scored | 622 / 632 |
-| Scoring models in use | `gemini-3.1-flash-lite` (467), `gemini-3.5-flash-lite` (165) |
+| Postings ingested | 16,668 |
+| Stage A survivors / scored | 625 / 635 |
+| Scoring models in the corpus | `3.1-flash-lite` 427, `3.5-flash-lite` 138, `2.5-pro` 56, `2.5-flash` 14 |
+| Rubric versions in the corpus | none 565, `2026-08-31.3` 66, `.2` 3, `.4` 1 |
 | Applications | 22 applied, 1 drafted, 44 not_applied (113 status events) |
-| Documents | 52 rows — 28 resumes, 24 letters; 16 resumes and 12 letters live |
+| Documents | 52 rows — 28 resumes, 24 letters |
 | Letters with stored content | 12 (the `content` column postdates the first batch) |
-| **Edit distances computed** | **0** |
+| **Edit distances computed** | **1** — PostHog, 0.032 |
 | Targets | 143 companies — tier 1: 8, tier 2: 93, tier 3: 42 |
 | ATS split | greenhouse 72, ashby 70, smartrecruiters 1 |
 | Bullet bank | 21 bullets across 10 roles |
-| Tests | **547 pass, 10 fail** — all one date bug, §8.1 |
-| Last daily run | 2026-08-29 14:04 UTC, all stages clean, 10 scored, 4 escalated |
-| Gemini prepaid balance | ~$1.82 — roughly 73 days at 2.5¢/day |
+| Tests | **695 pass, 0 fail** |
+| Last scheduled run | 2026-08-31 15:30 UTC — 13,899 fetched, 40 new, **0 scored** |
+| Billing | Vertex, GCP credit. The prepaid AI Studio balance is no longer drawn on |
 
-The daily run fetches 143 boards, scores ~10 new postings, and syncs 67 rows
-(25 in the top 25) to the sheet. It has run every weekday since 2026-08-13.
+**The scheduled run no longer scores.** It fetches, filters and syncs only, so
+an unscored backlog accumulates until someone runs `cli score` deliberately.
+That is a temporary posture while calibration settles; `register-task.ps1
+-Spend` puts scoring back. As of this measurement the backlog is 0 — recent
+fetches have produced no Stage A survivors — so the 3/day estimate in
+`HANDOFF.md` is a historical average, not a current rate.
+
+The mixed provenance in rows 3 and 4 is deliberate, not drift: `PHASE5_PLAN`
+§3.5 keeps the 3.1-era corpus as historical record and rescores only what
+ranks. The `scorer` / `rubric_version` columns exist to make that mixture
+visible rather than implicit.
 
 ---
 
@@ -191,13 +212,31 @@ These hold across every phase and are not negotiable per-task.
 
 ## 7. Cost and billing
 
-| Work | Model | Cost |
+**Current, as of 2026-08-31 — everything below runs on Vertex, billed to the
+GCP billing account where the credits live.**
+
+| Work | Model | Notes |
 |---|---|---|
-| Daily scoring | `gemini-3.1-flash-lite`, escalate to `3.5-flash-lite` | ~2.5¢/day, ~0.18¢/posting |
-| Bullet selection | `gemini-3.1-flash-lite`, 79% cache hit | ~0.4¢/resume |
-| Cover letter prose | `gemini-3.5-flash` (deliberately not an alias) | ~2¢/letter |
-| Grounding | Flash-Lite | negligible |
+| Stage B scoring | `gemini-2.5-flash` | escalates on a 5–7 score |
+| Escalation | `gemini-2.5-pro` | 67–84% of a run in practice, see below |
+| Grounding | `gemini-2.5-flash-lite` | caches nothing on Vertex; irrelevant, no long prefix |
+| Cover letter prose | `gemini-2.5-flash` | was `3.5-flash`, which Vertex does not serve |
 | `measure`, `status`, `sync`, tests | — | free |
+
+All four defaults are backend-keyed and resolve inside the Vertex provider's
+`KNOWN_MODELS`. That is not cosmetic: three separate defects came from a value
+being resolved without asking which backend was about to receive it —
+grounding (`574fdd4`), the rubric's field descriptions (`015236f`), and the
+prose model (`1bb0f0a`).
+
+**Escalation is not a rare second opinion.** It fired on 67% of a hand-scored
+set and 84% of the live queue, because scores cluster in the 5–7 band. 2.5 Pro
+is the expensive rung, so it dominates the cost of any scoring run — budget
+from the escalation rate, not the posting count.
+
+The historical figures below were measured on the Developer API and 3.x models
+and are kept for comparison only: daily scoring ~2.5¢/day at ~0.18¢/posting,
+bullet selection ~0.4¢/resume at 79% cache hit, letters ~2¢ each.
 
 Total Gemini spend across all 22 applications: **~53¢.** Prompt caching does
 most of the work — the ~10,204-token profile prefix is byte-identical on every
@@ -209,7 +248,28 @@ subscription-billed agent would consume the shared usage pool and cause
 throttling everywhere else. Watch for a stray `ANTHROPIC_API_KEY` in the shell
 environment — it silently bills Claude Code to the API.
 
-### The Vertex question (open, blocks part of §9)
+### The Vertex question — SETTLED 2026-08-31
+
+**Answered: the "Gemini 2.x SKUs" label is literal, and 2.5 was adopted.**
+The Gen AI SKU group contains no Gemini 3.x SKUs at all, which corroborated
+the live probe from a second direction, so the Billing cost table was never
+needed to decide it. The migration is complete: `JOBPIPE_GEMINI_BACKEND=vertex`,
+scoring on `gemini-2.5-flash`, and recalibration done — rank agreement +0.808
+against +0.258 for the 3.1 baseline, so the "would need full recalibration"
+cost priced below was paid and came out ahead.
+
+Two probe findings below were overturned by later measurement. **Implicit
+caching does fire on 2.5 Flash** against the real profile prefix (98% when it
+lands), so the explicit-cache 403 stays deliberately unsolved. And
+`thinking_budget=0` is accepted on 2.5 Flash and Flash Lite but **rejected by
+2.5 Pro** — the probe only covered the two candidates for the scoring call,
+not the escalation model, and that gap hid a broken escalation ladder for
+three calibration runs. `PHASE5_PLAN` §3.3 has the full account.
+
+The original analysis is kept below because the reasoning is still the right
+shape for the next billing question, not because its conclusions are current.
+
+### The original analysis (2026-08-29, superseded above)
 
 Google Cloud promotional credits **cannot** be spent on the AI Studio
 Developer API key in `.env`; for accounts created after 2 March 2026 they are
@@ -246,10 +306,9 @@ Three further facts the probe settled:
    AI Studio keys. The constraint that pushed the project off 2.5 and the
    constraint limiting the credit to 2.x may cancel out.
 
-**The decision still pending:** whether the credit's "Gemini 2.x SKUs" label
-is literal. Real 2.5 and 3.1 usage was put through Vertex on 2026-08-29;
-Billing → Cost table, grouped by SKU, filtered to Vertex, for that date
-answers it (billing lags ~24h).
+**The decision then pending** — whether the credit's "Gemini 2.x SKUs" label
+is literal. Answered above: it is. The two branches below were the live
+options at the time; the second one is what happened.
 
 - Credit covers 3.x → use `gemini-3.1-flash-lite` on Vertex. Same model, no
   recalibration, caching intact, credit pays. Unambiguous win.
@@ -270,7 +329,27 @@ permits training on submitted prompts.
 
 ## 8. Verified defects and open questions
 
-Everything here was reproduced on 2026-08-29.
+Everything here was reproduced on 2026-08-29. **Status as of 2026-08-31:**
+
+| | |
+|---|---|
+| 8.1 date time-bomb | **fixed** — Slice 0, `8299bdf` |
+| 8.2 `measure` slot labels off by two | **fixed** — Slice 0, `579c072`, confirmed on real output |
+| 8.3 zero edit distances | **fixed** — `copy_for_editing`, now n=1 |
+| 8.4 applications with no documents | open, historical; nothing new depends on it |
+| 8.5 holdout contradicts the headline | **superseded** — see the note below |
+| 8.6 grounding not independent of the writer | **decided, not fixed** — `PHASE5_PLAN` §5.1 keeps grounding off-session deliberately |
+| 8.7 smaller confirmed items | mostly closed in Slice 0; `title_exclude 'lead'` audited and kept, `63fa270` |
+| 8.8 already done but not recorded | still accurate |
+
+**8.5 deserves a specific note**, because its conclusion was inverted twice.
+It reported the model over-scoring and recommended tightening. Two attempts to
+act on that — calibration examples and a scope ceiling — both improved the
+number they targeted and **degraded rank agreement**, which is the metric the
+sheet actually uses. Both are off by default with their mechanisms kept and
+tested. The lesson, recorded in `HANDOFF.md` §5: MAE and bias measure a
+decision the sheet does not make. Do not reopen 8.5 without reading that
+first.
 
 ### 8.1 Ten tests fail — a date time-bomb, not a product bug
 
@@ -360,6 +439,18 @@ and addendum §6 (SmartRecruiters fetcher shipped).
 ---
 
 ## 9. Phase 5 — the final version: jobpipe as an MCP server
+
+> **SUPERSEDED by `PHASE5_PLAN.md`.** That document was written from this one
+> and settles every decision left open here. The architecture below survived
+> intact; the open questions did not, and several were answered the other way.
+> Where the two disagree, the plan wins. Kept because the reasoning that
+> produced the architecture is not repeated there.
+>
+> **Progress as of 2026-08-31:** Slice 0 complete. Track A complete, all six
+> steps — Vertex migration, rubric through `2026-08-31.4`, recalibration, and
+> the queue backfill. Track B slices 1 and 2 shipped and exercised on a real
+> application. **Next is Track B slice 3**, `render_resume` and the seven
+> variant orderings, which `HANDOFF.md` flags as needing human review.
 
 The end state is that the human work left in this project — reviewing a resume
 against the real posting, writing and tightening a letter, deciding what to
