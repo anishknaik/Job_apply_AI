@@ -12,9 +12,11 @@ config/master_profile.md*
 samples/**
 !samples/README.md
 
-# Hand-scored calibration data — contains personal judgements about employers
-config/calibration*.csv
-config/calibration*_result.json
+# Hand-scored calibration data — contains personal judgements about named
+# employers. Globbed across every extension, not per-extension: the generated
+# calibration_examples.md is the same content in a different file type, and an
+# extension-specific pattern would have let it through.
+config/calibration*
 
 # Database (source of truth, but local and large)
 *.db

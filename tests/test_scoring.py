@@ -105,9 +105,26 @@ class TestRequestShape:
         assert "apply_reason" in props
 
     def test_build_system_prompt_puts_the_profile_after_the_rubric(self):
-        prompt = scoring.build_system_prompt("MY PROFILE TEXT")
+        prompt = scoring.build_system_prompt("MY PROFILE TEXT", examples="")
         assert prompt.endswith("MY PROFILE TEXT")
         assert "CANDIDATE MASTER PROFILE" in prompt
+
+    def test_calibrated_examples_go_last_when_present(self):
+        """Few-shot anchors on the judgement the rules only approximate. The
+        closer they sit to the posting being scored, the more weight they
+        carry — so after the profile, not before it."""
+        prompt = scoring.build_system_prompt("MY PROFILE TEXT",
+                                             examples="EXAMPLE BLOCK")
+        assert prompt.index("MY PROFILE TEXT") < prompt.index("EXAMPLE BLOCK")
+        assert prompt.rstrip().endswith("EXAMPLE BLOCK")
+
+    def test_absent_examples_degrade_rather_than_break(self, tmp_path):
+        """Generated from gitignored CSVs, so a fresh checkout has none.
+        Scoring must still run — degraded, not broken."""
+        missing = tmp_path / "nope.md"
+        assert scoring.load_calibration_examples(missing) == ""
+        prompt = scoring.build_system_prompt("P", examples="")
+        assert prompt.endswith("P")
 
 
 class TestLanguageDealbreaker:

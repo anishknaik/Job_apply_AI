@@ -541,14 +541,63 @@ def load_profile(path: str | Path | None = None) -> str:
     return text
 
 
-def build_system_prompt(profile: str) -> str:
-    """Rubric + profile, as one string. Byte-identical on every call.
+CALIBRATION_EXAMPLES_PATH = Path("config/calibration_examples.md")
+
+
+def load_calibration_examples(path: str | Path | None = None) -> str:
+    """Few-shot examples built from Anish's own hand scores, or "" if absent.
+
+    Optional by design. It is generated from gitignored CSVs, so a fresh
+    checkout will not have it, and scoring must still run — degraded, not
+    broken.
+
+    Deliberately NOT part of `master_profile.md`. The profile is also read by
+    the letter writer, the grounding check and the MCP session; scoring
+    calibration is noise in all three. Keeping it separate means this prompt
+    can grow without widening the others.
+
+    Regenerate with scripts/build_calibration_examples.py after hand-scoring
+    more postings, and bump RUBRIC_VERSION when you do — the examples are part
+    of the prompt, so a score produced with a different set is a score under a
+    different rubric.
+    """
+    # OFF by default, on the evidence. Measured on the n=19 holdout
+    # 2026-08-31: adding 13 examples built from Anish's own scores halved the
+    # bias (+1.21 -> +0.89 fit, +1.11 -> +0.63 apply) and simultaneously
+    # destroyed rank agreement, Spearman +0.346 -> -0.016. Rank is what the
+    # sheet actually uses - it takes the top 25, it does not threshold - so a
+    # change that improves absolute scores while randomising their order is a
+    # net loss. Opt in with JOBPIPE_CALIBRATION_EXAMPLES=<path> to re-run the
+    # experiment; the generator is scripts/build_calibration_examples.py.
+    explicit = path or os.environ.get("JOBPIPE_CALIBRATION_EXAMPLES")
+    if not explicit:
+        return ""
+    path = Path(explicit)
+    if not path.exists():
+        log.info("no calibration examples at %s; scoring without few-shot "
+                 "anchors", path)
+        return ""
+    return path.read_text(encoding="utf-8").strip()
+
+
+def build_system_prompt(profile: str, examples: str | None = None) -> str:
+    """Rubric + profile + calibrated examples, as one string.
+
+    Byte-identical on every call, which is what makes implicit caching fire.
 
     Returned as plain text rather than provider-shaped blocks: Anthropic wraps
     it in a cache_control block, Gemini passes it as system_instruction, and
     that difference is the provider's business, not this module's.
+
+    Examples go last: they are few-shot anchors on the judgement the rules
+    above only approximate, and the closer they sit to the posting being
+    scored the more weight they carry.
     """
-    return RUBRIC + profile
+    if examples is None:
+        examples = load_calibration_examples()
+    if not examples:
+        return RUBRIC + profile
+    return RUBRIC + profile + "\n\n---\n\n" + examples + "\n"
 
 
 def check_cacheable(provider: ScoringProvider, system_prompt: str,
