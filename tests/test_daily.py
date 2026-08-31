@@ -113,3 +113,38 @@ class TestRunIsRecorded:
         from jobpipe import db
         assert db.connect(dbfile).execute(
             "SELECT COUNT(*) FROM runs").fetchone()[0] == 3
+
+    def test_stage_a_pass_counts_this_run_not_the_whole_survivor_pool(
+            self, stages, dbfile):
+        """Caught on the first real run: it recorded 554 against a log line
+        reading "passed 3".
+
+        The column means "how many passed Stage A in THIS run", which is what
+        run_daily.py recorded and what the log prints. Keying on last_seen_at
+        counted every live survivor the fetch happened to see again — a number
+        that would have looked like a filter regression forever after, and one
+        nobody would have questioned because it is plausible.
+        """
+        from jobpipe import db
+        conn = db.connect(dbfile)
+        db.init_schema(conn)
+        from jobpipe.normalize import Posting
+
+        # An old survivor, seen again today but first seen long ago.
+        old = Posting(ats_type="ashby", source_id="old", company="X",
+                      title="ML Engineer", location="NYC", remote_flag=False,
+                      description="", url="u1", posted_at=None)
+        pid, _ = db.upsert_posting(conn, old, old.content_hash,
+                                   seen_at=db.utc_days_ago(30))
+        db.set_stage_a(conn, pid, True, "passed")
+        conn.execute("UPDATE postings SET last_seen_at = ? WHERE id = ?",
+                     (db.utcnow(), pid))
+        conn.commit()
+        conn.close()
+
+        assert cli.cmd_daily(args(db=dbfile)) == 0
+        conn = db.connect(dbfile)
+        row = conn.execute("SELECT * FROM runs ORDER BY id DESC "
+                           "LIMIT 1").fetchone()
+        assert row["stage_a_pass"] == 0, (
+            "an old survivor seen again is not a posting that passed today")

@@ -937,9 +937,15 @@ def cmd_daily(args) -> int:
         fetched=since("SELECT COUNT(*) FROM postings WHERE last_seen_at >= ?"),
         new_postings=since(
             "SELECT COUNT(*) FROM postings WHERE first_seen_at >= ?"),
+        # first_seen_at, not last_seen_at. The column means "how many passed
+        # Stage A in THIS run", which is what run_daily.py recorded and what
+        # the log prints. Keying on last_seen_at counted every live survivor
+        # the fetch happened to see again - 554 against a log line reading
+        # "passed 3" on the first real run, a number that would have looked
+        # like a filter regression forever after.
         stage_a_pass=since(
             "SELECT COUNT(*) FROM postings WHERE stage_a_passed = 1 "
-            "AND last_seen_at >= ?"),
+            "AND first_seen_at >= ?"),
         scored=since("SELECT COUNT(*) FROM scores WHERE scored_at >= ?"),
         errors=", ".join(degraded))
     run_conn.close()
