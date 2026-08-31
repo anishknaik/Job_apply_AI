@@ -65,8 +65,14 @@ config/sponsorship_review.md
 
 # Conversation transcripts and planning notes kept in the tree for reference.
 # Personal content throughout; the .md docs are the maintained record.
-MCP_change_job_apply_claude_convo.txt
-mcp-job-application-pipeline-chat.txt
+#
+# Globbed, not named one by one: exporting a session writes a NEW filename
+# every time, and the previous list would not have caught it. A transcript
+# quotes the profile, the scores and the hand judgements verbatim.
+*convo*.txt
+*transcript*.txt
+session_*.txt
+*-chat.txt
 open_questions_answered..txt
 
 # Orphaned SQLite -shm files left behind by a FUSE mount. Harmless, not ours.
