@@ -6,6 +6,10 @@
 !.env.example
 config/service_account.json*
 config/master_profile.md*
+# The bullet bank is a RESUME: name, email, phone, LinkedIn, education, every
+# employer and every bullet. It was tracked until 2026-08-31 and had to be
+# purged from history before the repo could be shared. The .example stays.
+config/bullets.yaml
 
 # Personal documents (Phase 2 inputs). Real name, address, employment history
 # and things written to specific companies. The README stays; nothing else does.

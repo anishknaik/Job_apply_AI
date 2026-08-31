@@ -1,0 +1,123 @@
+# Bullet bank — EXAMPLE. Copy to bullets.yaml and replace everything.
+#
+#   cp config/bullets.example.yaml config/bullets.yaml
+#
+# This file is the fabrication firewall. Resume tailoring is SELECTION AND
+# ORDERING, never writing: the model picks bullet ids and their order and may
+# choose between pre-written `variants`. It may not author bullet text. That
+# removes the hallucination surface from the resume entirely.
+#
+# RULES FOR EDITING BY HAND:
+#   * Every number traces to a source document you already have — an existing
+#     resume, or a project you can point at. Nothing enters this bank that is
+#     not already evidenced somewhere.
+#   * `text` is immutable. Rewriting a bullet to sound stronger is exactly the
+#     failure this file exists to prevent.
+#   * `variants.short` must make the SAME claim as `text`, only tighter. It is
+#     for one-page fitting, not for softening or inflating.
+#   * Adding a bullet means adding evidence first.
+#
+# `skills` tags drive keyword alignment. They are matched against a posting's
+# vocabulary to PREFER bullets, never to alter them. A bullet whose skills
+# overlap the posting is promoted up to two ranks before being cut to fit one
+# page, so tag honestly and specifically.
+#
+# `rank` is the drop order: 1 survives longest, higher numbers are cut first.
+
+meta:
+  name: Jane Q. Example
+  email: jane.example@example.com
+  phone: "(555) 010-0000"
+  linkedin: linkedin.com/in/example
+  location: Springfield, IL
+  # Shown under the name. Keep factual; make no seniority claim you cannot
+  # evidence. One per resume variant.
+  headline:
+    ai_ml: "Software Engineer & Data Scientist · Machine Learning · GenAI · Data Engineering"
+    data_science: "Data Scientist & Software Engineer · Applied ML · Experimental Design"
+
+education:
+  school: Example State University
+  degree: B.S. Computer Science · Minor in Statistics
+  date: May 2025
+  coursework: >-
+    Machine Learning, Databases, Algorithms, Regression Methods,
+    Data Structures
+
+# Fixed metadata. The model never edits these — it only decides which roles
+# appear and which bullets hang off them. `kind` is experience or project.
+roles:
+  - id: acme
+    kind: experience
+    company: Acme Analytics
+    title: Data Engineering Intern
+    dates: Jun 2024 - Aug 2024
+    location: Remote
+    # Groups are named workstreams inside one role. Use them when a single job
+    # covered distinct projects: the stack line is where most of an ATS's
+    # keyword match actually lands.
+    groups:
+      - id: acme-pipeline
+        name: Ingestion Pipeline
+        stack: "Python, Airflow, PostgreSQL, dbt"
+
+  - id: side-project
+    kind: project
+    company: Document Q&A Assistant
+    title: Personal project
+    dates: 2025
+    location: ""
+
+bullets:
+  - id: acme-etl
+    role: acme
+    group: acme-pipeline
+    rank: 1
+    archetypes: [ai_ml_engineer, data_scientist]
+    skills: [etl, airflow, postgresql, python, pipelines]
+    # REQUIRED on every bullet. Where this claim can be checked — a resume, a
+    # repo, a report. load_bank refuses a bank whose bullets have no source,
+    # which is what makes "every claim traces to a document" a mechanism
+    # rather than an intention.
+    source: resume-2025.pdf, Acme Analytics section
+    text: >-
+      Built a nightly ingestion pipeline moving 40M rows from three vendor
+      APIs into PostgreSQL, cutting a four-hour manual export to twelve
+      minutes.
+    variants:
+      short: >-
+        Built a nightly pipeline moving 40M rows from three APIs into
+        PostgreSQL, replacing a four-hour manual export.
+
+  - id: rag-assistant
+    role: side-project
+    rank: 2
+    archetypes: [ai_ml_engineer]
+    skills: [rag, embeddings, vector_database, chunking, llm]
+    source: github.com/example/doc-qa README
+    text: >-
+      Built a retrieval-augmented Q&A assistant over 2,000 PDFs with
+      token-aware chunking and a vector store, grounding every answer in
+      citations back to the source document.
+
+# Skills render in variant-specific order. `core` is shown first and always;
+# `working` is shown when there is room; `exposure` is NEVER surfaced on a
+# resume — it exists so you can record honestly without claiming fluency.
+skills:
+  Languages:
+    core: [Python, SQL]
+    working: [JavaScript]
+    exposure: [Go]
+  "ML & Frameworks":
+    core: [scikit-learn, pandas, NumPy]
+    working: [PyTorch, XGBoost]
+  "GenAI & LLM":
+    core: [Prompt engineering, LLM pipeline orchestration]
+    working: [RAG, Embeddings, Vector stores]
+  "Data & Backend":
+    working: [ETL pipelines, FastAPI, PostgreSQL, Airflow]
+  "Cloud & Infra":
+    working: [AWS (S3, EC2), Docker]
+  "Analytics & BI":
+    core: [Matplotlib]
+    working: [Power BI]
