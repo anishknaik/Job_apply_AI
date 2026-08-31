@@ -305,7 +305,13 @@ def copy_for_editing(conn, posting_id: int) -> dict[str, Any]:
         body = generated.read_text(encoding="utf-8")
 
     sent.parent.mkdir(parents=True, exist_ok=True)
-    sent.write_text(body, encoding="utf-8")
+    # newline="" so the copy keeps the stored content's line endings byte for
+    # byte. Without it Python rewrites LF as CRLF on Windows and the copy
+    # differs from its original on EVERY line. `measure` normalises, so the
+    # distance still reads 0.000 - but a human running `diff` to review their
+    # own edits sees the whole file changed, which defeats the point of
+    # copying rather than renaming.
+    sent.write_text(body, encoding="utf-8", newline="")
 
     return {
         "sent_path": str(sent),

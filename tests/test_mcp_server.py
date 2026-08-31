@@ -386,3 +386,29 @@ class TestAdvanceStatus:
                            "WHERE posting_id = ? ORDER BY id DESC LIMIT 1",
                            (pid,)).fetchone()
         assert row["source"] == "mcp"
+
+
+class TestTheCopyIsByteIdentical:
+    """Not merely equal after normalising — identical.
+
+    `measure` normalises whitespace, so a copy that differs only in line
+    terminators still reports distance 0.000 and looks fine. But the human
+    reviewing their own edits runs `diff`, and Python rewriting LF as CRLF on
+    write makes every line of a 16-line letter show as changed. That defeats
+    the reason for copying rather than renaming.
+    """
+
+    def test_line_endings_survive_the_copy(self, conn, tmp_path):
+        pid = seed(conn)
+        body = "Dear Team,\n\nOne.\n\nTwo.\n"
+        path = tmp_path / "cover_letter.md"
+        path.write_bytes(body.encode("utf-8"))
+        doc = db.insert_document(conn, pid, "cover_letter",
+                                 generated_path=str(path), content=body)
+        conn.execute("UPDATE documents SET grounding_ok = 1, "
+                     "grounding_accuracy = 1.0 WHERE id = ?", (doc,))
+        conn.commit()
+
+        out = mcp_server.copy_for_editing(conn, pid)
+        assert Path(out["sent_path"]).read_bytes() == path.read_bytes()
+        assert b"\r\n" not in Path(out["sent_path"]).read_bytes()
