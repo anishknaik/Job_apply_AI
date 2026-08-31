@@ -678,6 +678,87 @@ def cmd_tailor(args) -> int:
     return 1 if run.failed else 0
 
 
+def cmd_ground(args) -> int:
+    """Re-run the grounding check on an existing draft and record the verdict.
+
+    Separate from generation for two reasons, both of which bite right now.
+
+    The 52 documents already in the database predate the grounding columns, so
+    every one carries a NULL verdict and `copy_for_editing` refuses all of
+    them. An absent check is not a pass, so the fix is to run the check rather
+    than waive it.
+
+    And a verdict goes stale. Grounding is judged against `bullets.yaml` and
+    `master_profile.md`; when the profile changes - as it did in Phase 5 slice
+    0 - every stored verdict describes a comparison against a profile that no
+    longer exists.
+
+    Never rewrites the letter. §2.2 forbids auto-correction: an unsupported
+    claim is fixed by hand, or by correcting the profile when the claim is
+    true and merely unrecorded.
+    """
+    from . import grounding
+    from . import pipeline_tailor as pt
+    from .providers import default_model
+
+    _load_env()
+    conn = db.connect(args.db)
+    db.init_schema(conn)
+
+    row = db.get_posting(conn, int(args.posting_id))
+    if row is None:
+        print(f"no posting with id {args.posting_id}")
+        return 1
+
+    doc = db.current_document(conn, row["id"], "cover_letter")
+    if doc is None:
+        print(f"{row['company']} - {row['title']} has no cover letter.\n"
+              f"  python -m jobpipe.cli tailor --cover-letter {row['id']} "
+              f"--yes")
+        return 1
+
+    # The database first, the file only as a fallback - a row cannot be
+    # renamed, and the file is the one a human works on.
+    text = doc["content"]
+    if not text:
+        path = Path(doc["generated_path"] or "")
+        if not path.name or not path.exists():
+            print(f"draft {doc['id']} has neither stored content nor a file "
+                  f"at {path}; there is nothing to check")
+            return 1
+        text = path.read_text(encoding="utf-8")
+
+    try:
+        bank = pt.load_bank()
+    except Exception as exc:  # noqa: BLE001 - the bank is hand-edited
+        print(f"bullet bank is unusable, refusing to run:\n  {exc}")
+        return 1
+
+    provider = _build_provider(args.provider)
+    if not args.yes:
+        print(f"would check draft {doc['id']} ({row['company']} - "
+              f"{row['title']}) on {default_model(provider.name)}. "
+              f"Add --yes to confirm the spend.")
+        return 1
+
+    prompts = pt.build_prompts(bank)
+    check = grounding.check(provider, bank, text, row["description"] or "",
+                            prompts["grounding"])
+    db.record_grounding(conn, doc["id"], check)
+
+    print(f"{row['company']} - {row['title']}")
+    print(f"  draft {doc['id']}, revision {doc['revision']}, "
+          f"checked by {check.model}")
+    print(f"  {check.report()}")
+    if check.ok:
+        print("\n  Recorded. copy_for_editing will now release this draft.")
+        return 0
+    print("\n  Recorded as FAILED, and copy_for_editing will refuse it. Fix "
+          "the claims above in the draft by hand, or correct the master "
+          "profile if a claim is true and simply unrecorded.")
+    return 1
+
+
 def cmd_measure(args) -> int:
     """What you changed in the drafts you actually sent (Phase 2 §7).
 
@@ -1024,6 +1105,15 @@ def build_parser() -> argparse.ArgumentParser:
                           help="review folder (default output/applications)")
     p_tailor.add_argument("--provider", default=None)
     p_tailor.set_defaults(func=cmd_tailor)
+
+    p_ground = sub.add_parser(
+        "ground", help="re-check an existing draft against the bank and "
+                       "profile, and record the verdict")
+    p_ground.add_argument("posting_id", metavar="POSTING_ID")
+    p_ground.add_argument("--yes", action="store_true",
+                          help="required - confirms the spend")
+    p_ground.add_argument("--provider", default=None)
+    p_ground.set_defaults(func=cmd_ground)
 
     p_measure = sub.add_parser(
         "measure", help="edit distance between generated and sent letters")

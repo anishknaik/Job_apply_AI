@@ -80,6 +80,57 @@ class TestVoiceCorpusIsCurated:
         for _, note in letters.VOICE_EXEMPLARS:
             assert len(note) > 30, "curation without a reason rots"
 
+    def test_the_letter_citing_this_project_is_excluded(self):
+        """ErinBakers says "the pipeline now covers 142 companies" and quotes
+        this project's own calibration figures. master_profile.md is explicit:
+        the current period is availability, not experience, and "if a
+        generated document ever describes current project work, that is
+        fabrication." The claims are true and the profile still forbids
+        citing them, so an exemplar carrying them teaches the wrong thing."""
+        chosen = {name for name, _ in letters.VOICE_EXEMPLARS}
+        assert not any("ErinBakers" in name for name in chosen)
+
+    def test_the_letter_using_a_banned_phrase_is_excluded(self):
+        """Granules uses "welcome the chance", which is in BANNED_PHRASES —
+        one of his own tells. Showing the model a pattern the prompt bans is
+        self-defeating."""
+        chosen = {name for name, _ in letters.VOICE_EXEMPLARS}
+        assert not any("Granules" in name for name in chosen)
+
+    def test_the_ban_list_overlaps_the_corpus_it_was_measured_from(self):
+        """KNOWN, and recorded here 2026-08-30 rather than left to be
+        rediscovered.
+
+        Four of the six exemplars contain "welcome the chance" — including
+        BOTH that have been in use since Phase 2. This is not an oversight in
+        the curation: BANNED_PHRASES was derived FROM this corpus ("Banned
+        because they are HIS tells"), so the letters it was measured from
+        necessarily contain them.
+
+        The consequence is that the prompt demonstrates a phrase it forbids in
+        the same breath. That is exactly why `banned_used()` and its single
+        retry are load-bearing rather than belt-and-braces — guidance never
+        substitutes for the check, and this is the sharpest example of why.
+
+        Pinned at the current count so the overlap cannot grow unnoticed.
+        Excluding every contaminated letter would cut the corpus to two, which
+        is the problem the 2026-08-30 audit set out to fix. The real fix —
+        truncating exemplars before the closing, where the tells cluster — is
+        a slice 4 decision, when Claude writes the prose.
+        """
+        contaminated = [
+            note for note, text in letters.load_exemplars()
+            if any(b.lower() in text.lower() for b in letters.BANNED_PHRASES)]
+        assert len(contaminated) <= 4, (
+            f"exemplar contamination grew to {len(contaminated)}; the corpus "
+            f"is teaching more banned phrases than it did at the audit")
+
+    def test_the_corpus_is_large_enough_to_carry_a_voice(self):
+        """Two exemplars was the whole corpus until the 2026-08-30 audit.
+        Examples alone drift back toward generic model voice by the third
+        paragraph; too few is what makes that happen fastest."""
+        assert len(letters.VOICE_EXEMPLARS) >= 4
+
     def test_a_missing_corpus_raises_rather_than_generating_generic(self,
                                                                     tmp_path):
         with pytest.raises(letters.LetterError, match="no voice exemplars"):

@@ -35,19 +35,47 @@ log = logging.getLogger(__name__)
 
 LETTERS_DIR = Path("samples/cover_letters")
 
-# Deliberately curated, not "every letter in the folder".
+# Deliberately curated, not "every letter in the folder". Fourteen letters sit
+# there; six are used. A few-shot example teaches everything it contains, so an
+# exemplar carrying an unsupported claim or a banned tell is worse than one
+# fewer exemplar.
 #
-# EXCLUDED, and why it matters: McKinsey_Cover_Letter opens "As the co-founder
-# of an AI company", a claim that appears nowhere in master_profile.md, which
-# records Gradient Tensor as "AI Engineer". Whether the letter overstated or
-# the profile is incomplete is the human's to resolve — but a few-shot example
-# containing an unsupported claim teaches the model to make it, and that is
-# the exact failure §2 is built to prevent.
+# ADDED 2026-08-30, after an audit of seven letters written by Claude in a chat
+# and edited by hand before sending. They are the best voice evidence available
+# because they are POST-edit: what he actually sends, not what a model drafted.
+# They cannot feed `measure` — the generated originals were never kept, so
+# there is no pair to diff.
 #
-# ALSO EXCLUDED: CityOfHope, Fanatics and Fervorly. All three close on the
-# identical "bring that combination of X, Y and Z" scaffold, and all three
-# follow the title restatement with "I graduated from Rutgers with a B.S.".
-# Showing the model the pattern this prompt bans would be self-defeating.
+# EXCLUDED, and why each one matters:
+#
+#   * McKinsey opens "As the co-founder of an AI company". When this list was
+#     first written that claim appeared nowhere in master_profile.md. The
+#     profile has since been rewritten and now records it (§6, and the §12
+#     block), so the original objection is resolved — but the letter stays out
+#     by decision, 2026-08-30.
+#
+#   * CityOfHope, Fanatics and Fervorly all close on the identical "bring that
+#     combination of X, Y and Z" scaffold and all follow the title restatement
+#     with "I graduated from Rutgers". Showing the model the pattern this
+#     prompt bans would be self-defeating.
+#
+#   * ErinBakers describes THIS project — "the pipeline now covers 142
+#     companies", "100% recall with 59% precision". master_profile.md is
+#     explicit that the current period is availability rather than experience:
+#     "If a generated document ever describes current project work, that is
+#     fabrication." The claims are true; the profile forbids citing them. An
+#     exemplar that cites current project work teaches the model to do it.
+#
+#   * Granules uses "welcome the chance", which is in BANNED_PHRASES below.
+#     One of his own tells, banned precisely because it reads as generated.
+#
+#   * PTR_Global carries a different contact address in its header
+#     (Aknaik473@) from the one in the bank and the profile. Unresolved, so
+#     out of the corpus until it is.
+#
+#   * AI_Engineer_Cover_Letter has no recorded reason. It predates this audit
+#     and was excluded before the reasons were being written down. Worth
+#     revisiting rather than leaving as folklore.
 VOICE_EXEMPLARS = (
     ("Anish_Naik_Cover_Letter_NORC_1.pdf",
      "Research institution. The anchor: states a position in the second "
@@ -56,6 +84,20 @@ VOICE_EXEMPLARS = (
     ("Anish_Naik_TargetedVictory_Cover_Letter.pdf",
      "Engineering role. Concrete about the daily work, and names the kind of "
      "problem he likes rather than listing adjectives."),
+    ("metso_cover_letter.pdf",
+     "Industrial AI. Opens by quoting one line from the posting and saying "
+     "why that line decided it, then goes straight to a concrete engagement "
+     "rather than a summary of skills."),
+    ("tiny_health_cover_letter.pdf",
+     "Healthcare AI. Names the failure mode he cares about and lets the rest "
+     "of the letter follow from it, instead of listing capabilities."),
+    ("Anish_Naik_Cover_Letter_Flexjet.pdf",
+     "Entry-level ML. Turns the thin part of his experience into the point — "
+     "what he learned from models after they were trained rather than while "
+     "training them."),
+    ("Anish_Naik_Cover_Letter_DataAnnotation.pdf",
+     "AI training data. States the unusual angle he comes from in the second "
+     "sentence, then earns it with a single project rather than three."),
 )
 
 # Phrases measured across the corpus. Banned because they are HIS tells, not
