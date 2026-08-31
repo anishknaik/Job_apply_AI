@@ -345,9 +345,9 @@ class TestRescoreSafety:
 
     def _cli_args(self, **kw):
         import types
-        base = dict(db=":memory:", rescore=True, yes=True, provider=None,
-                    model=None, escalation_model=None, targets=None,
-                    filters=None, verbose=False)
+        base = dict(db=":memory:", rescore=True, yes=True, queue=False,
+                    provider=None, model=None, escalation_model=None,
+                    targets=None, filters=None, verbose=False)
         base.update(kw)
         return types.SimpleNamespace(**base)
 
@@ -491,3 +491,115 @@ class TestScopeCeilingIsEnforced:
         top of that range, not a new policy invented in code."""
         assert scoring.SCOPE_GAP_APPLY_CEILING == 5
         assert "fall to 3-5" in scoring.RUBRIC
+
+
+class TestQueueBackfill:
+    """`--queue` exists because neither existing mode fits a rubric change.
+
+    Scoring only the unscored skips every row carrying a stale score, and
+    `--rescore` deletes the whole table to reach them - discarding the 3.1-era
+    corpus PHASE5_PLAN 3.5 keeps as historical record, and billing for 625
+    postings to refresh 67.
+    """
+
+    def _cli_args(self, **kw):
+        import types
+        base = dict(db=":memory:", rescore=False, yes=True, queue=True,
+                    provider=None, model=None, escalation_model=None,
+                    targets=None, filters=None, verbose=False)
+        base.update(kw)
+        return types.SimpleNamespace(**base)
+
+    def _seed(self, conn, n):
+        from jobpipe.normalize import Posting
+        ids = []
+        for i in range(n):
+            posting = Posting(ats_type="ashby", source_id=f"q{i}",
+                              company=f"Co{i}", title="ML Engineer",
+                              location="NY", remote_flag=False,
+                              description="Build things.", url=f"https://q/{i}",
+                              posted_at=None)
+            pid, _ = db.upsert_posting(conn, posting, posting.content_hash)
+            db.set_stage_a(conn, pid, True, "passed")
+            ids.append(pid)
+        return ids
+
+    def _score(self, conn, pid, rubric):
+        db.insert_score(conn, pid, {"overall": 6, "apply_score": 6},
+                        "gemini-3.1-flash-lite", scorer="gemini/api",
+                        rubric_version=rubric)
+        conn.commit()
+
+    def test_only_queued_postings_are_selected(self, conn):
+        a, b, c = self._seed(conn, 3)
+        db.record_status(conn, a, "not_applied")
+        db.record_status(conn, b, "applied")
+        conn.commit()
+        got = {r["id"] for r in db.get_queue_off_rubric(conn, "2026-08-31.3")}
+        assert got == {a, b}, "a posting with no status is not in the queue"
+        assert c not in got
+
+    def test_rows_already_on_the_current_rubric_are_skipped(self, conn):
+        a, b = self._seed(conn, 2)
+        for pid in (a, b):
+            db.record_status(conn, pid, "not_applied")
+        self._score(conn, a, "2026-08-31.3")
+        self._score(conn, b, "2026-08-30.1")
+        conn.commit()
+        got = {r["id"] for r in db.get_queue_off_rubric(conn, "2026-08-31.3")}
+        assert got == {b}, "re-running must only cost what is left"
+
+    def test_a_null_rubric_version_counts_as_stale(self, conn):
+        """The 3.1-era corpus predates the provenance columns entirely."""
+        a, = self._seed(conn, 1)
+        db.record_status(conn, a, "not_applied")
+        db.insert_score(conn, a, {"overall": 6, "apply_score": 6},
+                        "gemini-3.1-flash-lite")
+        conn.commit()
+        assert [r["id"] for r in
+                db.get_queue_off_rubric(conn, "2026-08-31.3")] == [a]
+
+    def test_it_refuses_without_yes_and_scores_nothing(self, conn, monkeypatch):
+        from jobpipe import cli
+        a, = self._seed(conn, 1)
+        db.record_status(conn, a, "not_applied")
+        conn.commit()
+        monkeypatch.setattr(cli.db, "connect", lambda _: conn)
+        assert cli.cmd_score(self._cli_args(yes=False)) == 1
+        assert conn.execute("SELECT COUNT(*) n FROM scores").fetchone()["n"] == 0
+
+    def test_queue_and_rescore_together_are_refused(self, conn, monkeypatch):
+        """One targets the queue and keeps everything else; the other discards
+        the whole table. Silently picking either would be wrong."""
+        from jobpipe import cli
+        a, = self._seed(conn, 1)
+        db.record_status(conn, a, "not_applied")
+        self._score(conn, a, "2026-08-30.1")
+        monkeypatch.setattr(cli.db, "connect", lambda _: conn)
+        assert cli.cmd_score(self._cli_args(rescore=True)) == 1
+        assert conn.execute("SELECT COUNT(*) n FROM scores").fetchone()["n"] == 1
+
+
+class TestLocationIsNeverADealbreaker:
+    """Third instance of one defect: a rule qualified everywhere except on the
+    field the model fills.
+
+    master_profile.md 10 says he relocates anywhere in the US without
+    qualification, and the rubric's rule 1 says "relocation the candidate has
+    ruled out" - but the `dealbreakers` field description said "mandatory
+    relocation", unqualified. Verkada's CV posting came back overall 8 /
+    apply 2 on a five-days-onsite line, below the sheet's floor of 4.
+    """
+
+    def test_the_field_description_rules_location_out(self):
+        desc = scoring.SCORE_SCHEMA["properties"]["dealbreakers"]["description"]
+        assert "LOCATION IS NEVER ONE" in desc
+        assert "mandatory relocation," not in desc, \
+            "the unqualified phrase is what taught the model to cap on onsite"
+        for term in ("on-site", "hybrid", "relocat"):
+            assert term in desc.lower(), f"{term} must be named as in scope"
+
+    def test_the_rubric_still_keeps_its_qualifier(self):
+        """The prose was never wrong; only the field was. It must stay right."""
+        assert "relocation the candidate \\nhas ruled out" in scoring.RUBRIC \
+            or "relocation the candidate has ruled out" in scoring.RUBRIC.replace("\\n", "")

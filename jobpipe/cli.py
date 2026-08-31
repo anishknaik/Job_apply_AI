@@ -247,6 +247,12 @@ def cmd_score(args) -> int:
     # or a filters.yaml mistake refuses instead of billing.
     cap = int(os.environ.get("JOBPIPE_MAX_SCORES_PER_RUN", "600"))
 
+    if args.queue and args.rescore:
+        print("--queue and --rescore are mutually exclusive: one targets the "
+              "queue and keeps everything else, the other discards the whole "
+              "table. Pick the one you mean.")
+        return 1
+
     if args.rescore:
         # Scores are derived data, so clearing them is recoverable by paying
         # again — unlike `postings`, which is never deleted from. Needed after
@@ -274,6 +280,25 @@ def cmd_score(args) -> int:
         conn.commit()
         print(f"cleared {existing} score(s) for a full re-score")
 
+    targeted = None
+    if args.queue:
+        targeted = db.get_queue_off_rubric(conn, scoring.RUBRIC_VERSION,
+                                           limit=cap)
+        total = conn.execute(
+            "SELECT COUNT(DISTINCT posting_id) n FROM status_events"
+        ).fetchone()["n"]
+        print(f"queue backfill: {len(targeted)} of {total} queued posting(s) "
+              f"are not on rubric {scoring.RUBRIC_VERSION}")
+        if not targeted:
+            print("nothing to do - the queue is already current.")
+            return 0
+        if len(targeted) > cap:
+            print(f"{len(targeted)} exceeds the {cap} cap; nothing scored.")
+            return 1
+        if not args.yes:
+            print("Add --yes to confirm the spend. Nothing has been scored.")
+            return 1
+
     gate = pipeline.check_scoring_gate(conn, cap=cap, enabled=args.yes)
     if not gate.allowed:
         print(gate.reason)
@@ -300,7 +325,8 @@ def cmd_score(args) -> int:
 
     run = scoring.score_pending(conn, provider, system_prompt, limit=cap,
                                 model=args.model,
-                                escalation_model=args.escalation_model)
+                                escalation_model=args.escalation_model,
+                                rows=targeted)
 
     print(f"\nscored           {run.scored}")
     print(f"escalated        {run.escalated}")
@@ -1149,6 +1175,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_score.add_argument("--rescore", action="store_true",
                          help="discard existing scores and score everything "
                               "again; needed after a rubric change")
+    p_score.add_argument("--queue", action="store_true",
+                         help="rescore only the application queue - postings "
+                              "carrying a status - that are not already on "
+                              "the current rubric. Deletes nothing, and skips "
+                              "rows already current, so it is safe to re-run")
     p_score.set_defaults(func=cmd_score)
 
     p_cal = sub.add_parser("calibrate")

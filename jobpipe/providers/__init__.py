@@ -41,9 +41,23 @@ DEFAULT_ESCALATION_MODELS = {
 # Deliberately NOT `gemini-flash-latest`: an alias silently changes model
 # underneath a calibrated prompt, and this is the one call whose output
 # quality is the entire deliverable.
+# Keyed by BACKEND as well as provider, for the same reason grounding is: this
+# default was provider-keyed only, so it returned gemini-3.5-flash on Vertex -
+# a model Vertex does not serve and one the credit would not cover if it did.
+# Third instance of one defect. Grounding was the first (574fdd4), the rubric's
+# field descriptions the second; each time a value was resolved without asking
+# which backend was about to receive it.
+#
+# The Vertex entry is the faithful port of the reasoning above: the cheapest
+# non-lite flash on offer, one tier above the flash-lite used for selection and
+# grounding. gemini-2.5-pro is also credit-eligible and would be the choice if
+# letter quality ever justifies the thinking-token SKU - a deliberate decision
+# to make on its own, not a default to drift into.
 DEFAULT_PROSE_MODELS = {
-    "gemini": "gemini-3.5-flash",
-    "anthropic": "claude-sonnet-5",
+    ("gemini", "api"): "gemini-3.5-flash",
+    ("gemini", "vertex"): "gemini-2.5-flash",
+    ("anthropic", "api"): "claude-sonnet-5",
+    ("anthropic", "vertex"): "claude-sonnet-5",
 }
 
 
@@ -67,18 +81,26 @@ DEFAULT_GROUNDING_MODELS = {
 def default_grounding_model(provider: str | None = None) -> str:
     provider = (provider or os.environ.get("JOBPIPE_PROVIDER")
                 or DEFAULT_PROVIDER).strip().lower()
+    # Override first, backend second. Resolving the backend up front made an
+    # explicitly chosen model depend on the billing switch being set, which is
+    # backwards: naming a model is the one case where no default is needed.
+    override = os.environ.get("JOBPIPE_GROUNDING_MODEL")
+    if override:
+        return override
     backend = gemini_backend() if provider == "gemini" else "api"
-    return (os.environ.get("JOBPIPE_GROUNDING_MODEL")
-            or DEFAULT_GROUNDING_MODELS.get((provider, backend))
+    return (DEFAULT_GROUNDING_MODELS.get((provider, backend))
             or DEFAULT_MODELS.get(provider, DEFAULT_MODELS[DEFAULT_PROVIDER]))
 
 
 def default_prose_model(provider: str | None = None) -> str:
     provider = (provider or os.environ.get("JOBPIPE_PROVIDER")
                 or DEFAULT_PROVIDER).strip().lower()
-    return (os.environ.get("JOBPIPE_PROSE_MODEL")
-            or DEFAULT_PROSE_MODELS.get(provider,
-                                        DEFAULT_PROSE_MODELS[DEFAULT_PROVIDER]))
+    override = os.environ.get("JOBPIPE_PROSE_MODEL")
+    if override:
+        return override
+    backend = gemini_backend() if provider == "gemini" else "api"
+    return (DEFAULT_PROSE_MODELS.get((provider, backend))
+            or DEFAULT_MODELS.get(provider, DEFAULT_MODELS[DEFAULT_PROVIDER]))
 
 
 def get_provider(name: str | None = None, **kwargs) -> ScoringProvider:
@@ -116,7 +138,24 @@ def gemini_backend() -> str:
     on its own before the model changes underneath it — two variables moving
     at once is how a regression becomes unattributable.
     """
-    value = (os.environ.get("JOBPIPE_GEMINI_BACKEND") or "api").strip().lower()
+    raw = os.environ.get("JOBPIPE_GEMINI_BACKEND")
+    if raw is None or not raw.strip():
+        # Deliberately no default. This variable decides which account is
+        # billed, and defaulting to `api` made that decision silently: a
+        # process that fails to load .env - a script run from outside the repo
+        # root, a cron entry with the wrong working directory - fell back to
+        # the Developer API. With a key exported in a shell profile that is a
+        # silent charge to the prepaid balance rather than the GCP credit.
+        # Refusing costs one explicit line in .env and turns an invisible
+        # billing event into a startup error.
+        raise ProviderError(
+            "JOBPIPE_GEMINI_BACKEND is not set. It decides which account is "
+            "billed, so it has no default: set it to 'vertex' (bills the GCP "
+            "billing account, where the credits live) or 'api' (bills the "
+            "prepaid Developer API balance). If you expected .env to supply "
+            "it, the process did not load .env - python-dotenv searches "
+            "upward from the calling file, not the working directory.")
+    value = raw.strip().lower()
     if value not in ("api", "vertex"):
         raise ProviderError(
             f"JOBPIPE_GEMINI_BACKEND must be 'api' or 'vertex', not {value!r}")

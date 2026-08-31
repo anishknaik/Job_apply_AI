@@ -85,7 +85,18 @@ DOMAINS = ["ai_infra", "ai_saas", "data_infra", "product_saas",
 #                 description carried no test at all; skills_match had the
 #                 bare description "0-10". Relocation, not new rules -
 #                 7917ada showed a fourth attempt at prose does not stick.
-RUBRIC_VERSION = "2026-08-31.3"
+#   2026-08-31.4  the same defect, third instance, found by the step 6
+#                 backfill: `dealbreakers` listed "mandatory relocation"
+#                 unqualified, while the rubric says "relocation the
+#                 candidate has ruled out" and the profile says he relocates
+#                 anywhere in the US without qualification - so there is no
+#                 city to rule out and location can never be a dealbreaker.
+#                 The field description was the one place the qualifier was
+#                 missing, and it is the place attached to what the model
+#                 fills. Cost a real role: Verkada's CV posting scored
+#                 overall 8 / apply 2 on a five-days-onsite line, dropping it
+#                 below the sheet's floor of 4 entirely.
+RUBRIC_VERSION = "2026-08-31.4"
 
 LEGITIMACY = ["ok", "suspicious", "likely_ghost"]
 
@@ -198,9 +209,13 @@ SCORE_SCHEMA = {
             "type": "array",
             "items": {"type": "string"},
             "description": "Hard blockers stated in the posting: clearance "
-                           "requirements, mandatory relocation, fluency in a "
-                           "language the candidate does not speak, years of "
-                           "experience far beyond the profile. Empty if none.",
+                           "requirements, fluency in a language the candidate "
+                           "does not speak, years of experience far beyond "
+                           "the profile. Empty if none. LOCATION IS NEVER ONE "
+                           "- the candidate relocates anywhere in the US "
+                           "without qualification, so on-site, hybrid, "
+                           "five-days-a-week and required-relocation are all "
+                           "fully in scope and must not appear here.",
         },
         "overall": {"type": "integer",
                     "minimum": 0, "maximum": 10,
@@ -848,15 +863,22 @@ def scorer_id(provider: ScoringProvider) -> str:
 
 def score_pending(conn, provider: ScoringProvider, system_prompt: str,
                   limit: int, model: str | None = None,
-                  escalation_model: str | None = None) -> ScoreRun:
+                  escalation_model: str | None = None,
+                  rows=None) -> ScoreRun:
     """Score the Stage B queue, committing as it goes.
 
     Committing per posting rather than at the end means an interrupted run
     keeps the work it already paid for.
+
+    `rows` overrides the selection so a targeted backfill reuses this loop
+    rather than copying it. The loop is where provenance is written, and a
+    second copy of it is how a backfill ends up writing rows that look scored
+    but carry no `rubric_version`.
     """
     run = ScoreRun()
     model = model or default_model(provider.name)
-    rows = db.get_unscored(conn, limit=limit)
+    if rows is None:
+        rows = db.get_unscored(conn, limit=limit)
     log.info("scoring %d posting(s) with %s via %s",
              len(rows), model, provider.name)
 

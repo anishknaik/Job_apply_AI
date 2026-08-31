@@ -393,6 +393,43 @@ def get_unscored(conn: sqlite3.Connection, limit: int | None = None):
     return conn.execute(sql).fetchall()
 
 
+def get_queue_off_rubric(conn: sqlite3.Connection, rubric_version: str,
+                         limit: int | None = None):
+    """Postings in the application queue not scored by the current rubric.
+
+    The queue is the set `list_queue` surfaces: everything carrying a status
+    event. Those are the postings a session actually works on, and the ones
+    `render_resume` needs `domain` for.
+
+    Exists because `score` had exactly two modes and neither fits a rubric
+    change. Scoring only the unscored skips every row already carrying a
+    stale score, and `--rescore` deletes the whole table to reach them -
+    which would discard the 3.1-era corpus PHASE5_PLAN 3.5 keeps deliberately
+    as historical record, and bill for 625 postings to refresh 67.
+
+    Ordered oldest-rubric-first so an interrupted run resumes usefully, and
+    idempotent: a posting already on `rubric_version` is not returned, so
+    re-running after a partial failure costs only what is left.
+    """
+    # EXISTS, not a join on the latest event: which status a posting is at
+    # does not matter here, only that it is in the queue at all. A join on
+    # MAX(id) would read as though it did, and `current_statuses` keys off
+    # MAX(id) while a bare rowid would not necessarily agree with it.
+    sql = """
+        SELECT p.*
+        FROM postings p
+        LEFT JOIN scores s ON s.posting_id = p.id
+        WHERE EXISTS (SELECT 1 FROM status_events e WHERE e.posting_id = p.id)
+          AND (s.posting_id IS NULL
+               OR s.rubric_version IS NULL
+               OR s.rubric_version != ?)
+        ORDER BY p.id
+    """
+    if limit is not None:
+        sql += f" LIMIT {int(limit)}"
+    return conn.execute(sql, (rubric_version,)).fetchall()
+
+
 # ---------------------------------------------------------------------------
 # scores
 # ---------------------------------------------------------------------------

@@ -319,7 +319,10 @@ class TestProvenanceIsWritten:
         in billing track, data terms and — as the probe found — caching."""
         import types as _t
         provider = _t.SimpleNamespace(name="gemini")
-        monkeypatch.delenv("JOBPIPE_GEMINI_BACKEND", raising=False)
+        # Set explicitly rather than deleted: the backend has no default, so
+        # an unset variable is now an error rather than a third answer. What
+        # this test is about is that the recorded id follows the backend.
+        monkeypatch.setenv("JOBPIPE_GEMINI_BACKEND", "api")
         assert _scoring.scorer_id(provider) == "gemini/api"
         monkeypatch.setenv("JOBPIPE_GEMINI_BACKEND", "vertex")
         assert _scoring.scorer_id(provider) == "gemini/vertex"

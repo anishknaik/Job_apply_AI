@@ -327,12 +327,12 @@ class TestLetterScaffolding:
     def test_prose_model_is_not_the_scoring_model(self):
         """§5: do not cost-optimise this call."""
         from jobpipe.providers import DEFAULT_MODELS, DEFAULT_PROSE_MODELS
-        assert DEFAULT_PROSE_MODELS["gemini"] != DEFAULT_MODELS["gemini"]
+        assert DEFAULT_PROSE_MODELS[("gemini", "vertex")] != DEFAULT_MODELS["gemini"]
 
     def test_the_prose_model_is_pinned_not_an_alias(self):
         """An alias silently changes model under a calibrated prompt."""
         from jobpipe.providers import DEFAULT_PROSE_MODELS
-        assert "latest" not in DEFAULT_PROSE_MODELS["gemini"]
+        assert all("latest" not in m for m in DEFAULT_PROSE_MODELS.values())
 
 
 class TestBlockNamesMatchTheAssembledLetter:

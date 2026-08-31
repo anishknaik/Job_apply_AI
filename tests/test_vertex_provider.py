@@ -52,7 +52,22 @@ def reply(text='{"overall": 8}', prompt=7125, out=13, cached=6982):
 
 
 class TestTheBackendSwitch:
-    def test_default_is_the_developer_api(self, monkeypatch):
+    def test_it_refuses_rather_than_defaulting(self, monkeypatch):
+        """No default: this variable decides which account is billed.
+
+        Defaulting to `api` made that choice silently, so a process that
+        failed to load .env - a script run from outside the repo root, a cron
+        entry with the wrong working directory - fell back to the Developer
+        API. With a key exported in a shell profile that is a silent charge to
+        the prepaid balance instead of the GCP credit.
+        """
+        monkeypatch.delenv("JOBPIPE_GEMINI_BACKEND", raising=False)
+        with pytest.raises(providers.ProviderError) as exc:
+            providers.gemini_backend()
+        assert "no default" in str(exc.value)
+        assert "vertex" in str(exc.value) and "api" in str(exc.value)
+
+    def _removed_test_default_is_the_developer_api(self, monkeypatch):
         monkeypatch.delenv("JOBPIPE_GEMINI_BACKEND", raising=False)
         assert providers.gemini_backend() == "api"
 
