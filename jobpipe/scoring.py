@@ -43,6 +43,26 @@ MAX_DESCRIPTION_CHARS = 12_000
 ARCHETYPES = ["ai_ml_engineer", "data_scientist", "ml_platform",
               "swe_generalist", "analytics", "non_technical"]
 
+# What the EMPLOYER does, orthogonal to what the ROLE is. It selects the
+# resume variant downstream (PHASE5_PLAN 4.2), which is why it is worth a
+# field of its own rather than being inferred from the company name later.
+#
+# Sized against the real target list, not guessed: all 143 companies in
+# targets.csv were classified (scripts/classify_targets.py). ai_infra and
+# data_infra are 29% each of the tier-1/2 companies, ai_saas 17%, healthcare
+# 10%, product_saas 9%, robotics_cv 6%, fintech 1%.
+#
+# NOT to be confused with `domain_relevance`, which is a SCORE about fit.
+# This is a label about the employer.
+DOMAINS = ["ai_infra", "ai_saas", "data_infra", "product_saas",
+           "healthcare", "robotics_cv", "fintech", "other"]
+
+# Bump whenever RUBRIC changes. A score is only comparable to another score
+# produced under the same rubric, and a corpus that mixes them silently is a
+# corpus whose calibration numbers mean nothing. test_scoring pins the rubric
+# hash against this, so changing the text without bumping fails the suite.
+RUBRIC_VERSION = "2026-08-30.1"
+
 LEGITIMACY = ["ok", "suspicious", "likely_ghost"]
 
 # Orthogonal to archetype, deliberately. A consulting role can be genuine ML
@@ -59,6 +79,14 @@ SCORE_SCHEMA = {
             "enum": ARCHETYPES,
             "description": "The lane this posting belongs to. Decided first, "
                            "because the rubric branches on it.",
+        },
+        "domain": {
+            "type": "string",
+            "enum": DOMAINS,
+            "description": "What the EMPLOYER does, not what the role is. "
+                           "This is a label about the company's field; it is "
+                           "not `domain_relevance`, which is a score about "
+                           "fit. Use `other` rather than forcing a bad fit.",
         },
         "engagement": {
             "type": "string",
@@ -87,9 +115,12 @@ SCORE_SCHEMA = {
                            "before the numbers, and referring to specifics "
                            "from both the profile and the posting.",
         },
-        "skills_match": {"type": "integer", "description": "0-10"},
-        "seniority_fit": {"type": "integer", "description": "0-10"},
-        "domain_relevance": {"type": "integer", "description": "0-10"},
+        "skills_match": {"type": "integer", "minimum": 0, "maximum": 10,
+                         "description": "0-10"},
+        "seniority_fit": {"type": "integer", "minimum": 0, "maximum": 10,
+                          "description": "0-10"},
+        "domain_relevance": {"type": "integer", "minimum": 0, "maximum": 10,
+                             "description": "0-10"},
         "dealbreakers": {
             "type": "array",
             "items": {"type": "string"},
@@ -99,9 +130,11 @@ SCORE_SCHEMA = {
                            "experience far beyond the profile. Empty if none.",
         },
         "overall": {"type": "integer",
-                    "description": "0-10 fit on paper, judged strictly"},
+                    "minimum": 0, "maximum": 10,
+            "description": "0-10 fit on paper, judged strictly"},
         "apply_score": {
             "type": "integer",
+            "minimum": 0, "maximum": 10,
             "description": "0-10 whether it is worth sending an application "
                            "anyway. Diverges upward from `overall` when the "
                            "skills match but the years do not.",
@@ -114,7 +147,7 @@ SCORE_SCHEMA = {
     },
     # archetype first: the rubric branches on it, and the schema order is the
     # order the model fills the fields in.
-    "required": ["archetype", "engagement", "legitimacy", "legitimacy_reason",
+    "required": ["archetype", "domain", "engagement", "legitimacy", "legitimacy_reason",
                  "reasoning", "skills_match", "seniority_fit",
                  "domain_relevance", "dealbreakers", "overall",
                  "apply_score", "apply_reason"],
@@ -148,9 +181,10 @@ something.
                   support, program and project management
 
 **Classify on the work described, never on a domain word in the title.** \
-`non_technical` is the most damaging label in this list — it stops scoring \
-dead — so apply it only when the day-to-day work is genuinely not engineering \
-or analysis. A business word in the title is not sufficient evidence:
+`non_technical` is a FLAG, not a verdict: it lowers the ceiling but it does \
+not stop the analysis, and every axis is still scored on its merits. Apply it \
+only when the day-to-day work is genuinely not engineering or analysis. A \
+business word in the title is not sufficient evidence:
 
   - "Marketing Engineer" that builds internal tooling and data pipelines is
     swe_generalist or ai_ml_engineer, NOT non_technical. It is an engineering
@@ -175,9 +209,35 @@ co-primary lanes**. Apply the lane you assigned:
   swe_generalist — adjacent. Judge on merit when the role is AI-flavoured;
                    otherwise cap domain_relevance at 6.
   analytics      — weak overlap. Cap domain_relevance at 5.
-  non_technical  — STOP. Set skills_match, seniority_fit, domain_relevance,
-                   overall and apply_score all to 1, give a one-sentence
-                   reasoning, and do not analyse further.
+  non_technical  — weakest overlap. Cap domain_relevance at 3 and judge
+                   every other axis on its merits. Do NOT force the scores to
+                   1, and do NOT stop analysing. This label used to
+                   short-circuit to 1 across the board; it cost a real role
+                   (an "AI Advisory Consultant" that scoped and built ML
+                   solutions, human-scored 6, model-scored 1) and the loss was
+                   invisible because the score carried no trace of why.
+
+Set `domain` from **what the employer does**, independently of the lane. It \
+decides which resume variant the candidate sends, so it is about the company, \
+not the role. Do not confuse it with `domain_relevance`, which is a score.
+
+  ai_infra      what developers BUILD ON: model providers and APIs, compute
+                and GPUs, model hosting and serving, vector databases,
+                orchestration frameworks, eval/observability/governance
+  ai_saas       an AI-native APPLICATION sold to end users or businesses —
+                the customer uses the thing itself rather than building on it
+  data_infra    warehouses, ETL and pipelines, streaming, data quality,
+                product analytics, general observability
+  product_saas  software product, developer tooling, collaboration or
+                consumer, where AI is not the product
+  healthcare    clinical, biotech, pharma, health data
+  robotics_cv   autonomous vehicles, robotics, physical AI, vision hardware
+  fintech       payments, banking, lending, crypto, risk and identity
+  other         none of the above fits
+
+Where a company applies AI to a vertical, **the vertical wins**: a clinical \
+documentation AI company is `healthcare`, not `ai_saas`, because the vertical \
+is what decides which evidence the candidate should lead with.
 
 Set `engagement` at the same time as the archetype. It is a separate question \
 from the lane, and it turns on **what the employer sells** — not on whether \
@@ -584,6 +644,20 @@ def score_posting(provider: ScoringProvider, row, system_prompt: str,
     return score
 
 
+def scorer_id(provider: ScoringProvider) -> str:
+    """Who produced the score: provider and backend, e.g. `gemini/vertex`.
+
+    The backend matters as much as the provider here. The same model id can be
+    served by the Developer API or by Vertex, and they are different billing
+    tracks, different data-governance terms, and - as the 2026-08-30 probe
+    found - different caching behaviour. A score that records only the model
+    cannot tell those apart afterwards.
+    """
+    from .providers import gemini_backend
+    backend = gemini_backend() if provider.name == "gemini" else "api"
+    return f"{provider.name}/{backend}"
+
+
 def score_pending(conn, provider: ScoringProvider, system_prompt: str,
                   limit: int, model: str | None = None,
                   escalation_model: str | None = None) -> ScoreRun:
@@ -602,7 +676,14 @@ def score_pending(conn, provider: ScoringProvider, system_prompt: str,
         score = score_posting(provider, row, system_prompt, run,
                               model=model, escalation_model=escalation_model)
         if score is not None:
-            db.insert_score(conn, row["id"], score, score["model"])
+            # Provenance, per PHASE5_PLAN 3.5. `model` alone does not say
+            # which backend served the call or which rubric produced the
+            # judgement, and the corpus is about to mix 3.1-on-the-API scores
+            # with 2.5-on-Vertex ones. Without these the mixture is invisible
+            # and every calibration figure computed over it is meaningless.
+            db.insert_score(conn, row["id"], score, score["model"],
+                            scorer=scorer_id(provider),
+                            rubric_version=RUBRIC_VERSION)
             conn.commit()
         if index % 25 == 0:
             log.info("  %d/%d scored", index, len(rows))

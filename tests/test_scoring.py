@@ -74,8 +74,8 @@ class TestRequestShape:
         scoring.score_posting(provider, row, SYSTEM, scoring.ScoreRun())
         schema = provider.calls[0]["schema"]
         assert set(schema["required"]) == {
-            "archetype", "engagement", "legitimacy", "legitimacy_reason",
-            "reasoning", "skills_match", "seniority_fit",
+            "archetype", "domain", "engagement", "legitimacy",
+            "legitimacy_reason", "reasoning", "skills_match", "seniority_fit",
             "domain_relevance", "dealbreakers", "overall",
             "apply_score", "apply_reason"}
 

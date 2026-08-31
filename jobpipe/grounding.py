@@ -30,7 +30,7 @@ import logging
 from dataclasses import dataclass, field
 
 from .bullets import Bank
-from .providers import ScoringProvider, default_model
+from .providers import ScoringProvider, default_grounding_model
 
 log = logging.getLogger(__name__)
 
@@ -184,7 +184,9 @@ def check(provider: ScoringProvider, bank: Bank, letter_text: str,
           posting_text: str, system_prompt: str,
           model: str | None = None) -> GroundingResult:
     """Verify one letter. Never modifies it — §2.2 forbids auto-correction."""
-    model = model or default_model(provider.name)
+    # Not the scoring model: this check is short and structured, and on the
+    # Vertex backend it runs on 2.5 Flash Lite while scoring runs on Flash.
+    model = model or default_grounding_model(provider.name)
     user = (f"=== JOB POSTING (the only evidence for `employer` claims) ===\n"
             f"{posting_text[:10_000]}\n\n"
             f"=== THE LETTER TO CHECK ===\n{letter_text}")

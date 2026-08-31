@@ -96,6 +96,7 @@ class TestScoreRoundTrip:
     def _payload(self):
         from jobpipe import scoring
         sample = {"archetype": "ai_ml_engineer", "engagement": "consulting",
+                  "domain": "ai_infra",
                   "legitimacy": "ok", "legitimacy_reason": "",
                   "reasoning": "r", "skills_match": 7, "seniority_fit": 6,
                   "domain_relevance": 8, "dealbreakers": ["x"], "overall": 6,

@@ -724,7 +724,34 @@ Gemini. Run them in parallel.
    Vertex at `global`), and populated token counts. 17 offline tests cover the
    usage mapping, refusal handling and the switch.
 3. Demote `non_technical` to a flag; update the rubric to say what the flag
-   means.
+   means. **DONE 2026-08-30**, `RUBRIC_VERSION = 2026-08-30.1`.
+
+   The short-circuit ("STOP. Set ... all to 1") is gone; the label now caps
+   `domain_relevance` at 3 and every other axis is judged on merit. Verified
+   live on the two diagnostic postings: Scale AI's "AI Advisory Consultant"
+   moved 4 -> **6**, matching its human score, while Anthropic's "Silicon
+   Engineer" stayed at 1 but reclassified to `swe_generalist` — the same
+   number, now earned rather than forced. The demotion moves what deserves
+   moving without inflating genuine non-fits.
+
+   `domain` shipped in the same rubric change and is **required**, so a score
+   cannot silently omit it. Two gaps surfaced while building it:
+
+   - **Grounding never inherited the scoring model.** It called
+     `default_model()`, which ignores `JOBPIPE_SCORING_MODEL`, so moving
+     scoring to 2.5 Flash would have silently left grounding on
+     3.1-flash-lite — a model the credit does not cover.
+     `default_grounding_model()` is keyed by backend, because
+     `gemini-2.5-flash-lite` is served on Vertex but unavailable to new
+     Developer API keys, so one default cannot be right for both.
+   - **No score field was range-constrained.** Every description said "0-10"
+     and nothing enforced it; the `non_technical` short-circuit had been
+     masking the gap by forcing exact values. Now bounded, and Vertex accepts
+     `minimum`/`maximum` in the response schema — verified, not assumed.
+
+   One thing to watch: `domain` came back `ai_saas` on one run and `ai_infra`
+   on the next for Scale AI, at temperature 0. Genuinely borderline companies
+   will flip, which is why Claude proposes the variant and Anish confirms.
 4. Rescore the holdout with 2.5 Flash. **Gate:** if it does not fix Scale AI
    and Ramp, stop and diagnose before backfilling.
 5. Rebuild the hand-scored set, record MAE and bias against a rubric version.

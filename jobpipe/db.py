@@ -402,6 +402,10 @@ _SCORE_COLUMNS = (
     "dealbreakers", "reasoning", "model", "scored_at", "archetype",
     "engagement", "legitimacy", "legitimacy_reason", "apply_score",
     "apply_reason",
+    # Provenance (PHASE5_PLAN 3.5). `model` alone does not say which backend
+    # served it or which rubric produced it, and a corpus that mixes rubrics
+    # silently is a corpus whose calibration numbers describe nothing.
+    "domain", "scorer", "rubric_version",
 )
 
 _SCORE_INSERT = (
@@ -411,13 +415,18 @@ _SCORE_INSERT = (
 
 
 def insert_score(conn: sqlite3.Connection, posting_id: int, score: dict,
-                 model: str) -> None:
+                 model: str, scorer: str | None = None,
+                 rubric_version: str | None = None) -> None:
     import json
 
     values = dict(score)
     values["dealbreakers"] = json.dumps(score.get("dealbreakers", []))
     values["model"] = model
     values["scored_at"] = utcnow()
+    if scorer is not None:
+        values["scorer"] = scorer
+    if rubric_version is not None:
+        values["rubric_version"] = rubric_version
     conn.execute(_SCORE_INSERT,
                  (posting_id, *(values.get(c) for c in _SCORE_COLUMNS)))
 

@@ -47,6 +47,32 @@ DEFAULT_PROSE_MODELS = {
 }
 
 
+# Grounding is a short, structured check with no long shared prefix, so it
+# wants the cheapest capable model rather than the scoring model. It used to
+# inherit `default_model()`, which ignores JOBPIPE_SCORING_MODEL entirely -
+# so moving scoring to 2.5 Flash would have silently left grounding on
+# 3.1-flash-lite, a model the credit does not cover.
+#
+# Keyed by BACKEND as well as provider, because gemini-2.5-flash-lite is
+# served on Vertex but is unavailable to new Developer API keys (verified
+# live 2026-08-12). One default cannot be right for both.
+DEFAULT_GROUNDING_MODELS = {
+    ("gemini", "api"): "gemini-3.1-flash-lite",
+    ("gemini", "vertex"): "gemini-2.5-flash-lite",
+    ("anthropic", "api"): "claude-haiku-4-5",
+    ("anthropic", "vertex"): "claude-haiku-4-5",
+}
+
+
+def default_grounding_model(provider: str | None = None) -> str:
+    provider = (provider or os.environ.get("JOBPIPE_PROVIDER")
+                or DEFAULT_PROVIDER).strip().lower()
+    backend = gemini_backend() if provider == "gemini" else "api"
+    return (os.environ.get("JOBPIPE_GROUNDING_MODEL")
+            or DEFAULT_GROUNDING_MODELS.get((provider, backend))
+            or DEFAULT_MODELS.get(provider, DEFAULT_MODELS[DEFAULT_PROVIDER]))
+
+
 def default_prose_model(provider: str | None = None) -> str:
     provider = (provider or os.environ.get("JOBPIPE_PROVIDER")
                 or DEFAULT_PROVIDER).strip().lower()
@@ -112,6 +138,7 @@ def default_escalation_model(provider: str | None = None) -> str:
 
 __all__ = ["ProviderError", "ProviderResponse", "ScoringProvider",
            "get_provider", "default_model", "default_escalation_model",
-           "gemini_backend",
+           "gemini_backend", "default_grounding_model",
+           "DEFAULT_GROUNDING_MODELS",
            "DEFAULT_MODELS", "DEFAULT_ESCALATION_MODELS",
            "DEFAULT_PROSE_MODELS", "default_prose_model"]
