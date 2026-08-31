@@ -207,24 +207,114 @@ Two fixes:
   testing around it, and it is why the earlier proposal to pin expected values
   is dropped.
 
-### 4.2 The variant set
+### 4.2 The variant set — settled 2026-08-30
 
-Replaces per-application bullet selection.
+Replaces per-application bullet selection. **Seven variants**, sized against
+the actual target list rather than assumed: all 143 companies in `targets.csv`
+were hand-classified by domain. `scripts/classify_targets.py` is re-runnable
+and holds the mapping, so a disputed company is one edit away from a corrected
+count.
 
-| Lane | Count |
-|---|---|
-| AI/ML engineering | 3 |
-| Data science / analytics | 2 |
-| Software engineering | 1 |
+| Domain | All | T1 | T2 | T3 | **Priority (T1+2)** |
+|---|---:|---:|---:|---:|---|
+| `ai_infra` | 29 | 3 | 26 | 0 | **29%** |
+| `data_infra` | 32 | 0 | 29 | 3 | **29%** |
+| `ai_saas` | 17 | 3 | 14 | 0 | **17%** |
+| `healthcare` | 10 | 1 | 9 | 0 | 10% |
+| `product_saas` | 25 | 1 | 8 | 16 | 9% |
+| `robotics_cv` | 8 | 0 | 6 | 2 | 6% |
+| `fintech` | 22 | 0 | 1 | 21 | 1% |
 
-Claude selects a variant; it does not select bullets. `render_resume` takes
+`ai_infra` is what developers **build on** — compute and GPUs, model hosting
+and serving, vector databases, orchestration frameworks, eval/observability/
+governance, and the model providers themselves. `ai_saas` is an AI-native
+**application** sold to end users. The test is who the customer is: a
+developer wiring it into something else, or someone using the thing itself.
+Where a company applies AI to a vertical (Abridge, Harvey, Rogo) the vertical
+wins, because the vertical is what decides which bullets should lead.
+
+**The classification overturned the first proposal twice**, which is why it
+was worth doing before any ordering was written:
+
+- **Two fintech variants were proposed. Fintech is 1% of the priority list** —
+  21 of its 22 companies are tier 3. Two of six variants would have served one
+  company.
+- **`data_infra` had no variant and is 29%**, tied for largest, with 29 tier-2
+  companies. Anish has a real story for it — `bumi-etl`, `capstone-quality`,
+  `gt-remittance`, `gt-nbs7` — that had nowhere to go.
+
+#### A variant is an ORDERING, not a subset
+
+The bank holds 21 bullets and roughly 14–16 fit one page, so any two subsets
+must share at least 11. Seven "different" bullet lists would be seven
+near-copies that drift apart. So a variant is **a rank ordering over the whole
+bank, plus a headline and a skill-section order.** The one-page loop already
+drops from the bottom, so an ordering *is* a selection, and there stays exactly
+one copy of every bullet.
+
+| Variant | Domains served | Priority | Leads with |
+|---|---|---|---|
+| `ai_ml_infra` | `ai_infra` | 29% | `dist-distill`, `dist-ablation`, `dist-harness`, `rag-agentic`, `spot-gpt` |
+| `ai_ml_data` | `data_infra` | 29% | `gt-nbs7`, `bumi-etl`, `gt-remittance`, `capstone-quality`, `rag-fullstack` |
+| `ai_ml_product` | `ai_saas` + `product_saas` | 26% | `gt-lesson-plan`, `rag-agentic`, `newsletter-pipeline`, `gt-ownership` |
+| `ai_ml_health` | `healthcare` | 10% | `gt-nbs7`, then `dist-*`, `rag-agentic` |
+| `ai_ml_cv` | `robotics_cv` | 6% | `nec-yolo`, `nec-tracking`, `spot-cv` |
+| `ds_analytics` | any domain, DS lane | — | `bumi-models`, `stock-ensemble`, `brain-*`, `capstone-*` |
+| `swe_backend` | any domain, SWE lane; `fintech` falls here | 1% | `gt-remittance`, `gt-nbs7`, `rag-fullstack` |
+
+`ai_ml_product` is tuned for `ai_saas`, which outnumbers `product_saas` 17 to 9
+in the priority list; generic product SaaS rides along rather than the reverse.
+
+**Fintech gets no variant and does not need one.** The drop order is already
+relevance-aware — a bullet whose `skills` overlap the posting's vocabulary is
+promoted up to two ranks before being cut — so a Chime posting naming payments
+and PostgreSQL promotes `gt-remittance` on its own. A variant earns its place
+only when the *whole* ordering differs, not when one bullet should move.
+
+`ai_ml_cv` exists so `nec-yolo`, `nec-tracking` and `spot-cv` have somewhere to
+go; they are otherwise cut on every render, and Verkada-shaped roles are real
+(one application already went out).
+
+#### Headlines — four
+
+`meta.headline` in `bullets.yaml` carries two keys and needs four. Every term
+traces to the skills taxonomy; kept factual, with no seniority claim.
+
+```
+ai_ml         Software Engineer & Data Scientist · Machine Learning ·
+              GenAI / Agentic AI · Data Engineering
+data_science  Data Scientist & Software Engineer · Applied ML ·
+              Experimental Design · Data Engineering
+swe           Software Engineer · Backend & Cloud Infrastructure ·
+              Python, FastAPI, PostgreSQL · Kubernetes on Azure
+cv            AI Engineer · Computer Vision · Object Detection &
+              Tracking · PyTorch, OpenCV, YOLOv8
+```
+
+"AI Engineer" rather than "Machine Learning Engineer" on the CV line: it is a
+title he has actually held.
+
+#### Who picks the variant
+
+**Gemini emits `domain` at scoring time**, as one more field on the structured
+response beside `archetype` — so the domain is in the database before a session
+starts. Lane comes from `archetype`; variant is `(lane, domain)` with
+nearest-match fallback, the same pattern `VARIANT_FOR_ARCHETYPE` already uses
+for five archetypes onto two variants.
+
+Claude does not select bullets. `render_resume` takes
 `(posting_id, variant, posting_skills)` — no `bullet_ids`, no `skill_order`.
+
+The ~565 postings scored before the field existed carry `domain: null` and fall
+back to Claude proposing and Anish confirming. **This is why Track A step 3
+should land before slice 3 ships** — otherwise every queued posting takes the
+fallback and the grid is never exercised.
 
 **One-page enforcement still drops bullets per posting**, so `RenderResult.dropped`
 and `CLAUDE.md`'s three review questions survive unchanged. What changes is the
 fix. Today it is "lower that bullet's `rank`, add the posting's vocabulary to
 its `skills` tags" — done per posting. Under fixed variants, a per-posting rank
-tweak would drift the six apart until they are six one-offs and the original
+tweak would drift the seven apart until they are seven one-offs and the original
 problem is back.
 
 So: **a wrong drop list is either a permanent edit to that variant, or a signal
