@@ -60,6 +60,17 @@ def get_provider(name: str | None = None, **kwargs) -> ScoringProvider:
             or DEFAULT_PROVIDER).strip().lower()
 
     if name == "gemini":
+        # Same provider name, two backends. The Developer API key bills to a
+        # track that Google Cloud promotional credits are excluded from;
+        # Vertex bills to the account where the credits live, and carries
+        # enterprise data terms for a prompt that is a full personal profile.
+        #
+        # A backend rather than a third provider name because everything above
+        # here keys off `gemini` — the rubric, the escalation ladder, the
+        # model defaults. Rollback is unsetting one variable.
+        if gemini_backend() == "vertex":
+            from .vertex_provider import VertexGeminiProvider
+            return VertexGeminiProvider(**kwargs)
         from .gemini_provider import GeminiProvider
         return GeminiProvider(**kwargs)
     if name == "anthropic":
@@ -69,6 +80,21 @@ def get_provider(name: str | None = None, **kwargs) -> ScoringProvider:
     raise ProviderError(
         f"unknown provider {name!r}. Set JOBPIPE_PROVIDER to one of: "
         f"{', '.join(sorted(DEFAULT_MODELS))}")
+
+
+def gemini_backend() -> str:
+    """Which Gemini backend to use: `api` (the Developer API) or `vertex`.
+
+    Deliberately does NOT change which model runs. Flipping the backend moves
+    the same model to a different billing door, so the backend can be verified
+    on its own before the model changes underneath it — two variables moving
+    at once is how a regression becomes unattributable.
+    """
+    value = (os.environ.get("JOBPIPE_GEMINI_BACKEND") or "api").strip().lower()
+    if value not in ("api", "vertex"):
+        raise ProviderError(
+            f"JOBPIPE_GEMINI_BACKEND must be 'api' or 'vertex', not {value!r}")
+    return value
 
 
 def default_model(provider: str | None = None) -> str:
@@ -86,5 +112,6 @@ def default_escalation_model(provider: str | None = None) -> str:
 
 __all__ = ["ProviderError", "ProviderResponse", "ScoringProvider",
            "get_provider", "default_model", "default_escalation_model",
+           "gemini_backend",
            "DEFAULT_MODELS", "DEFAULT_ESCALATION_MODELS",
            "DEFAULT_PROSE_MODELS", "default_prose_model"]

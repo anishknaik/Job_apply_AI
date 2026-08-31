@@ -707,12 +707,22 @@ Gemini. Run them in parallel.
 ### Track A — Vertex migration and recalibration
 
 1. Verify §3.3's three unknowns with live calls.
-2. `VertexGeminiProvider` — ~80 lines on `models.generate_content` +
-   `GenerateContentConfig`, different usage field names
-   (`prompt_token_count`, `candidates_token_count`,
-   `cached_content_token_count`), behind the existing interface. Add a
-   `JOBPIPE_GEMINI_BACKEND=vertex` switch so rollback is a config edit.
-   `interactions.create` is Developer-API only and does not port.
+2. `VertexGeminiProvider` — **DONE 2026-08-30.** On
+   `models.generate_content` + `GenerateContentConfig`, with the different
+   usage field names, behind the existing interface.
+   `JOBPIPE_GEMINI_BACKEND=vertex` switches it; unsetting one variable is the
+   rollback. `interactions.create` is Developer-API only and does not port.
+
+   **Deliberately model-agnostic.** Flipping the backend does not change which
+   model runs, so the backend can be verified on its own before the model
+   changes underneath it — two variables moving at once is how a regression
+   becomes unattributable, and step 4 already has a confound to diagnose.
+
+   Verified live through the normal `get_provider()` path, scoring a real
+   posting: dispatch, service-account auth, the real `SCORE_SCHEMA`, the
+   escalation ladder (both `3.1-flash-lite` and `3.5-flash-lite` resolve on
+   Vertex at `global`), and populated token counts. 17 offline tests cover the
+   usage mapping, refusal handling and the switch.
 3. Demote `non_technical` to a flag; update the rubric to say what the flag
    means.
 4. Rescore the holdout with 2.5 Flash. **Gate:** if it does not fix Scale AI
