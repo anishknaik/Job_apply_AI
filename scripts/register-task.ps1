@@ -36,6 +36,31 @@ if ($Remove) {
 
 if (-not (Test-Path $script)) { Write-Error "missing $script"; exit 2 }
 
+# Registering an S4U principal needs administrator rights. Without this check
+# the failure surfaces as a raw CIM error - "Register-ScheduledTask : Access is
+# denied", HRESULT 0x80070005 - which says nothing about what to do next.
+$self      = $PSCommandPath
+$identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = New-Object Security.Principal.WindowsPrincipal($identity)
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Output ""
+    Write-Output "This needs an ELEVATED shell."
+    Write-Output ""
+    Write-Output "  The task runs with -LogonType S4U so it works whether or"
+    Write-Output "  not you are logged on. Granting that is an admin-only"
+    Write-Output "  operation; everything else here is not."
+    Write-Output ""
+    Write-Output "  Easiest way from this window (accept the UAC prompt):"
+    Write-Output ""
+    Write-Output "    Start-Process powershell -Verb RunAs -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-File','$self'"
+    Write-Output ""
+    Write-Output "  Or right-click PowerShell, Run as administrator, then:"
+    Write-Output ""
+    Write-Output "    powershell -ExecutionPolicy Bypass -File $self"
+    Write-Output ""
+    exit 3
+}
+
 $argline = "-NoProfile -ExecutionPolicy Bypass -File `"$script`""
 if ($Spend) { $argline += ' -Spend' }
 
