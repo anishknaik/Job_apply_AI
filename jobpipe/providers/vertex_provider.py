@@ -60,6 +60,20 @@ KNOWN_MODELS = (
 # being a constraint once the model moves — but it costs nothing to keep.
 DEFAULT_LOCATION = "global"
 
+# Models that REFUSE thinking_budget=0. Gemini 2.5 Pro is a thinking model and
+# Vertex rejects the request outright:
+#
+#   400 INVALID_ARGUMENT - "The model does not support setting
+#   thinking_budget to 0."
+#
+# Found on 2026-08-31 by scoring three real postings, not by the probe, which
+# only covered 2.5 Flash and Flash Lite. It matters because 2.5 Pro is the
+# configured ESCALATION model: every borderline posting silently lost its
+# second opinion and fell back to the primary score, which score_posting
+# treats as a non-fatal outcome. Three calibration runs were affected before
+# anyone noticed.
+NO_THINKING_DISABLE = ("gemini-2.5-pro", "gemini-3-pro", "gemini-3.5-pro")
+
 
 class VertexGeminiProvider(ScoringProvider):
     name = "gemini"          # the rubric and escalation ladder key off this
@@ -137,12 +151,15 @@ class VertexGeminiProvider(ScoringProvider):
             temperature=0,
             response_mime_type="application/json",
             response_schema=schema,
-            # Off deliberately, not left at whatever the default is: thinking
-            # output is a distinct and more expensive SKU, and scoring emits a
-            # small structured object. Verified accepted on 2.5 Flash and
-            # Flash Lite, with thoughts_token_count coming back 0.
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
         )
+
+        # Off where the model allows it, not left at whatever the default is:
+        # thinking output is a distinct and more expensive SKU, and scoring
+        # emits a small structured object. A Pro model cannot turn it off and
+        # rejects the whole request rather than ignoring the field, so it is
+        # omitted rather than sent and hoped for.
+        if not any(model.startswith(p) for p in NO_THINKING_DISABLE):
+            config.thinking_config = types.ThinkingConfig(thinking_budget=0)
 
         try:
             response = self._client.models.generate_content(
