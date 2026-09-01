@@ -63,26 +63,46 @@ def application_dir(row, root: Path = OUTPUT_ROOT) -> Path:
     return Path(root) / letters.slug(row)
 
 
+def render_and_record(bank, row, conn, selected, variant, *,
+                      skill_order=None, posting_skills=None, model=None,
+                      root: Path = OUTPUT_ROOT) -> dict:
+    """Render chosen bullets to a one-page PDF and record the document row.
+
+    Split out of generate_resume because the two halves have different
+    callers. Selection is a model call; this half is not, and this half is the
+    whole of what `render_resume` needs over MCP (PHASE5_PLAN §4.2) — there
+    the client has already decided, so a provider in this path would mean a
+    second model choosing after the first one already chose.
+
+    The fabrication firewall is unaffected by the split: `Bank.select` gates
+    the ids upstream of here and raises on an unknown one, which is the check
+    §9.5.1 says carries the guarantee on its own once the schema enum is gone.
+    """
+    folder = application_dir(row, root)
+    rendered = resume.render(bank, selected, folder / "resume.pdf",
+                             variant=variant, skill_order=skill_order,
+                             emphasise=posting_skills)
+
+    when = db.utcnow()
+    version = resume_version(variant, rendered.bullet_ids, when)
+    db.insert_document(conn, row["id"], "resume",
+                       archetype=variant,
+                       bullet_ids=rendered.bullet_ids,
+                       generated_path=str(rendered.path),
+                       model=model, generated_at=when)
+    return {"rendered": rendered, "version": version, "folder": folder}
+
+
 def generate_resume(provider, bank, row, sel_system, conn,
                     root: Path = OUTPUT_ROOT) -> dict:
     """Select bullets, render, verify, record. Raises on failure."""
     selection = tailor.select_bullets(provider, bank, row, sel_system)
-    folder = application_dir(row, root)
-    rendered = resume.render(bank, selection["bullets"],
-                             folder / "resume.pdf",
-                             variant=selection["variant"],
-                             skill_order=selection["skill_order"],
-                             emphasise=selection["posting_skills"])
-
-    when = db.utcnow()
-    version = resume_version(selection["variant"], rendered.bullet_ids, when)
-    db.insert_document(conn, row["id"], "resume",
-                       archetype=selection["variant"],
-                       bullet_ids=rendered.bullet_ids,
-                       generated_path=str(rendered.path),
-                       model=selection["model"], generated_at=when)
-    return {"selection": selection, "rendered": rendered, "version": version,
-            "folder": folder}
+    result = render_and_record(bank, row, conn, selection["bullets"],
+                               selection["variant"],
+                               skill_order=selection["skill_order"],
+                               posting_skills=selection["posting_skills"],
+                               model=selection["model"], root=root)
+    return {"selection": selection, **result}
 
 
 def generate_cover_letter(provider, bank, row, letter_system, ground_system,
