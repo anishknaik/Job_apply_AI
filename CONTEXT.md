@@ -39,7 +39,7 @@ metric is interviews per hour spent, not applications per day.
 | 2 | Queued role → tailored resume PDF → cover letter → grounding check | Running on demand |
 | 3 | Application form fill, human clicks submit | Not started, deliberately blocked (§8.4) |
 | 4 | Recruiter research → outreach drafts | Not started |
-| 5 | **MCP server + Cowork — the final version** | Planned, §9 |
+| 5 | **MCP server + Cowork — the final version** | Slice 0 + Tracks A and B done; Track C (form filling) not started |
 
 ---
 
@@ -58,7 +58,7 @@ metric is interviews per hour spent, not applications per day.
 | Targets | 143 companies — tier 1: 8, tier 2: 93, tier 3: 42 |
 | ATS split | greenhouse 72, ashby 70, smartrecruiters 1 |
 | Bullet bank | 21 bullets across 10 roles |
-| Tests | **698 pass, 0 fail** |
+| Tests | **777 pass, 0 fail** |
 | Last scheduled run | 2026-08-31 15:30 UTC — 13,899 fetched, 40 new, **0 scored** |
 | Billing | Vertex, GCP credit. The prepaid AI Studio balance is no longer drawn on |
 
@@ -125,7 +125,7 @@ max 3 per company applied *during* selection rather than after truncation.
 
 ## 4. Module map
 
-7,315 lines of Python across 28 modules, 557 offline tests.
+9,895 lines of Python across 33 modules, 777 offline tests.
 
 | Module | Lines | Does |
 |---|---|---|
@@ -143,6 +143,9 @@ max 3 per company applied *during* selection rather than after truncation.
 | `grounding.py` | 210 | Claim extraction and routing to evidence |
 | `pipeline.py` / `pipeline_tailor.py` | 148 / 131 | The two runs |
 | `providers/` | 256 | Gemini + Anthropic behind one interface |
+| `mcp_server.py` | 831 | The 10-tool MCP surface. Thin: imports and calls |
+| `variants.py` | 233 | The seven orderings, headlines, `(lane, domain)` grid |
+| `header.py` | 214 | Generates the resume header from `master_profile.md` §12 |
 | `fetchers/` | 515 | Greenhouse, Ashby, SmartRecruiters, SSRF-guarded HTTP |
 
 Config: `master_profile.md` (534 lines, gitignored, source of truth for every
@@ -170,19 +173,27 @@ between 3 and 12 rows. Top 25, floor 4, 3 per company.
 
 **The bullet bank is a structural firewall — over bullet text.** Bullet ids
 are compiled into the response schema as an `enum`, so the API rejects an
-invented id before it reaches the code; `Bank.select` re-checks anyway. **No
+invented id before it reaches the code; `Bank.select` re-checks anyway. Under
+MCP the enum is gone and that re-check carries the guarantee alone, which is
+why `render_resume` takes a variant rather than a list of bullet ids. **No
 model can put a sentence in the experience section that a human did not
 write.** Only the cover letter writes prose, which is why grounding exists for
 that module alone.
 
-**The header block is NOT covered, and this used to be stated too broadly.**
-`meta:`, `education:` and each role's company, title and dates are trusted
-YAML — hard-required by `load_bank()` at `bullets.py:162` and read straight
-into the PDF at `resume.py:213-219`. Nothing validates them. A model cannot
-reach them either, so MCP does not widen the gap; the exposure is that a stale
-or mistyped hand edit reaches every generated resume with nothing in between.
-`master_profile.md` §12 is now the source of truth for those fields and
-`TestHeaderMatchesTheProfile` fails when the two drift.
+**The header block is not covered by the firewall, and is now GENERATED
+instead.** `meta:`, `education:` and each role's company, title and dates are
+trusted YAML that nothing validates. A model cannot reach them, so MCP never
+widened the gap — the exposure was always that a stale or mistyped hand edit
+reaches every generated resume with nothing in between, and that the two files
+agreed only because somebody kept them in sync.
+
+`master_profile.md` §12 is the source in fact now, not by convention:
+`header.py` extracts it into `config/header.generated.yaml` and `load_bank()`
+overlays that onto the bank. `bullets.yaml` is never written to — the
+generated file is separate precisely so regenerating cannot touch a human's
+bullet text, and everything §12 declines to own (`headline`, a role's `kind`
+and `location`, the per-group `stack:` lines) stays hand-edited. `cli header`
+regenerates, `cli header --check` reports drift, and both are free.
 
 **Status is an append-only event log, not a column.** "Advance rate" is a
 question about transitions; overwriting `interview` with `rejected` destroys
@@ -352,7 +363,7 @@ Everything here was reproduced on 2026-08-29. **Status as of 2026-08-31:**
 | 8.3 zero edit distances | **fixed** — `copy_for_editing`, now n=2 |
 | 8.4 applications with no documents | open, historical; nothing new depends on it |
 | 8.5 holdout contradicts the headline | **superseded** — see the note below |
-| 8.6 grounding not independent of the writer | **decided, not fixed** — `PHASE5_PLAN` §5.1 keeps grounding off-session deliberately |
+| 8.6 grounding not independent of the writer | **fixed by inversion** — slice 4: Claude writes, `check_grounding` routes to Gemini |
 | 8.7 smaller confirmed items | mostly closed in Slice 0; `title_exclude 'lead'` audited and kept, `63fa270` |
 | 8.8 already done but not recorded | still accurate |
 
@@ -420,9 +431,19 @@ to follow it on that instance.
 
 ### 8.6 Grounding is not independent of the writer
 
-`grounding.check` resolves to `default_model()` — the same Gemini family that
-wrote the letter. `POST_PHASE2_FIXES.md` §2.2 is outstanding. §9 fixes this
-by inversion rather than by the migration that document proposes.
+`grounding.check` resolved to `default_model()` — the same Gemini family that
+wrote the letter. **Closed 2026-09-01 by inversion, not migration.** Under
+slice 4 Claude writes the prose and `check_grounding` routes to Gemini on the
+server's own credentials, so writer and checker are different model families
+and the session never sees a Gemini key. `POST_PHASE2_FIXES.md` §2.2 is
+satisfied without the migration it proposed.
+
+The second reason it stays off-session is not in §9: `get_posting` pulls
+untrusted third-party text into a session that holds write tools. The resume
+path is immune — a posting cannot argue a client into a bullet that does not
+exist — but the letter path is free prose, and an independent checker is the
+only thing between a badly-worded or hostile description and a claim in a
+letter.
 
 ### 8.7 Smaller, confirmed
 
@@ -460,11 +481,16 @@ and addendum §6 (SmartRecruiters fetcher shipped).
 > Where the two disagree, the plan wins. Kept because the reasoning that
 > produced the architecture is not repeated there.
 >
-> **Progress as of 2026-08-31:** Slice 0 complete. Track A complete, all six
+> **Progress as of 2026-09-01:** Slice 0 complete. Track A complete, all six
 > steps — Vertex migration, rubric through `2026-08-31.4`, recalibration, and
-> the queue backfill. Track B slices 1 and 2 shipped and exercised on a real
-> application. **Next is Track B slice 3**, `render_resume` and the seven
-> variant orderings, which `HANDOFF.md` flags as needing human review.
+> the queue backfill. **Track B complete, all four slices**: five read-only
+> tools, `copy_for_editing` + `advance_status`, `render_resume` with the seven
+> reviewed orderings and the header generator, and `save_cover_letter` +
+> `check_grounding` shipped together. Ten tools on the surface.
+>
+> **Next is Track C**, form filling (§6.1 of the plan) — the answers resource
+> and the session instructions. Sequenced here deliberately: it attaches the
+> artifacts slices 3 and 4 produce.
 
 The end state is that the human work left in this project — reviewing a resume
 against the real posting, writing and tightening a letter, deciding what to

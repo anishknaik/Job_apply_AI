@@ -1,4 +1,4 @@
-# Handoff — 2026-08-31
+# Handoff — 2026-09-01
 
 Where Phase 5 actually stands, what is verified against what is assumed, and
 what in the session transcript has since been overturned.
@@ -17,8 +17,8 @@ of the three: §7's Vertex question is settled, and §9 is superseded by
 ## 1. State
 
 ```
-38 commits, 698 tests passing, branch phase5/track-a-step5
-  (5 ahead of master, a fast-forward; phase5/slice-0 trails at 8d3deee)
+46 commits, 777 tests passing, branch phase5/track-a-step5
+  (13 ahead of master, a fast-forward; phase5/slice-0 trails at 8d3deee)
 16,669 postings | 625 past Stage A | 635 scored | 2 letters measured
   (only 1 of the 2 counts toward the per-slot means — see §3)
 ```
@@ -54,6 +54,8 @@ grows about 3/day and nothing reaches the sheet until someone runs `cli score`.
 | **Track B slice 1** | 5 read-only MCP tools, stdio, exercised from a live session |
 | **Track B slice 2** | `copy_for_editing` + `advance_status`, used on a real application |
 | **Track A, all 6** | probe, `VertexGeminiProvider`, rubric + `domain`, holdout gate, recalibration, queue backfill |
+| **Track B slice 3** | `render_resume`, the seven reviewed orderings, the header generator |
+| **Track B slice 4** | `save_cover_letter` + `check_grounding`, shipped together |
 
 Verified means observed, not inferred:
 
@@ -91,6 +93,45 @@ Verified means observed, not inferred:
 ---
 
 ## 3. Open
+
+**Track B is complete, all four slices. Next is Track C.**
+
+**Slice 3 — DONE 2026-09-01.** `render_and_record` split out of
+`generate_resume`; seven orderings in `jobpipe/variants.py`, reviewed and
+signed off; the header generated from `master_profile.md` §12 by
+`jobpipe/header.py`; `render_resume` on the tool surface. It takes a variant,
+never a list of bullet ids — the client could name bullets and the point of
+§4.2 is that it does not.
+
+Rendering them for real found that §4.2's own premise was false. "The
+one-page loop already drops from the bottom, so an ordering *is* a
+selection" was true while the model picked ~16 bullets and the loop trimmed
+two or three; handing it all 21 promoted `rank` into being the primary
+selector. See §5.
+
+**Slice 4 — DONE 2026-09-01.** `save_cover_letter` takes four body
+paragraphs and assembles the rest; `check_grounding` routes to Gemini on the
+server's own credentials. Ten tools on the surface now. §5.2's gate is
+covered end to end, including the sequence that would otherwise smuggle prose
+past it: save, check, rewrite, copy — the rewrite clears the verdict and the
+copy is refused.
+
+`check_grounding` is the first tool that spends money. It is a fraction of a
+cent on Flash Lite, and it is unavoidable rather than an oversight — §5.2
+makes a passing check mandatory before a letter reaches a human, so a gate
+that cannot be run blocks everything. `CLAUDE.md` still lists `cli ground`
+among the four never-run-unasked commands and does not mention the tool;
+worth reconciling.
+
+**Not built, deliberately:** §5.4's first-save-to-final-save distance. The
+STORAGE decision is done and tested — every save is its own revision and
+earlier drafts survive intact — but `measure` still only reads the live row,
+and there are no MCP-written letters yet to measure. Small addition when
+there is data.
+
+**Track C** — form filling, `PHASE5_PLAN` §6.1. The answers resource and the
+session instructions. Sequenced after slice 4 because it attaches the
+artifacts slices 3 and 4 produce.
 
 **Track A step 5 — DONE 2026-08-31**, against `2026-08-31.3` over the merged
 56-posting set. Rank agreement +0.808, the best any configuration has
@@ -225,6 +266,34 @@ field the model fills, or key the value by the backend that will receive it.
 **When a scoring result looks wrong, check where the rule is written before
 rewriting it.**
 
+**A premise that was true when written, and quietly stopped being true.**
+`PHASE5_PLAN` §4.2 says "the one-page loop already drops from the bottom, so
+an ordering *is* a selection." It was true when the model selected ~16
+bullets and the loop trimmed two or three — `rank` was then a tiebreak among
+choices already made. Feeding it all 21 made `rank` the primary selector, and
+`rank` orders bullets WITHIN a role, so comparing across roles asked whether
+Gradient Tensor's third bullet is worse than Brainayan's first. Every role
+has a rank-1 bullet, so every role survived: 14 bullets over 9 of 10 roles in
+all seven variants, and `swe_backend` losing `gt-remittance`, its own
+position-1 bullet. Fixed in `c5769fd` by keying on position. **The premise
+was not wrong when written; the conditions it held under changed.**
+
+**A test that reimplemented the thing it tested.**
+`TestDropOrderIsRelevanceAware` mirrored the drop formula in a local helper
+rather than calling the code, so it passed unchanged through the rewrite
+above while asserting a policy the code no longer had. The whole suite went
+green on a changed drop policy. The decision now lives in `resume.weakest()`
+at module level and the tests call it.
+
+**`.env`, a fourth time, and the first three are why it was caught.**
+`min_font_pt()` reads `JOBPIPE_MIN_FONT_PT` at call time; `.env` sets 9.0 and
+the module default is 10.0. The MCP server never loaded `.env`, so
+`render_resume` would have rendered every resume at the 10pt floor — several
+bullets thinner, nothing raised, nothing logged (`32e94f2`). My own
+verification scripts hit it too, which is how it surfaced: the first "9
+bullets, drops 12" measurement was taken at the wrong floor and was wrong.
+**Anything that is not the CLI gets no `.env` unless it asks.**
+
 **The pattern behind three of those:** having demoted MAE and bias as measuring
 the wrong decision, I kept optimising them anyway. Every intervention aimed at
 absolute scores degraded rank. **The profile fix was the only change that
@@ -235,23 +304,32 @@ by adding one.**
 
 ## 5a. Start here next session
 
-Track B slice 3, `render_resume`. Three pieces, in order:
+**Track C, form filling** (`PHASE5_PLAN` §6.1). Two pieces, and neither is
+code:
 
-1. **Split `pipeline_tailor.generate_resume`** into selection and render. The
-   parts are already separable — `bank.select`, `resume.render`,
-   `db.insert_document` — so this is decomposition, not rewrite.
-2. **Build the seven variant orderings** from `PHASE5_PLAN` §4.2. A variant is
-   an ORDERING over the whole bank plus a headline and skill-section order,
-   never a subset. **This is the part that needs Anish's review**, because a
-   wrong ordering makes every resume in that lane wrong the same way and
-   nothing will report it as an error.
-3. **The header generator** from `master_profile.md` §12, emitted to its own
-   file and merged at `load_bank()` — never written into `bullets.yaml`, which
-   stays entirely hand-edited.
+1. **The answers resource** (§6.1.1) — reusable short answers, the four
+   self-ID answers as verbatim option text, and an ATS-shaped profile view
+   that does not fork from `master_profile.md`. Note §12 deliberately
+   excludes the self-ID answers: that file is the system prefix on every
+   Stage B call, so anything in it reaches the scorer ~10 times a day, and
+   protected-characteristic data has no bearing on a score.
+2. **The session instructions** — field classes, the untrusted-page rule,
+   the attachment rule, tab scoping, stop-before-submit.
 
-The queue now carries `domain` on all 67, so `(lane, domain)` resolves without
-the fallback and the grid can actually be exercised. Tests stay offline: call
-the tool functions directly, do not stand up a transport.
+The browser surface is the Claude extension in Chrome. It exposes the whole
+logged-in browser rather than one tab, so the instructions must scope work to
+the application tab. Start with two or three applications filled under close
+supervision before treating the instructions as settled.
+
+**Before that, two cheap things worth doing first.** Use the new tools on one
+real application end to end — `render_resume`, `save_cover_letter`,
+`check_grounding`, `copy_for_editing` — because everything in Track B is
+tested offline and only slices 1 and 2 have ever been exercised live. And
+that produces the first letter written through the assembled seven-block
+shape, which is what the `why this role` question needs (§3).
+
+Tests stay offline: call the tool functions directly, do not stand up a
+transport.
 
 `cli score --queue` is the tool for a rubric change from here — it rescores
 only queued postings off the current rubric, deletes nothing, and is safe to
