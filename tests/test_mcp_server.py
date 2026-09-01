@@ -534,3 +534,24 @@ class TestRenderResume:
         out = mcp_server.render_resume(conn, pid)
         assert out["dropped"] == ["spot-cv", "brain-survey"]
         assert "defect" in out["review"]
+
+
+class TestTheServerLoadsItsEnvironment:
+    def test_main_loads_env_before_serving(self, monkeypatch):
+        """.env sets JOBPIPE_MIN_FONT_PT=9.0 and min_font_pt() reads it at
+        call time, so a server started without .env renders every resume at
+        the 10pt default - several bullets thinner, silently. .mcp.json runs
+        the module with no shell environment, so nothing else would load it."""
+        order = []
+
+        class FakeServer:
+            def run(self, transport):
+                order.append(("run", transport))
+
+        import jobpipe.cli as cli
+        monkeypatch.setattr(cli, "_load_env", lambda: order.append("env"))
+        monkeypatch.setattr(mcp_server, "build_server", lambda: FakeServer())
+        mcp_server.main()
+
+        assert order == ["env", ("run", "stdio")], \
+            "the environment must be loaded before the server serves"

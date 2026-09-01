@@ -599,6 +599,20 @@ def main() -> None:
     """stdio entry point. Local desktop sessions only — a custom connector is
     reached from Anthropic's cloud, which cannot see this machine's SQLite
     file, its Chromium, or a gitignored master_profile.md."""
+    # .env FIRST, before anything reads a setting out of the environment.
+    # It is not optional here: .env sets JOBPIPE_MIN_FONT_PT=9.0, and
+    # min_font_pt() reads that at call time, so a server started without it
+    # renders every resume at the 10pt default -- several bullets thinner,
+    # with nothing raised and nothing logged. That exact bug has already been
+    # paid for once in the CLI, which is why min_font_pt has a docstring about
+    # it. .mcp.json runs `python -m jobpipe.mcp_server` with no shell
+    # environment, so this process gets nothing unless it loads it here.
+    #
+    # Imported from the CLI rather than duplicated, and imported late so this
+    # thin module does not pull in 1,100 lines of CLI at import time.
+    from .cli import _load_env
+    _load_env()
+
     logging.basicConfig(level=logging.WARNING)
     build_server().run(transport="stdio")
 
