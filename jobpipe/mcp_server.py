@@ -39,7 +39,8 @@ from mcp.types import ToolAnnotations
 
 from pathlib import Path
 
-from . import db, letters, measure as _measure, states
+from . import (bullets as _bullets, db, letters, measure as _measure,
+               pipeline_tailor, states, tailor, variants)
 from .targets import load_targets
 
 log = logging.getLogger(__name__)
@@ -56,13 +57,16 @@ TOOL_ALLOWLIST = (
     # refuses to overwrite, and status is an append-only log.
     "copy_for_editing",
     "advance_status",
+    # Slice 3. Writes a PDF and a documents row; supersedes rather than
+    # overwrites, like every other document write.
+    "render_resume",
 )
 
 # Which of the above write. Declared rather than inferred, so the annotation
 # test asserts the split instead of asserting "everything is read-only" and
 # being edited to agree every time a write tool is added - which would make it
 # a record of what happened rather than a check on it.
-WRITE_TOOLS = ("copy_for_editing", "advance_status")
+WRITE_TOOLS = ("copy_for_editing", "advance_status", "render_resume")
 
 # snake_case: mcp 2.x accepts the camelCase aliases but exposes the fields as
 # read_only_hint / destructive_hint, and mixing the two reads like a bug.
@@ -381,6 +385,95 @@ def advance_status(conn, posting_id: int, status: str,
 # Registration
 # ---------------------------------------------------------------------------
 
+def render_resume(conn, posting_id: int, variant: str | None = None,
+                  posting_skills: list[str] | None = None) -> dict[str, Any]:
+    """Render the one-page resume for a posting from a fixed variant ordering.
+
+    No `bullet_ids` parameter, deliberately. Under MCP the client could name
+    bullets, and the whole point of §4.2 is that it does not: a variant is an
+    ordering over the whole bank, chosen per lane and edited on purpose, so
+    that seven resumes do not become seven hundred one-offs. Per-posting
+    relevance still enters, at the point where the one-page loop promotes a
+    bullet whose `skills` overlap `posting_skills` before cutting it.
+
+    `variant` may be omitted only when the (lane, domain) grid resolves
+    cleanly. Roughly 565 postings were scored before `domain` existed, and for
+    those the grid guesses — so it refuses instead and hands back what it
+    would have picked, because §4.2 wants Claude proposing and Anish
+    confirming precisely for those.
+
+    The returned `dropped` list is the review signal `CLAUDE.md` asks about:
+    a bullet the posting explicitly asked for appearing there is a concrete
+    defect. Under fixed variants the fix is a permanent edit to the ordering
+    or a different variant — never a per-application tweak, which is what
+    pulls the seven apart.
+    """
+    row = db.get_posting(conn, posting_id)
+    if row is None:
+        raise ToolError(f"no posting with id {posting_id}")
+
+    # scores has one row per posting; get_posting's own tool reads it the
+    # same way rather than through a helper that does not exist.
+    score = conn.execute("SELECT archetype, domain FROM scores "
+                         "WHERE posting_id = ?", (posting_id,)).fetchone()
+    archetype = score["archetype"] if score else None
+    domain = score["domain"] if score else None
+
+    if variant is None:
+        variant, why = variants.resolve(archetype, domain)
+        if "confirm" in why:
+            raise ToolError(
+                f"cannot pick a variant for posting {posting_id} on its own: "
+                f"{why}. Read the posting, choose one of "
+                f"{', '.join(sorted(variants.ORDERINGS))}, and pass it "
+                f"explicitly.")
+    else:
+        if variant not in variants.ORDERINGS:
+            raise ToolError(
+                f"unknown variant {variant!r}. Known: "
+                f"{', '.join(sorted(variants.ORDERINGS))}")
+        suggested, why = variants.resolve(archetype, domain)
+        why = (f"given explicitly; the grid would have picked {suggested}"
+               if suggested != variant else f"given explicitly, agrees with "
+                                            f"the grid ({why})")
+
+    bank = _bullets.load_bank()
+    try:
+        selected = tailor.bullets_for_variant(bank, variant)
+    except KeyError as exc:                                   # pragma: no cover
+        raise ToolError(str(exc)) from exc
+
+    result = pipeline_tailor.render_and_record(
+        bank, row, conn, selected, variant,
+        skill_order=None, posting_skills=posting_skills or [],
+        # Not a model. Nothing generative chose these bullets — the ordering
+        # did — and recording a model name here would misattribute the
+        # provenance the `scorer` columns exist to keep honest.
+        model="variant-ordering")
+    conn.commit()
+
+    rendered = result["rendered"]
+    return {
+        "posting_id": posting_id,
+        "company": row["company"],
+        "title": row["title"],
+        "variant": variant,
+        "why": why,
+        "archetype": archetype,
+        "domain": domain,
+        "path": str(rendered.path),
+        "version": result["version"],
+        "pages": rendered.pages,
+        "font_pt": rendered.font_pt,
+        "short_variants": rendered.short,
+        "rendered": rendered.bullet_ids,
+        "dropped": rendered.dropped,
+        "review": "Check `dropped` against the posting. A bullet the posting "
+                  "explicitly asks for appearing there is a defect in the "
+                  "variant, not in this render.",
+    }
+
+
 def build_server(db_path: str | None = None) -> MCPServer:
     """Register the read-only surface. Kept a function so a test can build an
     isolated server against a temp database."""
@@ -479,6 +572,23 @@ def build_server(db_path: str | None = None) -> MCPServer:
         try:
             return advance_status(conn, posting_id, status,
                                   letter_required=letter_required)
+        finally:
+            conn.close()
+
+    @server.tool(name="render_resume", annotations=WRITES,
+                 description="Render the one-page resume PDF for a posting "
+                             "from its variant ordering, and record it. Omit "
+                             "`variant` to use the (lane, domain) grid; it "
+                             "refuses rather than guessing when the posting "
+                             "predates the domain field. Returns `dropped` - "
+                             "the bullets that did not fit, which is what to "
+                             "review against the posting.")
+    def _render_resume(posting_id: int, variant: str | None = None,
+                       posting_skills: list[str] | None = None) -> dict:
+        conn = _conn(db_path)
+        try:
+            return render_resume(conn, posting_id, variant=variant,
+                                 posting_skills=posting_skills)
         finally:
             conn.close()
 

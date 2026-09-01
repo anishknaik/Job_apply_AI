@@ -412,3 +412,125 @@ class TestTheCopyIsByteIdentical:
         out = mcp_server.copy_for_editing(conn, pid)
         assert Path(out["sent_path"]).read_bytes() == path.read_bytes()
         assert b"\r\n" not in Path(out["sent_path"]).read_bytes()
+
+
+class TestRenderResume:
+    """Slice 3. The refusals and the variant resolution, not the PDF.
+
+    render_and_record is stubbed throughout: Playwright takes about a minute
+    per resume and tests/test_resume.py already covers the one-page loop. What
+    is new here is which ordering gets chosen and when the tool declines to
+    choose one.
+    """
+
+    @pytest.fixture
+    def stub_render(self, monkeypatch):
+        calls = {}
+
+        class Rendered:
+            path = Path("output/x/resume.pdf")
+            pages = 1
+            font_pt = 9.5
+            short = False
+            bullet_ids = ["dist-distill", "dist-ablation"]
+            dropped = ["spot-cv", "brain-survey"]
+
+        def fake(bank, row, conn, selected, variant, **kw):
+            calls["variant"] = variant
+            calls["selected"] = [b.id for b in selected]
+            calls["model"] = kw.get("model")
+            calls["posting_skills"] = kw.get("posting_skills")
+            return {"rendered": Rendered(), "version": "v1",
+                    "folder": Path("output/x")}
+
+        monkeypatch.setattr(mcp_server.pipeline_tailor, "render_and_record",
+                            fake)
+        return calls
+
+    def _classify(self, conn, pid, archetype, domain):
+        conn.execute("UPDATE scores SET archetype = ?, domain = ? "
+                     "WHERE posting_id = ?", (archetype, domain, pid))
+        conn.commit()
+
+    def test_an_unknown_posting_is_refused(self, conn, stub_render):
+        with pytest.raises(mcp_server.ToolError, match="no posting"):
+            mcp_server.render_resume(conn, 999999)
+
+    def test_the_grid_resolves_when_the_posting_is_classified(
+            self, conn, stub_render):
+        pid = seed(conn)
+        self._classify(conn, pid, "ai_ml_engineer", "healthcare")
+        out = mcp_server.render_resume(conn, pid)
+        assert out["variant"] == "ai_ml_health"
+        assert stub_render["variant"] == "ai_ml_health"
+
+    def test_an_unscored_domain_refuses_rather_than_guessing(
+            self, conn, stub_render):
+        """~565 postings predate the domain field. §4.2 wants Claude
+        proposing and Anish confirming for exactly those, so the tool must
+        not quietly pick the most common lane."""
+        pid = seed(conn)
+        self._classify(conn, pid, "ai_ml_engineer", None)
+        with pytest.raises(mcp_server.ToolError, match="cannot pick a variant"):
+            mcp_server.render_resume(conn, pid)
+        assert "variant" not in stub_render, "rendered despite refusing"
+
+    def test_the_refusal_lists_the_variants_to_choose_from(self, conn,
+                                                           stub_render):
+        pid = seed(conn)
+        self._classify(conn, pid, "ai_ml_engineer", None)
+        with pytest.raises(mcp_server.ToolError) as excinfo:
+            mcp_server.render_resume(conn, pid)
+        assert "ds_analytics" in str(excinfo.value)
+
+    def test_an_explicit_variant_overrides_the_grid(self, conn, stub_render):
+        pid = seed(conn)
+        self._classify(conn, pid, "ai_ml_engineer", None)
+        out = mcp_server.render_resume(conn, pid, variant="swe_backend")
+        assert out["variant"] == "swe_backend"
+
+    def test_an_explicit_variant_says_when_the_grid_disagrees(self, conn,
+                                                              stub_render):
+        pid = seed(conn)
+        self._classify(conn, pid, "ai_ml_engineer", "healthcare")
+        out = mcp_server.render_resume(conn, pid, variant="swe_backend")
+        assert "would have picked ai_ml_health" in out["why"]
+
+    def test_an_unknown_variant_is_refused(self, conn, stub_render):
+        pid = seed(conn)
+        with pytest.raises(mcp_server.ToolError, match="unknown variant"):
+            mcp_server.render_resume(conn, pid, variant="ai_ml_quantum")
+
+    def test_it_passes_the_whole_ordering_to_the_renderer(self, conn,
+                                                          stub_render):
+        """A variant is an ordering over the WHOLE bank; the one-page loop is
+        what turns it into a selection. Handing over a slice would make it a
+        subset, which is the thing §4.2 rules out."""
+        from jobpipe import bullets, variants
+        pid = seed(conn)
+        self._classify(conn, pid, "data_scientist", "ai_infra")
+        mcp_server.render_resume(conn, pid)
+        assert stub_render["selected"] == \
+            list(variants.ORDERINGS["ds_analytics"])
+        assert len(stub_render["selected"]) == len(bullets.load_bank().bullets)
+
+    def test_no_model_is_recorded_because_none_chose(self, conn, stub_render):
+        pid = seed(conn)
+        self._classify(conn, pid, "ai_ml_engineer", "ai_infra")
+        mcp_server.render_resume(conn, pid)
+        assert stub_render["model"] == "variant-ordering"
+
+    def test_posting_skills_reach_the_renderer(self, conn, stub_render):
+        """Relevance enters here rather than in selection: the drop order
+        promotes a bullet whose skills overlap before cutting it."""
+        pid = seed(conn)
+        self._classify(conn, pid, "ai_ml_engineer", "ai_infra")
+        mcp_server.render_resume(conn, pid, posting_skills=["vllm", "pytorch"])
+        assert stub_render["posting_skills"] == ["vllm", "pytorch"]
+
+    def test_dropped_comes_back_as_the_review_signal(self, conn, stub_render):
+        pid = seed(conn)
+        self._classify(conn, pid, "ai_ml_engineer", "ai_infra")
+        out = mcp_server.render_resume(conn, pid)
+        assert out["dropped"] == ["spot-cv", "brain-survey"]
+        assert "defect" in out["review"]
