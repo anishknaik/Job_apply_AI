@@ -239,6 +239,11 @@ class TestOnlyRealPairsAreMeasured:
 
 class TestSummary:
     def _entry(self, distance, archetype="ai_ml", slots=(0.0, 0.0)):
+        # Padded to the assembled seven-block shape. summarise() aggregates
+        # by_slot only over letters with that shape, so a bare two-slot
+        # fixture would be skipped and these assertions would read an empty
+        # dict rather than the means they are checking.
+        slots = tuple(slots) + (0.0,) * (len(measure.SLOT_NAMES) - len(slots))
         return {"distance": distance, "archetype": archetype,
                 "paragraphs": [measure.ParagraphChange(i, d, "a", "b")
                                for i, d in enumerate(slots)]}
@@ -273,3 +278,41 @@ class TestSentPath:
 
     def test_it_stays_in_the_same_folder(self):
         assert measure.sent_path_for("a/b/cover_letter.md").parent.name == "b"
+
+
+class TestSlotAlignmentGuard:
+    """A letter that is not seven blocks must not skew the per-slot means.
+
+    compare() matches paragraphs by position, so a free-form letter written
+    outside letters.assemble() is offset against every assembled one from its
+    first extra block onward. Averaging it in reports that offset as editing.
+    """
+
+    def _shaped(self, distance, n_slots, slot_value=0.9):
+        return {"distance": distance, "archetype": "data_science",
+                "paragraphs": [measure.ParagraphChange(i, slot_value, "a", "b")
+                               for i in range(n_slots)]}
+
+    def test_a_free_form_letter_is_excluded_from_by_slot(self):
+        assembled = {"distance": 0.03, "archetype": "ai_ml",
+                     "paragraphs": [measure.ParagraphChange(i, 0.1, "a", "b")
+                                    for i in range(len(measure.SLOT_NAMES))]}
+        summary = measure.summarise([assembled, self._shaped(0.03, 10)])
+        assert summary["by_slot"][2] == pytest.approx(0.1)
+        assert summary["slot_n"] == 1
+        assert summary["slot_skipped"] == 1
+
+    def test_it_still_counts_toward_the_headline(self):
+        """Whole-document distance does not care where blank lines fall."""
+        summary = measure.summarise([self._shaped(0.02, 10),
+                                     self._shaped(0.04, 9)])
+        assert summary["n"] == 2
+        assert summary["mean"] == pytest.approx(0.03)
+        assert summary["by_slot"] == {}
+        assert summary["slot_skipped"] == 2
+
+    def test_all_aligned_reports_nothing_skipped(self):
+        entry = self._shaped(0.05, len(measure.SLOT_NAMES))
+        summary = measure.summarise([entry, entry])
+        assert summary["slot_skipped"] == 0
+        assert summary["slot_n"] == 2

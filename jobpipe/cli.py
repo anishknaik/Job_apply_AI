@@ -819,13 +819,29 @@ def cmd_measure(args) -> int:
     print(f"\nmean {summary['mean']:.3f}   best {summary['best']:.3f}   "
           f"worst {summary['worst']:.3f}   n={summary['n']}")
 
-    print("\nby paragraph slot — the number that says which instruction is "
-          "wrong:")
-    for slot, value in summary["by_slot"].items():
-        name = (measure.SLOT_NAMES[slot] if slot < len(measure.SLOT_NAMES)
-                else f"slot {slot}")
-        bar = "#" * min(40, round(value * 100))
-        print(f"  {name:<20} {value:.3f}  {bar}")
+    if summary["by_slot"]:
+        print("\nby paragraph slot — the number that says which "
+              "instruction is wrong:")
+        for slot, value in summary["by_slot"].items():
+            name = (measure.SLOT_NAMES[slot]
+                    if slot < len(measure.SLOT_NAMES) else f"slot {slot}")
+            bar = "#" * min(40, round(value * 100))
+            print(f"  {name:<20} {value:.3f}  {bar}")
+
+    # Say what was left out, and why. A slot mean quietly computed over a
+    # subset is the kind of number that gets quoted later as if it had
+    # covered everything.
+    if summary["slot_skipped"]:
+        if summary["by_slot"]:
+            print(f"\n  over {summary['slot_n']} of {summary['n']} letters. "
+                  f"{summary['slot_skipped']} skipped — not the "
+                  f"seven-block assembled shape, so their paragraphs do not "
+                  f"line up with these. Their whole-document distance is in "
+                  f"the mean above; only the slot breakdown excludes them.")
+        else:
+            print(f"\nno per-slot breakdown: none of the {summary['n']} "
+                  f"letter(s) has the seven-block assembled shape, so there "
+                  f"is nothing the slots can be compared across.")
 
     if len(summary["by_archetype"]) > 1:
         print("\nby variant:")

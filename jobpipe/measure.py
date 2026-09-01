@@ -228,8 +228,25 @@ def summarise(measured: list[dict]) -> dict:
         return {"n": 0}
 
     distances = [m["distance"] for m in measured]
+
+    # Per-slot means are only comparable across letters that share the
+    # assembled seven-block shape, because compare() matches paragraphs by
+    # POSITION. A letter written outside letters.assemble() — free-form prose
+    # with six body paragraphs instead of four, say — sits offset against
+    # every other letter from its first extra block onward, and averaging it
+    # in reports that misalignment as editing. The first real case took the
+    # `why this role` mean from 0.110 to 0.524 while being 97% unchanged
+    # end to end.
+    #
+    # Its whole-document distance is still valid — Levenshtein over the full
+    # text does not care where the blank lines fall -- so such a letter stays
+    # in n, mean, best, worst and by_archetype. Only the slot breakdown
+    # excludes it, and how many were excluded is reported rather than dropped
+    # silently.
+    aligned = [m for m in measured
+               if len(m["paragraphs"]) == len(SLOT_NAMES)]
     by_slot: dict[int, list[float]] = {}
-    for entry in measured:
+    for entry in aligned:
         for change in entry["paragraphs"]:
             by_slot.setdefault(change.index, []).append(change.distance)
 
@@ -244,6 +261,8 @@ def summarise(measured: list[dict]) -> dict:
         "worst": max(distances),
         "best": min(distances),
         "by_slot": {k: sum(v) / len(v) for k, v in sorted(by_slot.items())},
+        "slot_n": len(aligned),
+        "slot_skipped": len(measured) - len(aligned),
         "by_archetype": {k: sum(v) / len(v)
                          for k, v in sorted(by_archetype.items())},
     }
