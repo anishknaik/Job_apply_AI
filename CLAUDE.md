@@ -78,9 +78,28 @@ They spend money and the first three write corpus-wide. Run one only when
 Anish asks for that specific thing, and say what it will cost before you do.
 "He approved Track A" is not approval for the next scoring run.
 
-The same four are kept off the MCP tool surface, and for a sharper reason: a
-tool that exists is a tool an agent can decide to call, and with the backlog
-now growing on purpose there is a standing invitation to clear it.
+**Three of the four are kept off the MCP tool surface** — `daily`, `score`,
+`calibrate` — and for a sharper reason than cost: a tool that exists is a tool
+an agent can decide to call, and with the backlog now growing on purpose there
+is a standing invitation to clear it.
+
+**Grounding is the exception, and only in its MCP form.** `check_grounding`
+IS on the tool surface, deliberately. `PHASE5_PLAN` §5.2 makes a passing check
+mandatory before a cover letter can reach a human — `copy_for_editing` refuses
+a draft without one — so a gate that cannot be run blocks the whole letter
+path. It is also the narrowest of the four: one short Flash Lite call, a
+fraction of a cent, checking the current stored draft and writing back a
+verdict on that one row. It scores nothing and touches no other posting.
+
+It is the only tool on the surface that spends money or builds a provider, and
+that too is the point rather than a leak: the checker must not be the writer.
+A model auditing its own prose a few turns later rationalises, and
+`get_posting` pulls untrusted third-party text into a session holding write
+tools. Claude writes, Gemini checks, and the session never sees a Gemini key.
+
+**`cli ground` stays on the never-run list.** The CLI form takes a posting id
+and is easy to point at anything; the tool form can only check the draft that
+is already there.
 
 This rule used to read "DO NOT RUN", which was accurate while the prepaid
 balance was $1.82 and is not any more — but the ban was doing two jobs and

@@ -119,9 +119,10 @@ copy is refused.
 `check_grounding` is the first tool that spends money. It is a fraction of a
 cent on Flash Lite, and it is unavoidable rather than an oversight — §5.2
 makes a passing check mandatory before a letter reaches a human, so a gate
-that cannot be run blocks everything. `CLAUDE.md` still lists `cli ground`
-among the four never-run-unasked commands and does not mention the tool;
-worth reconciling.
+that cannot be run blocks everything. `CLAUDE.md` now says so: three of the
+four stay off the surface, grounding is the exception in its MCP form only,
+and `cli ground` stays banned because the CLI form takes a posting id and can
+be pointed at anything, while the tool can only check the draft already there.
 
 **Not built, deliberately:** §5.4's first-save-to-final-save distance. The
 STORAGE decision is done and tested — every save is its own revision and
