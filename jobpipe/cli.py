@@ -785,6 +785,37 @@ def cmd_ground(args) -> int:
     return 1
 
 
+def cmd_header(args) -> int:
+    """Regenerate the resume header from master_profile.md §12. Free.
+
+    The header is the half of the resume the fabrication firewall never
+    covered: bullet text is enum-gated and re-validated, while name, contact,
+    degree and each role's company/title/dates are trusted YAML that nothing
+    checks. Generating them from one source removes the gap rather than
+    testing around it.
+    """
+    from . import header
+
+    if args.check:
+        drift = header.diff()
+        if not drift:
+            print("header.generated.yaml agrees with master_profile.md §12.")
+            return 0
+        print("the generated header has drifted from §12:\n\n")
+        for field in drift:
+            print(f"  {field}")
+        print("\nrun `python -m jobpipe.cli header` to regenerate. Until you "
+              "do, every resume renders the stale value.")
+        return 1
+
+    path, changed = header.write()
+    print(f"{path} {'regenerated' if changed else 'is already current'}.")
+    if changed:
+        print("\nbullets.yaml was NOT touched - it stays hand-edited. The "
+              "generated file is merged over it at load_bank().")
+    return 0
+
+
 def cmd_measure(args) -> int:
     """What you changed in the drafts you actually sent (Phase 2 §7).
 
@@ -1162,6 +1193,12 @@ def build_parser() -> argparse.ArgumentParser:
                           help="required - confirms the spend")
     p_ground.add_argument("--provider", default=None)
     p_ground.set_defaults(func=cmd_ground)
+
+    p_header = sub.add_parser(
+        "header", help="regenerate the resume header from the profile (free)")
+    p_header.add_argument("--check", action="store_true",
+                          help="report drift and exit non-zero; write nothing")
+    p_header.set_defaults(func=cmd_header)
 
     p_measure = sub.add_parser(
         "measure", help="edit distance between generated and sent letters")

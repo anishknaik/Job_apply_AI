@@ -164,6 +164,20 @@ def load_bank(path: str | Path = DEFAULT_PATH) -> Bank:
 
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     _require(isinstance(raw, dict), f"{path} did not parse to a mapping")
+
+    # The header block -- name, contact, degree, and each role's company,
+    # title and dates -- is generated from master_profile.md §12 and overlaid
+    # here. Nothing is written back into bullets.yaml, which stays entirely
+    # hand-edited; the generated file is separate so that regenerating can
+    # never touch a human's bullet text. Absent file, no overlay: a fresh
+    # checkout has no gitignored profile to generate from, and the bank's own
+    # hand-written header still renders.
+    from . import header as header_mod
+    try:
+        raw = header_mod.merge_into(raw, header_mod.load())
+    except Exception as exc:                       # pragma: no cover - guard
+        log.warning("generated header not applied (%s); using the bank's own "
+                    "values", exc)
     for key in ("meta", "education", "roles", "bullets", "skills"):
         _require(key in raw, f"{path} is missing the {key!r} section")
 

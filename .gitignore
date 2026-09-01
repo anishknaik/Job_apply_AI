@@ -10,6 +10,13 @@ config/master_profile.md*
 # employer and every bullet. It was tracked until 2026-08-31 and had to be
 # purged from history before the repo could be shared. The .example stays.
 config/bullets.yaml
+
+# Anything generated into config/. Today that is header.generated.yaml, which
+# carries name, phone, email and address lifted from master_profile.md §12 --
+# every bit as personal as the profile it comes from. Globbed, not named: an
+# exact-name rule has already failed three times here (HANDOFF §6), each time
+# on the next file that looked like the one already listed.
+config/*.generated.*
 # Targets are personal: the company list reflects one person's lanes and the
 # `tier` column encodes their priorities. targets.example.csv ships as a
 # starting point - 143 companies with VERIFIED board tokens, which is the
