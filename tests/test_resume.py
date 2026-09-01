@@ -225,9 +225,14 @@ class TestVariantIsALayout:
         line = [ln for ln in html.splitlines() if "Analytics &amp; BI" in ln][0]
         assert line.index("Power BI") < line.index("Matplotlib")
 
-    def test_variants_match_the_selector(self, bank, selected):
-        from jobpipe import tailor
-        assert set(resume.VARIANT_SKILL_ORDER) == set(tailor.VARIANTS)
+    def test_every_renderable_variant_has_a_layout(self, bank, selected):
+        """Equality here held while two variants existed. Seven more arrived
+        with §4.2, so the check is now containment: anything that can reach
+        build_html needs a skill order, or it renders its sections in bank
+        order and silently loses the emphasis the variant exists to apply."""
+        from jobpipe import tailor, variants
+        for name in set(tailor.VARIANTS) | set(variants.ORDERINGS):
+            assert name in resume.VARIANT_SKILL_ORDER, name
 
 
 class TestNormalisation:

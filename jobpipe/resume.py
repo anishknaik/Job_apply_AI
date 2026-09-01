@@ -25,6 +25,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import variants
 from .bullets import Bank, Bullet, match_score
 
 log = logging.getLogger(__name__)
@@ -161,6 +162,12 @@ VARIANT_SKILL_ORDER = {
                      "Cloud & Infra"],
 }
 
+# The seven §4.2 variants join the two legacy ones rather than replacing them.
+# Documents already on disk record `archetype` as `ai_ml` or `data_science`,
+# and a resume regenerated from one of those rows must still render the layout
+# it was sent with.
+VARIANT_SKILL_ORDER.update(variants.SKILL_ORDER)
+
 
 def build_html(bank: Bank, selected: list[Bullet], variant: str = "ai_ml",
                short: bool = False, font_pt: float | None = None,
@@ -207,7 +214,11 @@ def build_html(bank: Bank, selected: list[Bullet], variant: str = "ai_ml",
     contact = " · ".join(p for p in (meta.get("email"), meta.get("phone"),
                                      meta.get("linkedin"),
                                      meta.get("location")) if p)
-    headline = (meta.get("headline") or {}).get(variant, "")
+    # Seven variants share four headlines, so the variant name is not the
+    # key. Unknown names pass through unchanged and the two legacy variants
+    # keep resolving to themselves.
+    headline = (meta.get("headline") or {}).get(
+        variants.headline_key(variant), "")
 
     values = {
         "NAME": meta.get("name", ""),

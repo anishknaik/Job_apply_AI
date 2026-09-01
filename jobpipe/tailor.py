@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 
+from . import variants
 from .bullets import Bank, Bullet, match_score
 from .providers import ScoringProvider, default_model
 
@@ -221,6 +222,26 @@ def rank_selection(bank: Bank, ids: list[str],
     return sorted(
         bullets,
         key=lambda b: (order[b.id], -match_score(b, vocabulary), b.rank))
+
+
+def bullets_for_variant(bank: Bank, variant: str) -> list[Bullet]:
+    """A variant's ordering, resolved against the bank.
+
+    No provider and no posting: the ordering is fixed per lane, which is the
+    point of §4.2. Relevance still enters at render time, where the drop order
+    promotes a bullet whose `skills` overlap the posting vocabulary before
+    cutting it — so the same ordering yields a different tail per posting
+    without the variants drifting apart.
+
+    `Bank.select` raises on an unknown id, so an ordering that has drifted
+    from the bank fails loudly here rather than rendering a short resume.
+    """
+    ids = variants.ordering(variant)
+    if ids is None:
+        raise KeyError(
+            f"unknown variant {variant!r}; known: "
+            f"{', '.join(sorted(variants.ORDERINGS))}")
+    return bank.select(list(ids))
 
 
 def select_bullets(provider: ScoringProvider, bank: Bank, row,
