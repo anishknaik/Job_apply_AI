@@ -17,9 +17,10 @@ of the three: §7's Vertex question is settled, and §9 is superseded by
 ## 1. State
 
 ```
-36 commits, 695 tests passing, branch phase5/track-a-step5
-  (3 ahead of master, a fast-forward; phase5/slice-0 trails at 8d3deee)
-16,668 postings | 625 past Stage A | 635 scored | 1 letter measured
+38 commits, 698 tests passing, branch phase5/track-a-step5
+  (5 ahead of master, a fast-forward; phase5/slice-0 trails at 8d3deee)
+16,669 postings | 625 past Stage A | 635 scored | 2 letters measured
+  (only 1 of the 2 counts toward the per-slot means — see §3)
 ```
 
 Shipped configuration — all four models resolve on Vertex:
@@ -59,14 +60,33 @@ Verified means observed, not inferred:
 - The **11:30 task launches** — it failed on 5 of 17 days with `0xC0000142`
   until the S4U principal was applied. A manual trigger then ran clean and
   wrote the first row `runs` has ever had.
-- **`measure` has its first data point.** PostHog, distance 0.032, and the
-  seven block labels land on the right blocks — the Slice 0 slot fix confirmed
-  on real output rather than a fixture.
+- **`measure` has two data points.** PostHog 0.032 and a University of Utah
+  `Data Scientist I` at 0.033, both Cowork-written. The seven block labels
+  land on the right blocks — the Slice 0 slot fix confirmed on real output
+  rather than a fixture. Two independent letters agreeing to within 0.001 is
+  the first evidence the light-edit result is not a one-off.
 - **The new score fields land.** `domain`, `seniority_gap`, `scorer`,
   `rubric_version` all populate; Wayve classified `robotics_cv`, matching the
   hand classification.
 - **Implicit caching fires on 2.5 Flash** against the real profile prefix, 98%
   when it lands. Flash Lite caches nothing — measured twice, eleven calls.
+- **The profile overstated a claim, and a human edit caught it.** `gt-nbs7` and
+  `master_profile.md` both said he *built* the CDC NBS 7 Azure deployment and
+  that it was *the first Azure reference deployment*. Editing a letter he
+  actually sent, Anish downgraded it to "helped build the first proof of
+  concept for the Azure reference deployment" — he contributed to a PoC and
+  does not know whether the client won the work. Both sources now carry his
+  wording verbatim, plus a **Precision point** forbidding "delivered" or
+  "shipped".
+
+  Two things worth carrying forward. **Twelve live resumes already went out
+  with the strong version**, because a bank bullet cannot be softened per
+  application — that is the cost of the header/bullet text being trusted
+  hand-edited YAML. And `CLAUDE.md` says the profile has been wrong twice and
+  both times it understated; this is the third time and the first in the other
+  direction. An overstating profile is the more dangerous failure, because
+  nothing downstream can catch it: the fabrication firewall checks that a
+  bullet *exists*, never that it is *true*.
 
 ---
 
@@ -101,9 +121,25 @@ where being wrong makes every resume in a lane wrong the same way.
 **Track B slice 4** — `save_cover_letter` + `check_grounding`, shipped
 together, never separately.
 
-**More measured letters.** One data point showed `why this role` at 0.110
-against ~0.01 elsewhere — ten times more editing in the opening. Two or three
-more applications settle whether that is a prompt defect or noise.
+**More measured letters — and they have to be assembled ones.** The open
+question is still `why this role` at 0.110 against ~0.01 elsewhere, ten times
+more editing in the opening. It is **still standing at n=1**, because the
+second letter cannot speak to it: written free-form outside
+`letters.assemble()`, it has six body paragraphs where the schema has four, so
+every block after the first extra one is offset and `summarise()` excludes it
+from the per-slot means (`dec195d`).
+
+That exclusion is the point. Averaged in naively it would have taken the slot
+from 0.110 to 0.524 while the letter was 97% unchanged end to end — answering
+the open question, in the wrong direction, from an artefact of paragraph
+counting. The whole-document distances do aggregate, and the two agree closely
+(0.032 and 0.033).
+
+So the two or three letters that settle this must come out of the assembled
+seven-block shape. That is an argument for **slice 4 before more letters**:
+`save_cover_letter` takes the four body paragraphs and assembles the
+scaffolding server-side, which makes the mismatch structurally impossible
+rather than something to remember.
 
 ---
 

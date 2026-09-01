@@ -47,18 +47,18 @@ metric is interviews per hour spent, not applications per day.
 
 | | |
 |---|---|
-| Postings ingested | 16,668 |
+| Postings ingested | 16,669 |
 | Stage A survivors / scored | 625 / 635 |
 | Scoring models in the corpus | `3.1-flash-lite` 427, `3.5-flash-lite` 138, `2.5-pro` 56, `2.5-flash` 14 |
 | Rubric versions in the corpus | none 565, `2026-08-31.3` 66, `.2` 3, `.4` 1 |
 | Applications | 22 applied, 1 drafted, 44 not_applied (113 status events) |
-| Documents | 52 rows — 28 resumes, 24 letters |
-| Letters with stored content | 12 (the `content` column postdates the first batch) |
-| **Edit distances computed** | **1** — PostHog, 0.032 |
+| Documents | 53 rows — 28 resumes, 25 letters |
+| Letters with stored content | 13 (the `content` column postdates the first batch) |
+| **Edit distances computed** | **2** — PostHog 0.032, U. of Utah 0.033 |
 | Targets | 143 companies — tier 1: 8, tier 2: 93, tier 3: 42 |
 | ATS split | greenhouse 72, ashby 70, smartrecruiters 1 |
 | Bullet bank | 21 bullets across 10 roles |
-| Tests | **695 pass, 0 fail** |
+| Tests | **698 pass, 0 fail** |
 | Last scheduled run | 2026-08-31 15:30 UTC — 13,899 fetched, 40 new, **0 scored** |
 | Billing | Vertex, GCP credit. The prepaid AI Studio balance is no longer drawn on |
 
@@ -73,6 +73,20 @@ The mixed provenance in rows 3 and 4 is deliberate, not drift: `PHASE5_PLAN`
 §3.5 keeps the 3.1-era corpus as historical record and rescores only what
 ranks. The `scorer` / `rubric_version` columns exist to make that mixture
 visible rather than implicit.
+
+**Posting 16,669 is a manual row, and the corpus's only one.** A University of
+Utah `Data Scientist I` applied to outside the pipeline, recorded so its cover
+letter had something to hang off: `ats_type='manual'`, `stage_a_passed` NULL
+because Stage A never ran on it, no score, and a description marked as a
+retrieved summary rather than the raw ATS payload every fetched row holds.
+
+It is also the **second measured letter**, and it is measured only in part.
+Written free-form rather than through `letters.assemble()`, it has six body
+paragraphs where the schema has four, so its blocks sit offset against every
+assembled letter and `summarise()` excludes it from the per-slot means —
+reporting the exclusion rather than hiding it. Its whole-document distance is
+indifferent to where the blank lines fall, so that does count. The practical
+consequence is in `HANDOFF.md` §3: on slots the sample is still n=1.
 
 ---
 
@@ -335,7 +349,7 @@ Everything here was reproduced on 2026-08-29. **Status as of 2026-08-31:**
 |---|---|
 | 8.1 date time-bomb | **fixed** — Slice 0, `8299bdf` |
 | 8.2 `measure` slot labels off by two | **fixed** — Slice 0, `579c072`, confirmed on real output |
-| 8.3 zero edit distances | **fixed** — `copy_for_editing`, now n=1 |
+| 8.3 zero edit distances | **fixed** — `copy_for_editing`, now n=2 |
 | 8.4 applications with no documents | open, historical; nothing new depends on it |
 | 8.5 holdout contradicts the headline | **superseded** — see the note below |
 | 8.6 grounding not independent of the writer | **decided, not fixed** — `PHASE5_PLAN` §5.1 keeps grounding off-session deliberately |
