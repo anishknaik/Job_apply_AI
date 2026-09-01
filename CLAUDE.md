@@ -58,8 +58,9 @@ then edit. `measure` refuses stale pairs and says so.
 
 **Do not hand-edit `resume.pdf`.** It is assembled from the bullet bank, and
 that traceability is the whole fabrication guarantee *for bullet text*. If a
-resume is wrong, fix the bank, a bullet's `rank`, or its `skills` tags — then
-regenerate.
+resume is wrong, fix the bank, the variant's ordering in `jobpipe/variants.py`,
+or a bullet's `skills` tags — then regenerate. (`rank` orders bullets within
+a role for display; it no longer decides what gets cut.)
 
 The guarantee stops at the header. Name, contact, degree, coursework and each
 role's company, title and dates are trusted YAML that nothing validates. Their
@@ -154,15 +155,18 @@ went:
 **If the drop list contains something the posting explicitly asked for, that
 is a concrete defect**, not a matter of taste. "The resume looks about right"
 is an impression; "the posting names PostgreSQL three times and
-`gt-remittance` was dropped" is actionable, and the fix is specific — lower
-that bullet's `rank`, add the posting's vocabulary to its `skills` tags, or
-drop something else instead.
+`gt-remittance` was dropped" is actionable, and the fix is specific — move
+that bullet up its variant's ordering, add the posting's vocabulary to its
+`skills` tags, or decide the posting wants a different variant.
 
-The drop order is relevance-aware: a bullet whose `skills` overlap the
-posting's vocabulary is promoted up to two ranks before being cut. So a
-relevant bullet appearing in the drop list usually means its `skills` tags do
-not match the words the posting actually uses, which is a bank fix rather than
-a rendering one.
+**The one-page loop cuts from the END of the variant's ordering**, so what
+gets dropped is a decision somebody made in `jobpipe/variants.py`, not an
+accident. Relevance still promotes: a bullet whose `skills` overlap the
+posting's vocabulary moves up to four slots before being cut
+(`resume.RELEVANCE_SLOTS`). So a relevant bullet in the drop list means
+either its `skills` tags do not match the words the posting uses, or it sits
+too low in that lane — a tags fix or an ordering fix, never a per-application
+one. A per-posting tweak is what pulls the seven variants apart.
 
 Letters run 332–374 words against Anish's own 360–431. Tightening and
 lengthening drafts is most of the editing work.

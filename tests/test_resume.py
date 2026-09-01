@@ -115,68 +115,93 @@ class TestHtmlAssembly:
         assert "Brainayan" not in html
 
 
-class TestDropOrderIsRelevanceAware:
-    """The one-page loop drops the weakest bullet FOR THIS POSTING.
+class TestDropOrderFollowsTheGivenOrder:
+    """The one-page loop cuts from the END of the order it was handed.
 
-    Static rank alone got this exactly backwards on live data. `gt-ownership`
-    is rank 4 because it does not belong on most resumes — but on a Founding
-    Engineer posting it is among the most relevant bullets in the bank.
-    Ranking alone dropped it from precisely that resume while keeping it on
-    two where the posting never asked for it.
+    These call `resume.weakest` directly, on purpose. The previous version of
+    this class mirrored the formula in a local helper, so when the formula was
+    replaced the tests went on passing unchanged — still asserting a policy
+    the code no longer had. A test that reimplements what it is testing cannot
+    fail for the reason it exists.
+
+    `rank` used to be the primary key and was the wrong comparator: it orders
+    bullets WITHIN a role, so across roles it asked whether Gradient Tensor's
+    third bullet is worse than Brainayan's first. Because every role has a
+    rank-1 bullet, every role survived every cut — 14 bullets over 9 of 10
+    roles in all seven variants, and swe_backend losing `gt-remittance`, its
+    own position-1 bullet.
     """
 
-    def _weakest(self, bank, ids, vocabulary):
-        """Mirror the loop's choice without rendering."""
-        from jobpipe.bullets import match_score
-        working = bank.select(ids)
-        return max(working, key=lambda b: (
-            b.rank - min(match_score(b, vocabulary), 2),
-            working.index(b))).id
+    def _cuts(self, bank, ids, vocabulary=()):
+        return resume.weakest(bank.select(ids), list(vocabulary)).id
 
-    def test_an_irrelevant_low_rank_bullet_goes_first(self, bank):
-        """No ownership language in the posting: rank decides."""
+    def test_the_last_bullet_goes_first(self, bank):
         ids = ["dist-distill", "gt-ownership", "nec-yolo"]
-        assert self._weakest(bank, ids, ["qlora", "distillation"]) == \
-            "gt-ownership"
+        assert self._cuts(bank, ids) == "nec-yolo"
 
-    def test_a_matching_bullet_outlives_a_comparable_one(self, bank):
-        """gt-ownership is rank 4, gt-remittance rank 3. With the posting
-        asking for ownership, the promotion flips which goes first.
+    def test_rank_no_longer_decides(self, bank):
+        """`gt-ownership` is rank 4 and `dist-distill` rank 1. Placed second,
+        the rank-1 bullet is the one that goes: the caller ordered them, and
+        under the old key this assertion was exactly inverted."""
+        assert self._cuts(bank, ["gt-ownership", "dist-distill"]) ==             "dist-distill"
 
-        Deliberately compared against a near-rank bullet, not against the
-        rank-1 flagship: a 2-rank cap means relevance reorders within a band
-        rather than letting a marginal bullet displace the distillation work
-        on a founding posting. Both behaviours are intended.
-        """
-        ids = ["gt-remittance", "gt-ownership"]
-        assert self._weakest(bank, ids, []) == "gt-ownership"
-        assert self._weakest(bank, ids,
-                             ["ownership", "founding"]) == "gt-remittance"
+    def test_a_matching_bullet_outlives_nearer_ones(self, bank):
+        """Relevance promotion is what stops one fixed ordering producing an
+        identical tail for every posting (PHASE5_PLAN §4.2)."""
+        ids = ["gt-remittance", "dist-ablation", "spot-gpt", "gt-ownership"]
+        assert self._cuts(bank, ids) == "gt-ownership"
+        assert self._cuts(bank, ids, ["ownership", "founding", "scoping",
+                                      "client_delivery"]) == "spot-gpt"
 
-    def test_the_cap_stops_a_marginal_bullet_displacing_the_flagship(self,
-                                                                     bank):
-        """Even fully matched, rank 4 stays below rank 1."""
-        ids = ["dist-distill", "gt-ownership"]
-        assert self._weakest(bank, ids,
-                             list(bank.bullets["gt-ownership"].skills)) == \
-            "gt-ownership"
-
-    def test_promotion_is_capped_at_two_ranks(self, bank):
-        """A heavily-matching rank-4 bullet must not outrank a rank-1 one —
-        relevance reorders within a band, it does not invert the bank."""
-        from jobpipe.bullets import match_score
+    def test_promotion_is_capped_in_slots(self, bank):
+        """Four slots at most, so relevance reorders near the fold without
+        letting keyword overlap overrule the lane's design outright."""
         b = bank.bullets["gt-ownership"]
-        vocabulary = list(b.skills)          # every tag matches
-        assert min(match_score(b, vocabulary), 2) == 2
+        working = bank.select(["gt-remittance", "dist-ablation", "spot-gpt",
+                               "gt-ownership"])
+        promoted = resume.drop_weakness(b, working, list(b.skills))[0]
+        plain = resume.drop_weakness(b, working, [])[0]
+        assert plain - promoted == 2 * resume.RELEVANCE_SLOTS
 
-    def test_ties_still_break_deterministically(self, bank):
+    def test_a_fully_matching_bullet_cannot_outrank_everything(self, bank):
+        """`spot-cv` is last of five and matches the posting completely; it
+        still only reaches the front of the queue, not past it."""
+        ids = ["dist-distill", "dist-ablation", "dist-harness", "rag-agentic",
+               "spot-cv"]
+        assert self._cuts(bank, ids, ["computer_vision", "opencv", "yolov8",
+                                      "prototyping"]) == "rag-agentic"
+
+    def test_ties_break_deterministically(self, bank):
         ids = ["nec-yolo", "nec-tracking"]
-        first = self._weakest(bank, ids, [])
-        assert first == self._weakest(bank, ids, [])
+        assert self._cuts(bank, ids) == self._cuts(bank, ids)
 
-    def test_no_vocabulary_falls_back_to_rank(self, bank):
-        ids = ["dist-distill", "gt-ownership"]
-        assert self._weakest(bank, ids, []) == "gt-ownership"
+    def test_the_loop_actually_calls_this_function(self, bank, monkeypatch,
+                                                    tmp_path):
+        """The point of lifting it out of render(): if the loop stops routing
+        drops through it, every assertion above becomes decoration. Playwright
+        is stubbed out - what is under test is the wiring, not the geometry."""
+        called, state = [], {"fits": False}
+        real = resume.weakest
+
+        def spy(working, emphasise=None):
+            called.append([b.id for b in working])
+            if len(called) >= 2:
+                state["fits"] = True
+            return real(working, emphasise)
+
+        monkeypatch.setattr(resume, "weakest", spy)
+        monkeypatch.setattr(resume, "measure_px",
+                            lambda html: 0 if state["fits"] else 1e6)
+        monkeypatch.setattr(resume, "_render_pdf", lambda html, out: 1)
+
+        selected = bank.select(["dist-distill", "dist-ablation",
+                                "dist-harness", "rag-agentic", "spot-gpt",
+                                "gt-nbs7"])
+        result = resume.render(bank, selected, tmp_path / "r.pdf",
+                               verify=False)
+        assert called, "render() no longer routes its drops through weakest()"
+        # Dropped from the end of the given order, in order.
+        assert result.dropped == ["gt-nbs7", "spot-gpt"]
 
 
 class TestVariantIsALayout:

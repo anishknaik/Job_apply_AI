@@ -216,8 +216,8 @@ These hold across every phase and are not negotiable per-task.
   was wrong.
 - **Copy a letter before editing it.** `cp cover_letter.md cover_letter.sent.md`.
   Never rename, never edit in place.
-- **Never hand-edit `resume.pdf`.** Fix the bank, a `rank`, or `skills` tags,
-  then regenerate.
+- **Never hand-edit `resume.pdf`.** Fix the bank, the variant ordering, or
+  `skills` tags, then regenerate.
 - **Never run `cli daily`, `cli score`, or `cli calibrate`** by hand — prepaid
   balance, ~85¢ for a full re-score. The 11:30 cron no longer scores (§7).
 - No LinkedIn/Indeed scraping, no CAPTCHA bypass, secrets stay in `.env`.

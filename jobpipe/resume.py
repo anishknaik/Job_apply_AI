@@ -261,6 +261,22 @@ def _playwright():
 PRINT_WIDTH_PX = round((8.5 - 2 * MIN_MARGIN_IN) * 96)
 USABLE_PX = (11 - 2 * MIN_MARGIN_IN) * 96
 
+# How many ordering slots one point of posting relevance is worth when the
+# one-page loop decides what to cut. `match_score` caps at 2, so this is the
+# maximum promotion in slots divided by two.
+#
+# It exists because the drop key changed from rank to position and the two
+# have very different ranges. Against ranks 1-4, a promotion of 2 was half the
+# scale and decisive. Against 21 positions it would be noise, and §4.2 leans
+# on relevance being the thing that makes ONE fixed ordering behave
+# differently for different postings - without it the tail is identical every
+# time and the variants may as well be static documents.
+#
+# 2 puts the ceiling at four slots: a matching bullet sitting just under the
+# fold can cross it, while one near the bottom of the ordering still cannot
+# out-argue the lane's design. Tune here, not per posting.
+RELEVANCE_SLOTS = 2
+
 
 def measure_px(html_text: str) -> float:
     """Content height in CSS pixels, without producing a PDF.
@@ -400,6 +416,52 @@ def ats_parse_check(pdf_path: Path, bank: Bank, selected: list[Bullet],
             "fused_hyphens": fused, "chars": len(text)}
 
 
+# Drop from the END of the given order, promoting what this posting
+# actually asks for.
+#
+# `rank` was the primary key here and it was the wrong comparator.
+# rank orders bullets WITHIN a role — gt-lesson-plan 1, gt-nbs7 2,
+# gt-remittance 3, gt-ownership 4, all inside Gradient Tensor — so
+# using it across roles asked whether Gradient Tensor's third bullet
+# is worse than Brainayan's first, which it was never meant to answer.
+# Dropping the high numbers first removed every 3 and 4 before
+# touching any 2, and because every role has a rank-1 bullet, every
+# role survived. Measured across all seven variants: 14 bullets spread
+# over 9 of 10 roles, every time. That is the sample-everything,
+# lead-nothing shape tailor's own selection prompt warns costs a third
+# of the content to the page limit. It also cut swe_backend's
+# position-1 bullet, gt-remittance, from every posting that did not
+# happen to name payments.
+#
+# Position is the right key because the incoming list is ordered
+# strongest-first by whoever built it: a variant ordering (§4.2), or
+# the model's own order, which tailor.rank_selection already preserves
+# and which rank was overriding.
+#
+# Relevance still promotes — this is what kept `gt-ownership`, rank 4
+# and irrelevant to most postings, on the Founding Engineer resume it
+# belonged on. Ties break by position, so the result stays
+# deterministic and reproducible.
+def drop_weakness(bullet: Bullet, working: list[Bullet],
+                  emphasise: list[str] | None = None) -> tuple:
+    relevance = min(match_score(bullet, emphasise or []), 2)
+    position = working.index(bullet)
+    return (position - relevance * RELEVANCE_SLOTS, position)
+
+
+def weakest(working: list[Bullet],
+            emphasise: list[str] | None = None) -> Bullet:
+    """The bullet the one-page loop cuts next.
+
+    Module level, and the loop calls it, so the suite can exercise the real
+    decision. It used to be a closure inside render(), and the tests mirrored
+    the formula instead of calling it - which meant they went on passing
+    unchanged when the formula was replaced, asserting a policy the code no
+    longer had.
+    """
+    return max(working, key=lambda b: drop_weakness(b, working, emphasise))
+
+
 def render(bank: Bank, selected: list[Bullet], out: Path,
            variant: str = "ai_ml", skill_order: list[str] | None = None,
            emphasise: list[str] | None = None,
@@ -453,22 +515,7 @@ def render(bank: Bank, selected: list[Bullet], out: Path,
                 f"{len(working)} bullets. Something is wrong with the "
                 f"template rather than the selection.")
 
-        # Drop the weakest FOR THIS POSTING, not the weakest in general.
-        #
-        # Static rank alone gets this exactly backwards. `gt-ownership` is
-        # rank 4 because it does not belong on most resumes — but on a
-        # Founding Engineer posting it is among the most relevant bullets in
-        # the bank. Ranking alone dropped it from precisely that resume while
-        # keeping it on two where it was not asked for.
-        #
-        # So a bullet the posting actually asks for is promoted up to two
-        # ranks before the drop decision. Ties still break by position, so the
-        # result stays deterministic and reproducible.
-        def weakness(bullet: Bullet) -> tuple:
-            relevance = min(match_score(bullet, emphasise or []), 2)
-            return (bullet.rank - relevance, working.index(bullet))
-
-        victim = max(working, key=weakness)
+        victim = weakest(working, emphasise)
         working.remove(victim)
         dropped.append(victim.id)
         log.info("dropped %s to fit one page", victim.id)

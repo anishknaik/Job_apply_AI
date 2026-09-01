@@ -332,7 +332,7 @@ in the priority list; generic product SaaS rides along rather than the reverse.
 
 **Fintech gets no variant and does not need one.** The drop order is already
 relevance-aware — a bullet whose `skills` overlap the posting's vocabulary is
-promoted up to two ranks before being cut — so a Chime posting naming payments
+promoted up to four ordering slots before being cut — so a Chime posting naming payments
 and PostgreSQL promotes `gt-remittance` on its own. A variant earns its place
 only when the *whole* ordering differs, not when one bullet should move.
 
