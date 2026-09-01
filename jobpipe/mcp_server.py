@@ -6,8 +6,17 @@ logic the CLI and the test suite cannot reach.
 
 **Control inverts under MCP.** A server does not call a model — the client
 does. Today `letters.generate_letter` calls out to Gemini; under MCP, Claude
-reads the posting and calls *in*. That is why this module has no provider, no
-API key and no model name in it.
+reads the posting and calls *in*.
+
+`check_grounding` is the one exception, and it is the point rather than a
+leak. The checker must not be the writer: a model auditing its own prose a few
+turns later will rationalise, and `get_posting` pulls untrusted third-party
+text into a session holding write tools. The resume path is immune to whatever
+that text says — `Bank.select` means a posting cannot talk a client into a
+bullet that does not exist — but the letter path is free prose, and an
+independent checker is the only thing between a badly-worded or hostile
+description and a claim in a letter. So that one tool builds a provider from
+the server's own credentials, and **the session never sees a Gemini key.**
 
 WHAT IS DELIBERATELY ABSENT, and must stay absent:
 
@@ -60,13 +69,19 @@ TOOL_ALLOWLIST = (
     # Slice 3. Writes a PDF and a documents row; supersedes rather than
     # overwrites, like every other document write.
     "render_resume",
+    # Slice 4, shipped together and never separately: a write tool for
+    # prose without an independent checker is the one configuration
+    # worse than the status quo.
+    "save_cover_letter",
+    "check_grounding",
 )
 
 # Which of the above write. Declared rather than inferred, so the annotation
 # test asserts the split instead of asserting "everything is read-only" and
 # being edited to agree every time a write tool is added - which would make it
 # a record of what happened rather than a check on it.
-WRITE_TOOLS = ("copy_for_editing", "advance_status", "render_resume")
+WRITE_TOOLS = ("copy_for_editing", "advance_status", "render_resume",
+               "save_cover_letter", "check_grounding")
 
 # snake_case: mcp 2.x accepts the camelCase aliases but exposes the fields as
 # read_only_hint / destructive_hint, and mixing the two reads like a bug.
@@ -474,6 +489,169 @@ def render_resume(conn, posting_id: int, variant: str | None = None,
     }
 
 
+def save_cover_letter(conn, posting_id: int, why_this_role: str,
+                      primary_evidence: str, secondary_evidence: str,
+                      closing: str, root=None) -> dict[str, Any]:
+    """Store a cover letter written by the client. Four body paragraphs only.
+
+    The scaffolding is assembled here, not written: the name and contact line,
+    the date, `Dear <Company> Hiring Team,` and the sign-off. His seven real
+    letters all carry these and the first generated batch carried none of
+    them, which is why they did not look like his. Assembling also removes the
+    one thing a model reliably invents in a salutation, a hiring manager name.
+
+    Every save is its own `documents` row with a revision index, superseding
+    the last (PHASE5_PLAN §5.4). That is what makes two distances available
+    later: first save to final save says how good the opening draft was; final
+    save to `.sent.md` says what Anish still changed afterwards. §8.3 has zero
+    rows either way, so nothing historical is being traded off.
+
+    A new save clears the grounding verdict by definition — the new row has
+    none — so `copy_for_editing` refuses until `check_grounding` runs again.
+    That is the §5.2 gate working, not a bug to route around.
+    """
+    row = db.get_posting(conn, posting_id)
+    if row is None:
+        raise ToolError(f"no posting with id {posting_id}")
+
+    payload = {"why_this_role": why_this_role,
+               "primary_evidence": primary_evidence,
+               "secondary_evidence": secondary_evidence,
+               "closing": closing}
+    empty = [k for k in letters.BODY_KEYS if not (payload.get(k) or "").strip()]
+    if empty:
+        raise ToolError(
+            f"every body paragraph is required and these were empty: "
+            f"{empty}. The letter has a fixed four-paragraph shape and "
+            f"`measure` compares them slot by slot, so a missing one shifts "
+            f"every paragraph after it out of alignment.")
+
+    bank = _bullets.load_bank()
+    text = letters.assemble(payload, row, bank.meta)
+
+    # Checked, never merely instructed. The ban list is also in the resources
+    # as guidance, and guidance does not substitute for the check.
+    banned = letters.banned_used(text)
+    if banned:
+        raise ToolError(
+            f"this draft uses phrases the letter rules ban: {banned}. "
+            f"Rewrite the affected paragraph and call again — nothing was "
+            f"saved.")
+
+    folder = pipeline_tailor.application_dir(
+        row, root or pipeline_tailor.OUTPUT_ROOT)
+    path = letters.save_letter(text, folder / "cover_letter.md")
+    document_id = db.insert_document(conn, posting_id, "cover_letter",
+                                     generated_path=str(path),
+                                     model="claude-mcp", content=text)
+    conn.commit()
+
+    stored = conn.execute("SELECT revision FROM documents WHERE id = ?",
+                          (document_id,)).fetchone()
+    words = len(text.split())
+    out = {
+        "document_id": document_id,
+        "revision": stored["revision"] if stored else None,
+        "posting_id": posting_id,
+        "company": row["company"],
+        "path": str(path),
+        "words": words,
+        "grounded": False,
+        "next": f"call check_grounding({posting_id}) — copy_for_editing "
+                f"refuses a draft with no passing verdict",
+    }
+
+    # Reported, not enforced. His own letters run 360-431 words and the
+    # generated ones 332-374, so a hard floor here would reject drafts in the
+    # range he actually writes in. §5 puts the word target in the resources as
+    # guidance and keeps banned_used as the check; this respects that split.
+    if not letters.word_count_ok(text):
+        out["length_note"] = (
+            f"{words} words, outside the {letters.MIN_WORDS}-"
+            f"{letters.TARGET_WORDS + 40} target. Not rejected, but his own "
+            f"letters run 360-431 and tightening is most of the editing work.")
+
+    sent = _measure.sent_path_for(path)
+    if sent.exists():
+        out["warning"] = (
+            f"{sent} already exists and is now an edit of an EARLIER draft. "
+            f"`measure` will refuse the pair rather than report generation "
+            f"variance as human editing. Delete it deliberately, then "
+            f"copy_for_editing again once this draft passes grounding.")
+    return out
+
+
+def check_grounding(conn, posting_id: int) -> dict[str, Any]:
+    """Verify the current draft against the posting and the bank. Gemini.
+
+    Takes no letter text. §9.4 sketched `check_grounding(posting_id,
+    letter_text)`, written before `save_cover_letter` stored content — and a
+    checker fed arbitrary text can record a verdict on one draft that was
+    computed from another. The verdict has to attach to the bytes it was
+    computed from, because §5.2's gate reads it off the current draft.
+
+    Routed to Gemini on the server's own credentials, so the session holding
+    the untrusted posting text never sees a key and never audits its own
+    prose.
+
+    Fail-closed: a check that errors records nothing, which leaves the draft
+    uncleared and `copy_for_editing` refusing. An absent verdict must never be
+    readable as a pass. Costs a fraction of a cent — Flash Lite, one short
+    structured call.
+    """
+    row = db.get_posting(conn, posting_id)
+    if row is None:
+        raise ToolError(f"no posting with id {posting_id}")
+
+    doc = db.current_document(conn, posting_id, "cover_letter")
+    if doc is None:
+        raise ToolError(
+            f"posting {posting_id} has no cover letter draft to check. Call "
+            f"save_cover_letter first.")
+    text = doc["content"]
+    if not text:
+        raise ToolError(
+            f"draft {doc['id']} has no stored content, so there is nothing to "
+            f"check against. Re-save the letter.")
+
+    from . import grounding, scoring
+    from .providers import ProviderError, get_provider
+
+    bank = _bullets.load_bank()
+    try:
+        provider = get_provider()
+    except ProviderError as exc:
+        raise ToolError(
+            f"no grounding provider available: {exc}. The draft stays "
+            f"uncleared; an unrunnable check is not a pass.") from exc
+
+    try:
+        result = grounding.check(provider, bank, text,
+                                 pipeline_tailor._description(row),
+                                 grounding.build_system_prompt(
+                                     bank, scoring.load_profile()))
+    except Exception as exc:                                  # noqa: BLE001
+        # Deliberately broad. Whatever went wrong, the outcome is the same:
+        # no verdict is recorded, so the draft stays uncleared.
+        raise ToolError(
+            f"the grounding check did not complete: {exc}. Nothing was "
+            f"recorded, so this draft remains uncleared and copy_for_editing "
+            f"will refuse it. Retry, or fix the draft if it keeps failing."
+        ) from exc
+
+    db.record_grounding(conn, doc["id"], result)
+    return {
+        "document_id": doc["id"],
+        "posting_id": posting_id,
+        "ok": result.ok,
+        "accuracy": result.accuracy,
+        "model": result.model,
+        "claims": len(result.claims),
+        "problems": result.problems,
+        "report": result.report(),
+    }
+
+
 def build_server(db_path: str | None = None) -> MCPServer:
     """Register the read-only surface. Kept a function so a test can build an
     isolated server against a temp database."""
@@ -589,6 +767,38 @@ def build_server(db_path: str | None = None) -> MCPServer:
         try:
             return render_resume(conn, posting_id, variant=variant,
                                  posting_skills=posting_skills)
+        finally:
+            conn.close()
+
+    @server.tool(name="save_cover_letter", annotations=WRITES,
+                 description="Store a cover letter you wrote, as four body "
+                             "paragraphs. The server assembles the header, "
+                             "date, salutation and sign-off, refuses banned "
+                             "phrases, and files each save as a new revision. "
+                             "Grounding must be re-run before the draft can "
+                             "be released for editing.")
+    def _save_cover_letter(posting_id: int, why_this_role: str,
+                           primary_evidence: str, secondary_evidence: str,
+                           closing: str) -> dict:
+        conn = _conn(db_path)
+        try:
+            return save_cover_letter(conn, posting_id, why_this_role,
+                                     primary_evidence, secondary_evidence,
+                                     closing)
+        finally:
+            conn.close()
+
+    @server.tool(name="check_grounding", annotations=WRITES,
+                 description="Check the current cover letter draft against "
+                             "the posting and the bullet bank, using Gemini "
+                             "rather than the model that wrote it. Records "
+                             "the verdict against that draft. Fail-closed: an "
+                             "errored check records nothing and the draft "
+                             "stays uncleared.")
+    def _check_grounding(posting_id: int) -> dict:
+        conn = _conn(db_path)
+        try:
+            return check_grounding(conn, posting_id)
         finally:
             conn.close()
 

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from jobpipe import db, mcp_server
+from jobpipe import db, letters, mcp_server
 from jobpipe.normalize import Posting
 
 
@@ -555,3 +555,288 @@ class TestTheServerLoadsItsEnvironment:
 
         assert order == ["env", ("run", "stdio")], \
             "the environment must be loaded before the server serves"
+
+
+class TestSaveCoverLetter:
+    """Slice 4. Claude writes four paragraphs; the server does the rest.
+
+    What is worth testing here is not that a file appears. It is that the
+    scaffolding is assembled rather than accepted, that banned phrases are
+    CHECKED rather than requested, and that every save lands as its own
+    revision - PHASE5_PLAN §5.4 wants first-draft-to-final measurable, and a
+    row that overwrote its predecessor cannot answer that later.
+    """
+
+    BODY = {
+        "why_this_role": "Your team is rebuilding retrieval around evaluation "
+                         "rather than around the model, which is the harder "
+                         "half and the one most teams skip entirely today.",
+        "primary_evidence": "I distilled DeepSeek-R1 traces into Qwen2.5-7B "
+                            "and built the ablation before the result: two "
+                            "arms, held-out templates, non-overlapping "
+                            "confidence intervals at n equals one thousand.",
+        "secondary_evidence": "At Bumi I built XGBoost and LSTM models for "
+                              "price prediction and cut MAE twelve percent, "
+                              "running the hypothesis test before "
+                              "recommending the change rather than after it.",
+        "closing": "I would want to understand where retrieval currently "
+                   "breaks for you, and whether it is a ranking problem or a "
+                   "chunking one wearing a ranking costume.",
+    }
+
+    def _save(self, conn, pid, tmp_path, **over):
+        body = dict(self.BODY)
+        body.update(over)
+        return mcp_server.save_cover_letter(conn, pid, root=tmp_path, **body)
+
+    def test_an_unknown_posting_is_refused(self, conn, tmp_path):
+        with pytest.raises(mcp_server.ToolError, match="no posting"):
+            self._save(conn, 999999, tmp_path)
+
+    def test_an_empty_paragraph_is_refused_by_name(self, conn, tmp_path):
+        pid = seed(conn)
+        with pytest.raises(mcp_server.ToolError, match="primary_evidence"):
+            self._save(conn, pid, tmp_path, primary_evidence="   ")
+
+    def test_a_missing_paragraph_would_shift_every_slot_after_it(self, conn,
+                                                                 tmp_path):
+        """measure compares by POSITION, so three paragraphs is not a shorter
+        letter - it is a letter whose slots no longer line up with any other."""
+        pid = seed(conn)
+        with pytest.raises(mcp_server.ToolError, match="slot by slot"):
+            self._save(conn, pid, tmp_path, closing="")
+
+    def test_the_server_assembles_the_scaffolding(self, conn, tmp_path):
+        """Seven blocks, the shape measure's SLOT_NAMES describe. The client
+        sends four; header, salutation and sign-off are not its business."""
+        from jobpipe import measure as m
+        pid = seed(conn)
+        out = self._save(conn, pid, tmp_path)
+        text = Path(out["path"]).read_text(encoding="utf-8")
+        blocks = m.paragraphs(text)
+        assert len(blocks) == len(m.SLOT_NAMES)
+        assert blocks[1] == "Dear Abridge Hiring Team,"
+        assert blocks[-1].startswith("Sincerely,")
+
+    def test_the_salutation_is_not_the_clients_to_write(self, conn, tmp_path):
+        """A model asked for one occasionally invents a hiring manager."""
+        pid = seed(conn, company="Ramp", source_id="sal")
+        out = self._save(conn, pid, tmp_path)
+        assert "Dear Ramp Hiring Team," in Path(out["path"]).read_text(
+            encoding="utf-8")
+
+    def test_a_banned_phrase_is_refused_and_nothing_is_saved(self, conn,
+                                                             tmp_path):
+        """Checked, never merely instructed. The ban list is in the resources
+        as guidance too, and guidance does not substitute for the check."""
+        pid = seed(conn)
+        banned = letters.BANNED_PHRASES[0]
+        with pytest.raises(mcp_server.ToolError, match="ban"):
+            self._save(conn, pid, tmp_path,
+                       why_this_role=f"I am {banned} about this role and the "
+                                     f"problems your team has chosen to work "
+                                     f"on over the past two years.")
+        assert db.current_document(conn, pid, "cover_letter") is None
+
+    def test_the_content_is_stored_not_only_written(self, conn, tmp_path):
+        """Prose regenerates at ~0.53 distance from itself, so a file is not
+        a baseline - documents.content exists for exactly this reason."""
+        pid = seed(conn)
+        out = self._save(conn, pid, tmp_path)
+        row = db.current_document(conn, pid, "cover_letter")
+        assert row["content"] == Path(out["path"]).read_text(encoding="utf-8")
+
+    def test_each_save_is_its_own_revision(self, conn, tmp_path):
+        """§5.4: first save to final save is one of the two distances worth
+        having, and it is unanswerable if a save overwrites its predecessor."""
+        pid = seed(conn)
+        first = self._save(conn, pid, tmp_path)
+        second = self._save(conn, pid, tmp_path,
+                            closing="A different closing paragraph entirely, "
+                                    "written after rereading the posting.")
+        assert second["revision"] > first["revision"]
+        rows = conn.execute(
+            "SELECT id, content, superseded_at FROM documents "
+            "WHERE posting_id = ? AND doc_type = 'cover_letter' "
+            "ORDER BY revision", (pid,)).fetchall()
+        assert len(rows) == 2
+        assert rows[0]["superseded_at"] is not None
+        assert rows[0]["content"] != rows[1]["content"], \
+            "the earlier draft must survive intact to be measurable"
+
+    def test_a_new_save_arrives_uncleared(self, conn, tmp_path):
+        """The §5.2 gate: a fresh draft has no verdict, so copy_for_editing
+        refuses until check_grounding runs on THIS draft."""
+        pid = seed(conn)
+        self._save(conn, pid, tmp_path)
+        assert db.current_document(conn, pid,
+                                   "cover_letter")["grounding_ok"] is None
+
+    def test_a_resave_does_not_inherit_the_old_verdict(self, conn, tmp_path):
+        """The dangerous version of the above: pass the check, then rewrite."""
+        pid = seed(conn)
+        self._save(conn, pid, tmp_path)
+        conn.execute("UPDATE documents SET grounding_ok = 1 "
+                     "WHERE posting_id = ?", (pid,))
+        conn.commit()
+        self._save(conn, pid, tmp_path,
+                   closing="Rewritten after the check had already passed.")
+        assert db.current_document(conn, pid,
+                                   "cover_letter")["grounding_ok"] is None
+
+    def test_it_warns_when_an_edited_copy_is_already_there(self, conn,
+                                                           tmp_path):
+        pid = seed(conn)
+        out = self._save(conn, pid, tmp_path)
+        sent = Path(out["path"]).parent / "cover_letter.sent.md"
+        sent.write_text("an earlier edit", encoding="utf-8")
+        assert "warning" in self._save(conn, pid, tmp_path,
+                                       closing="Another closing paragraph.")
+
+    def test_length_is_reported_not_enforced(self, conn, tmp_path):
+        """His own letters run 360-431 and the generated ones 332-374, so a
+        hard floor would reject drafts in the range he actually writes in."""
+        pid = seed(conn)
+        out = self._save(conn, pid, tmp_path)
+        assert out["words"] > 0
+        assert "length_note" in out, "this short fixture is under the target"
+
+
+class TestCheckGrounding:
+    """Claude writes, Gemini checks. The refusals are the whole point."""
+
+    class _Result:
+        claims = [{"claim": "x", "supported": "supported"}]
+        model = "gemini-2.5-flash-lite"
+        ok = True
+        accuracy = 1.0
+        problems: list = []
+
+        def report(self):
+            return "grounding OK - 1 claim(s) all supported"
+
+    def _draft(self, conn, pid, tmp_path):
+        return mcp_server.save_cover_letter(
+            conn, pid, root=tmp_path, **TestSaveCoverLetter.BODY)
+
+    def test_an_unknown_posting_is_refused(self, conn):
+        with pytest.raises(mcp_server.ToolError, match="no posting"):
+            mcp_server.check_grounding(conn, 999999)
+
+    def test_no_draft_is_refused(self, conn):
+        pid = seed(conn)
+        with pytest.raises(mcp_server.ToolError, match="save_cover_letter"):
+            mcp_server.check_grounding(conn, pid)
+
+    def test_it_checks_the_stored_draft_not_supplied_text(self, conn,
+                                                          tmp_path,
+                                                          monkeypatch):
+        """§9.4 sketched check_grounding(posting_id, letter_text). A checker
+        fed arbitrary text can record a verdict on one draft computed from
+        another, and §5.2's gate reads the verdict off the current draft."""
+        pid = seed(conn)
+        self._draft(conn, pid, tmp_path)
+        seen = {}
+
+        def fake_check(provider, bank, letter_text, posting_text, system,
+                       model=None):
+            seen["text"] = letter_text
+            return self._Result()
+
+        monkeypatch.setattr("jobpipe.grounding.check", fake_check)
+        monkeypatch.setattr("jobpipe.providers.get_provider",
+                            lambda *a, **k: object())
+        mcp_server.check_grounding(conn, pid)
+        assert seen["text"] == db.current_document(
+            conn, pid, "cover_letter")["content"]
+
+    def test_a_pass_is_recorded_against_that_draft(self, conn, tmp_path,
+                                                   monkeypatch):
+        pid = seed(conn)
+        self._draft(conn, pid, tmp_path)
+        monkeypatch.setattr("jobpipe.grounding.check",
+                            lambda *a, **k: self._Result())
+        monkeypatch.setattr("jobpipe.providers.get_provider",
+                            lambda *a, **k: object())
+        out = mcp_server.check_grounding(conn, pid)
+        assert out["ok"] is True
+        row = db.current_document(conn, pid, "cover_letter")
+        assert row["grounding_ok"] == 1
+        assert row["grounding_model"] == "gemini-2.5-flash-lite"
+
+    def test_an_errored_check_records_nothing(self, conn, tmp_path,
+                                              monkeypatch):
+        """Fail-closed. An absent verdict must never read as a pass, so the
+        draft stays uncleared and copy_for_editing goes on refusing it."""
+        pid = seed(conn)
+        self._draft(conn, pid, tmp_path)
+        monkeypatch.setattr("jobpipe.providers.get_provider",
+                            lambda *a, **k: object())
+
+        def boom(*a, **k):
+            raise RuntimeError("extracted no claims from a non-empty letter")
+
+        monkeypatch.setattr("jobpipe.grounding.check", boom)
+        with pytest.raises(mcp_server.ToolError, match="did not complete"):
+            mcp_server.check_grounding(conn, pid)
+        assert db.current_document(conn, pid,
+                                   "cover_letter")["grounding_ok"] is None
+
+    def test_no_provider_is_a_refusal_not_a_pass(self, conn, tmp_path,
+                                                 monkeypatch):
+        from jobpipe.providers import ProviderError
+        pid = seed(conn)
+        self._draft(conn, pid, tmp_path)
+
+        def no_provider(*a, **k):
+            raise ProviderError("JOBPIPE_GEMINI_BACKEND is unset")
+
+        monkeypatch.setattr("jobpipe.providers.get_provider", no_provider)
+        with pytest.raises(mcp_server.ToolError, match="not a pass"):
+            mcp_server.check_grounding(conn, pid)
+        assert db.current_document(conn, pid,
+                                   "cover_letter")["grounding_ok"] is None
+
+
+class TestTheGateEndToEnd:
+    """§5.2 as a sequence, because each piece passing alone proves little."""
+
+    def test_a_draft_cannot_reach_a_human_until_it_is_checked(self, conn,
+                                                              tmp_path,
+                                                              monkeypatch):
+        pid = seed(conn)
+        mcp_server.save_cover_letter(conn, pid, root=tmp_path,
+                                     **TestSaveCoverLetter.BODY)
+
+        with pytest.raises(mcp_server.ToolError, match="no grounding verdict"):
+            mcp_server.copy_for_editing(conn, pid)
+
+        monkeypatch.setattr("jobpipe.providers.get_provider",
+                            lambda *a, **k: object())
+        monkeypatch.setattr("jobpipe.grounding.check",
+                            lambda *a, **k: TestCheckGrounding._Result())
+        mcp_server.check_grounding(conn, pid)
+
+        out = mcp_server.copy_for_editing(conn, pid)
+        assert Path(out["sent_path"]).exists()
+
+    def test_rewriting_after_a_pass_closes_the_gate_again(self, conn,
+                                                          tmp_path,
+                                                          monkeypatch):
+        """The sequence that would otherwise smuggle unchecked prose past the
+        gate: save, check, save again, copy."""
+        pid = seed(conn)
+        mcp_server.save_cover_letter(conn, pid, root=tmp_path,
+                                     **TestSaveCoverLetter.BODY)
+        monkeypatch.setattr("jobpipe.providers.get_provider",
+                            lambda *a, **k: object())
+        monkeypatch.setattr("jobpipe.grounding.check",
+                            lambda *a, **k: TestCheckGrounding._Result())
+        mcp_server.check_grounding(conn, pid)
+
+        body = dict(TestSaveCoverLetter.BODY)
+        body["closing"] = "An entirely new closing, written after the check."
+        mcp_server.save_cover_letter(conn, pid, root=tmp_path, **body)
+
+        with pytest.raises(mcp_server.ToolError, match="no grounding verdict"):
+            mcp_server.copy_for_editing(conn, pid)
