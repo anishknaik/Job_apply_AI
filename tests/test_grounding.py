@@ -117,6 +117,20 @@ class TestEvidenceRouting:
         grounding.check(provider, bank, LETTER, POSTING, "sys")
         assert LETTER in provider.calls[0]["user_text"]
 
+    def test_a_letter_is_still_labelled_a_letter(self, bank):
+        """The `label` parameter must leave a letter's request unchanged."""
+        provider = FakeProvider()
+        grounding.check(provider, bank, LETTER, POSTING, "sys")
+        assert "=== THE LETTER TO CHECK ===" in provider.calls[0]["user_text"]
+
+    def test_a_short_answer_is_labelled_as_one(self, bank):
+        """§6.1: a form answer is checked by the same rules as a letter."""
+        provider = FakeProvider()
+        grounding.check(provider, bank, LETTER, POSTING, "sys", kind="answer")
+        text = provider.calls[0]["user_text"]
+        assert "=== THE APPLICATION ANSWER TO CHECK ===" in text
+        assert "THE LETTER TO CHECK" not in text
+
     def test_subjects_are_constrained(self):
         items = grounding.GROUNDING_SCHEMA["properties"]["claims"]["items"]
         assert items["properties"]["about"]["enum"] == ["candidate",
@@ -218,3 +232,49 @@ class TestReport:
         result = grounding.check(FakeProvider([near]), bank, LETTER, POSTING,
                                  "sys")
         assert "nearest evidence" in result.report()
+
+
+class TestWhatIsUnderTest:
+    """The system prompt, the `claim` field and the heading must name the same
+    thing. When they disagreed, the checker took 38 of 45 claims from the job
+    posting's requirement list and judged them as the candidate's."""
+
+    @staticmethod
+    def _claim_field(schema):
+        return schema["properties"]["claims"]["items"]["properties"]["claim"]
+
+    def test_the_letter_request_is_unchanged(self, bank):
+        assert grounding.schema_for("letter") is grounding.GROUNDING_SCHEMA
+        prompt = grounding.build_system_prompt(bank, "PROFILE")
+        assert prompt == grounding.build_system_prompt(bank, "PROFILE",
+                                                       kind="letter")
+        assert prompt.startswith("You are checking a cover letter")
+        assert "ONLY from" not in prompt
+
+    def test_an_answer_prompt_never_calls_it_a_letter(self, bank):
+        prompt = grounding.build_system_prompt(bank, "PROFILE", kind="answer")
+        framing = prompt.split("=== BULLET BANK ===")[0]
+        assert "letter" not in framing.lower()
+        assert "job application form" in framing
+
+    def test_an_answer_is_told_the_posting_is_not_a_source_of_claims(
+            self, bank):
+        prompt = grounding.build_system_prompt(bank, "PROFILE", kind="answer")
+        assert "never extract a claim from it" in prompt
+
+    def test_the_scope_rule_is_on_the_field_the_model_fills(self, bank):
+        """HANDOFF §5: a rule stated in prose and missing at the point of use
+        does not hold."""
+        provider = FakeProvider()
+        grounding.check(provider, bank, LETTER, POSTING, "sys", kind="answer")
+        claim = self._claim_field(provider.calls[0]["schema"])
+        assert "never extract a claim from it" in claim["description"]
+
+    def test_the_answer_schema_leaves_the_letter_schema_alone(self):
+        grounding.schema_for("answer")
+        claim = self._claim_field(grounding.GROUNDING_SCHEMA)
+        assert claim["description"].endswith("from the letter.")
+
+    def test_an_unknown_kind_is_refused(self, bank):
+        with pytest.raises(ValueError, match="letter"):
+            grounding.build_system_prompt(bank, "PROFILE", kind="memo")

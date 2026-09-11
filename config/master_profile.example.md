@@ -102,4 +102,11 @@ experience:
     company: Acme Analytics
     title: Data Engineering Intern
     dates: Jun 2024 - Aug 2024
+
+# Work authorization, for the two yes/no questions nearly every form asks.
+# The same facts as §10, in a shape a form filler reads without parsing prose.
+work_authorization:
+  authorized_to_work_in_us: true
+  requires_sponsorship: false     # now or in the future
+  status: US citizen
 ```

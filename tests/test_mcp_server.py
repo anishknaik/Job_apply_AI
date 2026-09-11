@@ -840,3 +840,246 @@ class TestTheGateEndToEnd:
 
         with pytest.raises(mcp_server.ToolError, match="no grounding verdict"):
             mcp_server.copy_for_editing(conn, pid)
+
+
+QUESTION_1 = ("Please describe any experience you have working directly with "
+              "customers.")
+QUESTION_2 = "Anything else you would like us to know?"
+ANSWER = ("At Gradient Tensor I scoped an LLM pipeline with the client, then "
+          "built and delivered it end to end.")
+
+
+def fake_verdict(monkeypatch, seen=None):
+    """Route check_grounding to a canned pass, recording what it was sent."""
+    def fake_check(provider, bank, letter_text, posting_text, system,
+                   model=None, **kw):
+        if seen is not None:
+            seen.update(text=letter_text, system=system, **kw)
+        return TestCheckGrounding._Result()
+
+    monkeypatch.setattr("jobpipe.grounding.check", fake_check)
+    monkeypatch.setattr("jobpipe.providers.get_provider",
+                        lambda *a, **k: object())
+
+
+class TestSaveShortAnswer:
+    """Track C. An answer typed into a form is prose making claims, so it
+    rides the letter's gate (§6.1).
+
+    What matters most is the KEY. `documents` supersedes per posting and
+    doc_type, and a form asks several questions — so without the question in
+    the key, answering the second would silently retire the first.
+    """
+
+    def _save(self, conn, pid, question=QUESTION_1, answer=ANSWER):
+        return mcp_server.save_short_answer(conn, pid, question, answer)
+
+    def test_an_unknown_posting_is_refused(self, conn):
+        with pytest.raises(mcp_server.ToolError, match="no posting"):
+            self._save(conn, 999999)
+
+    def test_an_empty_question_is_refused(self, conn):
+        pid = seed(conn)
+        with pytest.raises(mcp_server.ToolError, match="question is empty"):
+            self._save(conn, pid, question="   ")
+
+    def test_an_empty_answer_is_refused(self, conn):
+        pid = seed(conn)
+        with pytest.raises(mcp_server.ToolError, match="answer is empty"):
+            self._save(conn, pid, answer="  ")
+
+    def test_a_banned_phrase_is_refused_and_nothing_is_saved(self, conn):
+        """His tells are his tells in a form box too."""
+        pid = seed(conn)
+        with pytest.raises(mcp_server.ToolError, match="ban"):
+            self._save(conn, pid, answer=f"I {letters.BANNED_PHRASES[0]} to "
+                                         f"work with your customers.")
+        assert db.current_documents(conn, pid, "short_answer") == []
+
+    def test_the_answer_and_its_question_are_stored(self, conn):
+        pid = seed(conn)
+        self._save(conn, pid)
+        row = db.current_document(conn, pid, "short_answer",
+                                  question=QUESTION_1)
+        assert row["content"] == ANSWER
+        assert row["model"] == "claude-mcp"
+
+    def test_a_second_question_does_not_retire_the_first(self, conn):
+        """The reason `documents.question` exists."""
+        pid = seed(conn)
+        self._save(conn, pid, question=QUESTION_1)
+        self._save(conn, pid, question=QUESTION_2, answer="I live near NYC.")
+        live = db.current_documents(conn, pid, "short_answer")
+        assert [r["question"] for r in live] == [QUESTION_1, QUESTION_2]
+
+    def test_resaving_a_question_is_a_new_revision_of_that_question(
+            self, conn):
+        pid = seed(conn)
+        first = self._save(conn, pid)
+        self._save(conn, pid, question=QUESTION_2, answer="Unrelated.")
+        second = self._save(conn, pid, answer="A rewritten answer.")
+        assert (first["revision"], second["revision"]) == (1, 2), \
+            "revisions count per question, not per posting"
+        rows = conn.execute(
+            "SELECT content, superseded_at FROM documents "
+            "WHERE posting_id = ? AND question = ? ORDER BY revision",
+            (pid, QUESTION_1)).fetchall()
+        assert rows[0]["superseded_at"] is not None
+        assert rows[0]["content"] == ANSWER, "the earlier draft survives"
+
+    def test_the_same_question_rewrapped_lands_in_the_same_slot(self, conn):
+        """A question pasted with different line breaks is still one question.
+        Two live answers to it would be ambiguous at fill time."""
+        pid = seed(conn)
+        self._save(conn, pid)
+        self._save(conn, pid, question=QUESTION_1.replace(" ", "\n  ", 3),
+                   answer="Rewrapped.")
+        assert len(db.current_documents(conn, pid, "short_answer")) == 1
+
+    def test_a_new_save_arrives_uncleared(self, conn):
+        pid = seed(conn)
+        out = self._save(conn, pid)
+        assert out["grounded"] is False
+        assert db.current_document(conn, pid, "short_answer",
+                                   question=QUESTION_1)["grounding_ok"] is None
+
+    def test_it_never_touches_the_letter(self, conn, tmp_path):
+        """Different doc_type, so an answer cannot supersede a letter - and a
+        letter keeps its NULL question, so it is still found."""
+        pid = seed(conn)
+        mcp_server.save_cover_letter(conn, pid, root=tmp_path,
+                                     **TestSaveCoverLetter.BODY)
+        self._save(conn, pid)
+        assert db.current_document(conn, pid, "cover_letter") is not None
+
+    def test_it_stays_out_of_measure(self, conn):
+        """measure is letter-required letters only (§5.3). An answer row must
+        not enter that population."""
+        pid = seed(conn)
+        before = mcp_server.measure(conn)
+        self._save(conn, pid)
+        assert mcp_server.measure(conn) == before
+
+    def test_the_result_lists_every_question_on_file(self, conn):
+        pid = seed(conn)
+        self._save(conn, pid, question=QUESTION_1)
+        out = self._save(conn, pid, question=QUESTION_2, answer="Near NYC.")
+        assert out["questions_on_file"] == [QUESTION_1, QUESTION_2]
+        assert out["characters"] == len("Near NYC.")
+
+
+class TestCheckGroundingAShortAnswer:
+    """Same checker, same fail-closed rule. The question selects the row; it
+    is never the text being checked."""
+
+    def test_it_checks_the_stored_answer_under_its_own_label(
+            self, conn, monkeypatch):
+        pid = seed(conn)
+        mcp_server.save_short_answer(conn, pid, QUESTION_1, ANSWER)
+        seen = {}
+        fake_verdict(monkeypatch, seen)
+        mcp_server.check_grounding(conn, pid, question=QUESTION_1)
+        assert seen["text"] == ANSWER
+        assert seen["kind"] == "answer"
+        assert "job application form" in seen["system"], \
+            "the prompt must name what the heading names"
+
+    def test_a_letter_check_sends_nothing_new(self, conn, tmp_path,
+                                              monkeypatch):
+        """A letter's request must stay exactly what it was."""
+        pid = seed(conn)
+        mcp_server.save_cover_letter(conn, pid, root=tmp_path,
+                                     **TestSaveCoverLetter.BODY)
+        seen = {}
+        fake_verdict(monkeypatch, seen)
+        mcp_server.check_grounding(conn, pid)
+        assert "kind" not in seen
+        assert seen["system"].startswith("You are checking a cover letter")
+
+    def test_the_verdict_lands_on_that_answer_only(self, conn, tmp_path,
+                                                   monkeypatch):
+        pid = seed(conn)
+        mcp_server.save_cover_letter(conn, pid, root=tmp_path,
+                                     **TestSaveCoverLetter.BODY)
+        mcp_server.save_short_answer(conn, pid, QUESTION_1, ANSWER)
+        mcp_server.save_short_answer(conn, pid, QUESTION_2, "Near NYC.")
+        fake_verdict(monkeypatch)
+        out = mcp_server.check_grounding(conn, pid, question=QUESTION_1)
+        assert out["ok"] is True and out["question"] == QUESTION_1
+
+        def verdict(doc_type, question=None):
+            return db.current_document(conn, pid, doc_type,
+                                       question=question)["grounding_ok"]
+
+        assert verdict("short_answer", QUESTION_1) == 1
+        assert verdict("short_answer", QUESTION_2) is None
+        assert verdict("cover_letter") is None
+
+    def test_no_answers_at_all_is_refused(self, conn):
+        pid = seed(conn)
+        with pytest.raises(mcp_server.ToolError, match="save_short_answer"):
+            mcp_server.check_grounding(conn, pid, question=QUESTION_1)
+
+    def test_an_unknown_question_names_what_is_on_file(self, conn):
+        pid = seed(conn)
+        mcp_server.save_short_answer(conn, pid, QUESTION_1, ANSWER)
+        with pytest.raises(mcp_server.ToolError, match="working directly"):
+            mcp_server.check_grounding(conn, pid, question="Why us?")
+
+    def test_an_errored_check_records_nothing(self, conn, monkeypatch):
+        pid = seed(conn)
+        mcp_server.save_short_answer(conn, pid, QUESTION_1, ANSWER)
+        monkeypatch.setattr("jobpipe.providers.get_provider",
+                            lambda *a, **k: object())
+
+        def boom(*a, **k):
+            raise RuntimeError("extracted no claims")
+
+        monkeypatch.setattr("jobpipe.grounding.check", boom)
+        with pytest.raises(mcp_server.ToolError, match="did not complete"):
+            mcp_server.check_grounding(conn, pid, question=QUESTION_1)
+        assert db.current_document(conn, pid, "short_answer",
+                                   question=QUESTION_1)["grounding_ok"] is None
+
+    def test_rewriting_after_a_pass_clears_the_verdict(self, conn,
+                                                       monkeypatch):
+        """The sequence that would smuggle unchecked prose into a form: save,
+        check, rewrite. The rewrite is a new row, and it has no verdict."""
+        pid = seed(conn)
+        mcp_server.save_short_answer(conn, pid, QUESTION_1, ANSWER)
+        fake_verdict(monkeypatch)
+        mcp_server.check_grounding(conn, pid, question=QUESTION_1)
+        mcp_server.save_short_answer(conn, pid, QUESTION_1, "Rewritten.")
+        assert db.current_document(conn, pid, "short_answer",
+                                   question=QUESTION_1)["grounding_ok"] is None
+
+
+class TestFormAnswers:
+    """Read-only, touches no database, and a missing or malformed file is an
+    anticipated refusal rather than a crash that strips the reason."""
+
+    def test_it_merges_the_profile_and_the_answers_file(self, tmp_path):
+        # The tracked example profile, so this runs on any checkout.
+        profile = Path("config/master_profile.example.md")
+        answers_file = tmp_path / "answers.yaml"
+        answers_file.write_text(
+            'self_identification:\n  gender: ["Decline To Self Identify"]\n',
+            encoding="utf-8")
+        out = mcp_server.form_answers(answers_path=answers_file,
+                                      profile_path=profile)
+        assert out["identity"]["name"] == "Jane Q. Example"
+        assert out["self_identification"]["gender"] == [
+            "Decline To Self Identify"]
+
+    def test_a_missing_answers_file_is_a_refusal(self, tmp_path):
+        with pytest.raises(mcp_server.ToolError, match="answers.example.yaml"):
+            mcp_server.form_answers(answers_path=tmp_path / "none.yaml",
+                                    profile_path=tmp_path / "none.md")
+
+    def test_a_boolean_self_id_entry_is_a_refusal(self, tmp_path):
+        answers_file = tmp_path / "answers.yaml"
+        answers_file.write_text("self_identification:\n  transgender: [No]\n",
+                                encoding="utf-8")
+        with pytest.raises(mcp_server.ToolError, match="quote it"):
+            mcp_server.form_answers(answers_path=answers_file,
+                                    profile_path=tmp_path / "none.md")

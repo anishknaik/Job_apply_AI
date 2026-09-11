@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS runs (
 CREATE TABLE IF NOT EXISTS documents (
     id              INTEGER PRIMARY KEY,
     posting_id      INTEGER NOT NULL REFERENCES postings (id),
-    doc_type        TEXT NOT NULL,      -- resume | cover_letter
+    doc_type        TEXT NOT NULL,      -- resume | cover_letter | short_answer
     archetype       TEXT,
     bullet_ids      TEXT,               -- JSON array, resume only
     generated_path  TEXT,
@@ -205,6 +205,12 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     # the column a capped score cannot be told from one the model simply
     # scored low - and the cap becomes unauditable the moment it matters.
     ("scores", "seniority_gap", "TEXT"),
+
+    # Which form question a short answer answers (PHASE5_PLAN §6.1). Part of
+    # the supersede key: a form asks several questions, and saving the answer
+    # to one must not retire the answer to another. NULL for resumes and
+    # letters, which keep one live document per posting as before.
+    ("documents", "question", "TEXT"),
 ]
 
 
@@ -610,7 +616,7 @@ _DOCUMENT_COLUMNS = (
     "posting_id", "doc_type", "archetype", "bullet_ids", "generated_path",
     "sent_path", "model", "generated_at", "edit_distance", "content",
     "revision", "grounding_ok", "grounding_accuracy", "grounding_model",
-    "grounding_claims", "grounding_checked_at",
+    "grounding_claims", "grounding_checked_at", "question",
 )
 
 _DOCUMENT_INSERT = (
@@ -648,10 +654,14 @@ def insert_document(conn: sqlite3.Connection, posting_id: int, doc_type: str,
         # its own history. Counting them instead numbers the new draft after
         # the drafts that actually exist. Safe because nothing is ever deleted
         # from this table (§6), so the count only grows.
+        # Scoped by question with IS rather than =, so the NULL every resume
+        # and letter carries still matches itself and their numbering is
+        # unchanged, while each short answer counts its own drafts.
         values["revision"] = 1 + (conn.execute(
             "SELECT COALESCE(MAX(revision), COUNT(*)) FROM documents "
-            "WHERE posting_id = ? AND doc_type = ?",
-            (posting_id, doc_type)).fetchone()[0] or 0)
+            "WHERE posting_id = ? AND doc_type = ? AND question IS ?",
+            (posting_id, doc_type, values.get("question"))).fetchone()[0]
+            or 0)
     if isinstance(values.get("bullet_ids"), (list, tuple)):
         values["bullet_ids"] = json.dumps(list(values["bullet_ids"]))
 
@@ -660,9 +670,9 @@ def insert_document(conn: sqlite3.Connection, posting_id: int, doc_type: str,
     new_id = cur.lastrowid
     conn.execute(
         "UPDATE documents SET superseded_at = ? "
-        "WHERE posting_id = ? AND doc_type = ? AND id != ? "
-        "AND superseded_at IS NULL",
-        (utcnow(), posting_id, doc_type, new_id))
+        "WHERE posting_id = ? AND doc_type = ? AND question IS ? "
+        "AND id != ? AND superseded_at IS NULL",
+        (utcnow(), posting_id, doc_type, values.get("question"), new_id))
     return new_id
 
 
@@ -687,12 +697,24 @@ def record_grounding(conn: sqlite3.Connection, document_id: int,
 
 
 def current_document(conn: sqlite3.Connection, posting_id: int,
-                     doc_type: str):
-    """The live document of this type, or None."""
+                     doc_type: str, question: str | None = None):
+    """The live document of this type, or None. `question` selects which
+    short answer; resumes and letters leave it None."""
     return conn.execute(
         "SELECT * FROM documents WHERE posting_id = ? AND doc_type = ? "
-        "AND superseded_at IS NULL ORDER BY id DESC LIMIT 1",
-        (posting_id, doc_type)).fetchone()
+        "AND question IS ? AND superseded_at IS NULL "
+        "ORDER BY id DESC LIMIT 1",
+        (posting_id, doc_type, question)).fetchone()
+
+
+def current_documents(conn: sqlite3.Connection, posting_id: int,
+                      doc_type: str) -> list:
+    """Every live document of this type — one per question, for short
+    answers — oldest first."""
+    return conn.execute(
+        "SELECT * FROM documents WHERE posting_id = ? AND doc_type = ? "
+        "AND superseded_at IS NULL ORDER BY id",
+        (posting_id, doc_type)).fetchall()
 
 
 # ---------------------------------------------------------------------------

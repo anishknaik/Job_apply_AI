@@ -1,0 +1,51 @@
+# Application answers — form filling only (PHASE5_PLAN §6.1.1).
+#
+# Copy this file to config/answers.yaml and fill that copy in. The copy is
+# gitignored: it holds protected-characteristic data, so it never enters a
+# prompt prefix and scoring never reads it. It feeds form filling only.
+#
+# NOT here, deliberately:
+#   * name, email, phone, LinkedIn, GitHub, location, school, degree,
+#     graduation date, work authorization, sponsorship. Those live once, in
+#     master_profile.md §12, and a form is filled from there.
+#   * salary, SSN or any government id, payment details, and attestation or
+#     signature checkboxes. Never stored; filled by hand on every form
+#     (PHASE5_PLAN §6.1, "leave for Anish").
+#   * "Why this company?" and anything else specific to one posting. Those
+#     are drafted per application and checked with check_grounding.
+
+# ---------------------------------------------------------------------------
+# Voluntary self-identification (EEO / OFCCP).
+#
+# Write each answer as the form's EXACT option text, copied rather than
+# paraphrased. A form offering "I don't wish to answer" does not match a file
+# saying "prefer not to say", and the filler must select an option, never
+# interpret one.
+#
+# Each question takes a LIST because ATSs word the same answer differently
+# (Greenhouse vs Ashby). Add each ATS's wording the first time you meet it.
+# At fill time the option whose text matches an entry exactly is chosen; if
+# none matches, the field is left blank and flagged, never guessed.
+#
+# Declining is a real answer: if it is yours, list the decline option's text.
+# An empty list means "leave this question for me".
+self_identification:
+  gender: []
+  hispanic_or_latino: []       # Greenhouse asks this separately from race
+  race_ethnicity: []
+  veteran_status: []
+  disability_status: []        # the federal CC-305 form
+  # Asked by some forms only.
+  pronouns: []
+  sexual_orientation: []
+  transgender: []
+
+# ---------------------------------------------------------------------------
+# Logistics. Plain facts, reused across forms. Empty means "leave for me".
+logistics:
+  preferred_name: ""           # only if different from your legal name
+  earliest_start_date: ""      # e.g. "Immediately" or "Two weeks' notice"
+  how_did_you_hear: ""         # jobpipe finds roles on company careers pages
+  # Kept here rather than in the profile: scoring has no use for it, and the
+  # profile reaches Gemini on every scoring call.
+  work_authorization_expires: ""   # STEM OPT end date, if a form asks

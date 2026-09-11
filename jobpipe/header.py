@@ -63,12 +63,12 @@ class HeaderError(RuntimeError):
     pass
 
 
-def extract(profile_text: str) -> dict:
-    """Pull §12's YAML block out of the profile and shape it for merging.
+def structured_block(profile_text: str) -> dict:
+    """§12's YAML block, parsed and otherwise untouched.
 
-    Raises rather than returning a partial header: a missing key here would
-    silently leave the bank's hand-written value in place, which is exactly
-    the drift this module exists to remove.
+    The one parser for §12. `extract` shapes it for the resume header; form
+    filling (`answers.form_view`) reads the rest — keys such as `github` and
+    `work_authorization` that the header deliberately ignores.
     """
     import yaml
 
@@ -82,6 +82,17 @@ def extract(profile_text: str) -> dict:
     block = yaml.safe_load(match.group(1))
     if not isinstance(block, dict):
         raise HeaderError("§12's yaml block did not parse to a mapping")
+    return block
+
+
+def extract(profile_text: str) -> dict:
+    """Pull §12's YAML block out of the profile and shape it for merging.
+
+    Raises rather than returning a partial header: a missing key here would
+    silently leave the bank's hand-written value in place, which is exactly
+    the drift this module exists to remove.
+    """
+    block = structured_block(profile_text)
 
     for section in ("identity", "education", "experience"):
         if section not in block:

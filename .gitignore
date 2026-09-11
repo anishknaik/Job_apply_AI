@@ -36,6 +36,14 @@ samples/**
 # extension-specific pattern would have let it through.
 config/calibration*
 
+# Application answers (PHASE5_PLAN §6.1.1): voluntary self-identification --
+# gender, race/ethnicity, veteran and disability status -- plus logistics.
+# Protected-characteristic data, the most sensitive file in config/. Globbed
+# like everything above; the template is re-included because it holds no
+# answers.
+config/answers*
+!config/answers.example.yaml
+
 # Database (source of truth, but local and large)
 *.db
 *.db-wal

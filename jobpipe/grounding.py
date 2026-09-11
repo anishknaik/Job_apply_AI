@@ -25,6 +25,7 @@ the least expensive call in the phase and the one least worth skipping.
 """
 from __future__ import annotations
 
+import copy
 import json
 import logging
 from dataclasses import dataclass, field
@@ -82,6 +83,56 @@ GROUNDING_SCHEMA = {
     "additionalProperties": False,
 }
 
+# What is under test, in the words each part of the request uses for it. The
+# system prompt, the `claim` field and the section heading have to agree. A
+# prompt about "a cover letter", a field saying "from the letter" and a
+# section headed APPLICATION ANSWER left the checker unsure which text it was
+# checking: on LangChain's form answer it took 38 of 45 claims from the job
+# posting's requirement list and judged them as the candidate's (2026-09-10).
+# The letter's wording is the original, and its request stays byte-identical.
+KINDS = {
+    "letter": {"what": "a cover letter", "a_noun": "A letter",
+               "noun": "letter", "heading": "THE LETTER TO CHECK"},
+    "answer": {"what": "an answer written for a job application form",
+               "a_noun": "An answer", "noun": "answer",
+               "heading": "THE APPLICATION ANSWER TO CHECK"},
+}
+
+# Only an answer carries this. It sits beside a posting several times its own
+# length, and the posting's requirement list reads like claims.
+_ANSWER_SCOPE = (
+    f"Claims come ONLY from the section headed "
+    f"'=== {KINDS['answer']['heading']} ==='. The job posting is evidence for "
+    f"employer claims and nothing else: a requirement it lists is what the "
+    f"employer wants, not something the candidate claimed, so never extract "
+    f"a claim from it.")
+
+
+def _kind(kind: str) -> dict:
+    try:
+        return KINDS[kind]
+    except KeyError:
+        raise ValueError(f"unknown grounding kind {kind!r}; expected one of "
+                         f"{sorted(KINDS)}") from None
+
+
+def schema_for(kind: str = "letter") -> dict:
+    """The response schema for `kind`. A letter gets GROUNDING_SCHEMA itself.
+
+    An answer's `claim` field carries the scope rule, because the field the
+    model fills is where a rule has to be for it to hold — HANDOFF §5 found
+    a rule stated in prose and missing at the point of use four times.
+    """
+    k = _kind(kind)
+    if kind == "letter":
+        return GROUNDING_SCHEMA
+    schema = copy.deepcopy(GROUNDING_SCHEMA)
+    claim = schema["properties"]["claims"]["items"]["properties"]["claim"]
+    claim["description"] = (f"The factual assertion, quoted or closely "
+                            f"paraphrased from the {k['noun']}. "
+                            f"{_ANSWER_SCOPE}")
+    return schema
+
 
 @dataclass
 class GroundingResult:
@@ -122,14 +173,21 @@ class GroundingResult:
         return "\n".join(lines)
 
 
-def build_system_prompt(bank: Bank, profile: str) -> str:
-    """Cacheable prefix: the adversarial framing plus all candidate evidence."""
+def build_system_prompt(bank: Bank, profile: str,
+                        kind: str = "letter") -> str:
+    """Cacheable prefix: the adversarial framing plus all candidate evidence.
+
+    `kind` names what is under test and must match the `kind` given to
+    `check`. A letter's prompt is byte-identical to before it existed.
+    """
+    k = _kind(kind)
     lines = [
-        "You are checking a cover letter for claims its evidence does not "
+        f"You are checking {k['what']} for claims its evidence does not "
         "support. You are not editing it and not judging whether it is good.",
         "",
         "Assume something is wrong until you have found the sentence that "
-        "supports it. A letter that reads plausibly is the normal case for a "
+        f"supports it. {k['a_noun']} that reads plausibly is the normal "
+        "case for a "
         "fabricated claim — plausibility is what generation optimises for. "
         "Your job is the part that plausibility does not cover.",
         "",
@@ -147,6 +205,7 @@ def build_system_prompt(bank: Bank, profile: str) -> str:
         "questions. 'I find evaluation design absorbing' is not a factual "
         "claim. 'I designed a controlled ablation' is.",
         "",
+        *([_ANSWER_SCOPE, ""] if kind != "letter" else []),
         "=== HOW TO JUDGE ===",
         "",
         "Set `about` first, because it decides which evidence applies:",
@@ -155,7 +214,8 @@ def build_system_prompt(bank: Bank, profile: str) -> str:
         "below. Nothing else counts. If the profile does not say it, it is "
         "not supported, however reasonable it sounds.",
         "  * `employer` — check against the JOB POSTING supplied with the "
-        "letter. A product name, team structure or technical detail not in "
+        f"{k['noun']}. A product name, team structure or technical "
+        "detail not in "
         "the posting is unsupported even if it is probably true, because "
         "nothing here can confirm it.",
         "",
@@ -182,17 +242,25 @@ def build_system_prompt(bank: Bank, profile: str) -> str:
 
 def check(provider: ScoringProvider, bank: Bank, letter_text: str,
           posting_text: str, system_prompt: str,
-          model: str | None = None) -> GroundingResult:
-    """Verify one letter. Never modifies it — §2.2 forbids auto-correction."""
+          model: str | None = None,
+          kind: str = "letter") -> GroundingResult:
+    """Verify one letter or form answer. Never modifies it — §2.2 forbids
+    auto-correction.
+
+    `kind` (see KINDS) decides the section heading and the response schema,
+    and `system_prompt` must have been built for the same kind. A short answer
+    on an application form is checked by the same rules as a letter (§6.1).
+    """
+    k = _kind(kind)
     # Not the scoring model: this check is short and structured, and on the
     # Vertex backend it runs on 2.5 Flash Lite while scoring runs on Flash.
     model = model or default_grounding_model(provider.name)
     user = (f"=== JOB POSTING (the only evidence for `employer` claims) ===\n"
             f"{posting_text[:10_000]}\n\n"
-            f"=== THE LETTER TO CHECK ===\n{letter_text}")
+            f"=== {k['heading']} ===\n{letter_text}")
 
     response = provider.score(model=model, system_prompt=system_prompt,
-                              user_text=user, schema=GROUNDING_SCHEMA)
+                              user_text=user, schema=schema_for(kind))
     if response.refused:
         raise RuntimeError(
             f"grounding check refused by {model}: {response.refusal_reason}")
