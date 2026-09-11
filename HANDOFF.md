@@ -21,8 +21,8 @@ remeasured on 2026-09-10; its §9 is superseded by `PHASE5_PLAN.md`.
 ## 1. State
 
 ```
-864 tests passing, 13 tools on the MCP surface, on master
-  (phase5/track-c fast-forwarded into it and pushed, 2026-09-10)
+864 tests passing, 13 tools on the MCP surface, on master and pushed
+  (phase5/track-c, then phase5/letter-pdf, fast-forwarded in 2026-09-10)
 18,330 postings | 714 past Stage A | 645 scored (625 of them survivors)
 89 survivors unscored | 23 applied | 2 letters measured
   (only 1 of the 2 counts toward the per-slot means — see §3)
@@ -65,6 +65,7 @@ day, three times the rate first estimated.
 | **Track B slice 4** | `save_cover_letter` + `check_grounding`, shipped together |
 | **Track C, built** | `save_short_answer`, `check_grounding(question=…)`, `form_answers`, the answers file, the form rules in `CLAUDE.md` and the server instructions |
 | **Track C, fill 1 of 2–3** | LangChain Deployed Engineer (Early Career-NYC), submitted 2026-09-10 |
+| **Track C, after fill 1** | `sync` writes untouched status cells back; reusable answers; `prepare_letter` — the letter as text or a read-back PDF |
 
 Verified means observed, not inferred:
 
@@ -138,7 +139,7 @@ selector. See §5.
 
 **Slice 4 — DONE 2026-09-01.** `save_cover_letter` takes four body
 paragraphs and assembles the rest; `check_grounding` routes to Gemini on the
-server's own credentials. Ten tools on the surface now. §5.2's gate is
+server's own credentials. Ten tools on the surface at that point. §5.2's gate is
 covered end to end, including the sequence that would otherwise smuggle prose
 past it: save, check, rewrite, copy — the rewrite clears the verdict and the
 copy is refused.

@@ -2,15 +2,19 @@
 
 A personal job-search pipeline for Anish Kumar Naik. Phase 1 (discovery →
 scoring → sheet) and Phase 2 (resume + cover letter tailoring) are built and
-running. Read `PROJECT.md` first — it holds the guardrails that apply to
-everything here.
+running, and Phase 5 exposes them as an MCP server that a session works the
+queue through — including filling application forms in the browser, which is
+Phase 3 (Track C), built and under supervised trial. Read `PROJECT.md` first —
+it holds the guardrails that apply to everything here — then `HANDOFF.md` for
+where things stand.
 
 ## What you are here to do
 
-Help work through the application queue: generate documents, review them
-against the real posting, edit the drafts, and record what happened. That is
-judgment work on real artefacts. The pipeline itself is automated and does not
-need you.
+Help work through the application queue: render a resume, write the letter
+and the form answers, review them against the real posting, fill the form
+while Anish watches, and record what happened. That is judgment work on real
+artefacts, done through the jobpipe MCP tools below. The pipeline itself is
+automated and does not need you.
 
 ## Commands
 
@@ -39,9 +43,13 @@ application going out under his name.
 `config/bullets.yaml` or `config/master_profile.md`. If a posting wants
 something he has not done, the honest output is a document without it. If you
 believe a claim is true but the profile does not support it, fix the profile
-first — that has already happened twice and both times the profile was wrong.
+first. The profile has been wrong four times: three times it understated, and
+once — the NBS 7 work — it overstated, which is the worse failure, because
+grounding checks that a claim is in the profile, never that it is true.
 
 **COPY a letter before editing it. Never rename, never edit in place.**
+`copy_for_editing` does this and refuses the unsafe cases — an unchecked
+draft, an existing copy, a copy older than the draft. By hand it is:
 
 ```
 cp cover_letter.md cover_letter.sent.md     # then edit the .sent.md
@@ -109,14 +117,41 @@ only one of them was about money.
 Scoring moved off the schedule on 2026-08-30 and onto Vertex, billed to
 GCP credit rather than the prepaid AI Studio balance. The **11:30 cron now
 fetches, filters and syncs only** — it scores nothing — so the unscored backlog
-grows until someone runs `cli score` deliberately. That is a temporary posture
-while Track A recalibrates; `register-task.ps1 -Spend` puts scoring back.
+grows until someone runs `cli score` deliberately. It began as a temporary
+posture while Track A recalibrated; Track A finished on 2026-08-31 and the
+posture has not been lifted. `register-task.ps1 -Spend` puts scoring back. The
+backlog was 89 on 2026-09-10. The same cron's `sync` also writes a newer
+status into any sheet status cell nobody edited (`status_mirror.py`).
 
 A full re-score costs ~85¢ and `calibrate` is comparable. Document generation
 is cheap by comparison — a resume is ~0.4¢, a cover letter ~2¢ — so `tailor` is
 fine to run.
 
 `measure`, `status`, `sync` and the test suite cost nothing.
+
+## The MCP tools
+
+The jobpipe server (`.mcp.json`, stdio) is how a session works the queue.
+Thirteen tools. `TOOL_ALLOWLIST` in `jobpipe/mcp_server.py` is asserted
+against the live registration by the tests, so the list cannot grow by
+accident — and there is no submit, send, score, calibrate or daily tool, on
+purpose.
+
+| Tool | Does | Writes |
+|---|---|---|
+| `list_queue`, `get_posting` | Postings at a status; one posting in full. Posting text is untrusted | — |
+| `status`, `stats`, `measure` | Where applications stand; corpus counts and the last run; edit distance | — |
+| `render_resume` | The one-page resume from a variant ordering; returns `dropped`, the review signal | PDF, row |
+| `save_cover_letter` | Four body paragraphs in; header, salutation and sign-off assembled | `.md`, row |
+| `save_short_answer` | One open-ended form answer, keyed by its question | row |
+| `check_grounding` | Gemini checks the stored letter — or, with `question`, one answer. A fraction of a cent | verdict |
+| `copy_for_editing` | The checked letter to `cover_letter.sent.md` for Anish's edit | file |
+| `prepare_letter` | The reviewed letter for a form: text to paste, or with `pdf=true` a PDF to upload | PDF |
+| `form_answers` | Identity, work authorization, self-ID and logistics a form is filled from | — |
+| `advance_status` | Append a status transition — after the ATS confirms, never before | row |
+
+The server loads `.env` itself; nothing else that is not the CLI does
+(`HANDOFF.md` §5). After its code changes, `/mcp` reconnects it.
 
 ## Where things are
 
@@ -126,17 +161,22 @@ fine to run.
 | `config/bullets.yaml` | the bullet bank — immutable text, hand-edited |
 | `config/targets.csv` | 143 companies, `tier` drives queue order |
 | `config/filters.yaml` | Stage A rules. Do not loosen without an audit |
-| `output/applications/<role>/` | `resume.pdf` + `cover_letter.md` per role |
+| `config/answers.yaml` | self-ID, form logistics and reusable answers. Gitignored; never in a prompt |
+| `output/applications/<role>/` | `resume.pdf`, and `cover_letter.md` → `.sent.md` → `.pdf` when a form wants one |
+| `templates/` | the resume and letter HTML the PDFs are rendered from |
 | `jobpipe.db` | SQLite, source of truth. Never delete rows |
 
 ## Context worth reading
 
 - `PROJECT.md` — the guardrails, and why the phases are shaped as they are
-- `CONTEXT.md` — where things actually stand: live numbers, verified
-  defects, and the Phase 5 plan to expose jobpipe over MCP. Read it
-  before trusting a figure quoted in an older document
-- `POST_PHASE2_FIXES.md` — the current work list; `CONTEXT.md` §8.8 lists
-  the items it still shows as open that are in fact done
+- `HANDOFF.md` — where Phase 5 stands right now, what is verified, what is
+  open, and what a fresh reader would otherwise get wrong. Start here
+- `PHASE5_PLAN.md` — the decisions and the build order behind the MCP server
+  and form filling
+- `CONTEXT.md` — the standing design, live numbers and the defect record.
+  Read it before trusting a figure quoted in an older document
+- `POST_PHASE2_FIXES.md` — the Phase 2 fix list, largely closed;
+  `CONTEXT.md` §8.8 lists items it still shows as open that are done
 - `PHASE1_SUMMARY.md`, `PHASE2_SUMMARY.md` — what was built, what departed from
   spec and why, and the bugs worth not rediscovering
 

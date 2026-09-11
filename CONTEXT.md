@@ -106,16 +106,22 @@ normalize -> Posting  ->  dedupe (ats_type+source_id, then content_hash)
 Stage A  deterministic word-boundary regex              ~95% kill, $0
       |
       v
-Stage B  gemini-3.1-flash-lite, escalating 5-7 to 3.5-flash-lite
+Stage B  gemini-2.5-flash on Vertex, escalating 5-7 to 2.5-pro
+         on demand (`cli score`) — the 11:30 cron no longer scores
       |
       v
-SQLite jobpipe.db  (source of truth)  ->  Google Sheet (rendered view)
-      |                                     status column is human-owned
+SQLite jobpipe.db  (source of truth)  <->  Google Sheet (rendered view)
+      |                     status: a changed cell is Anish's edit and flows
+      |                     in; an untouched one is written back
       v
-Phase 2:  queued -> resume PDF -> [human commits] -> cover letter -> grounded
+MCP session:  render_resume -> save_cover_letter / save_short_answer
+              -> check_grounding (Gemini) -> copy_for_editing -> his edit
       |
       v
-human reviews, edits a COPY, applies, records the outcome
+browser:  fill from form_answers + prepare_letter, stop before submit
+      |
+      v
+Anish submits -> advance_status -> sync
 ```
 
 Sheet selection (`db.get_sheet_rows`): `apply_score >= 4` floor, optional
@@ -204,6 +210,14 @@ regenerates, `cli header --check` reports drift, and both are free.
 question about transitions; overwriting `interview` with `rejected` destroys
 the evidence the interview happened.
 
+**Status has two writers, and one rule between them.** Anish edits the
+sheet's status cell; a session records through `advance_status`. Only a cell
+that changed since the last sync counts as his edit — `sheet_status`
+remembers each reading — and a cell nobody touched is written back with the
+database's newer status, compare-and-set. The first version compared every
+cell with the database's current status, and reverted the first
+tool-recorded application thirteen seconds later (`HANDOFF.md` §5).
+
 **Content is stored, not pointed at.** Prose regenerates at **0.53 distance
 from itself** at temperature 0. A destroyed baseline is unrecoverable, and a
 regeneration is not a substitute — it would report model variance as human
@@ -228,14 +242,17 @@ These hold across every phase and are not negotiable per-task.
 - **Never fabricate.** Every claim traces to `bullets.yaml` or
   `master_profile.md`. If the posting wants something he has not done, the
   honest output is a document without it. If a claim is true but unsupported,
-  fix the profile first — that has happened twice and both times the profile
-  was wrong.
-- **Copy a letter before editing it.** `cp cover_letter.md cover_letter.sent.md`.
-  Never rename, never edit in place.
+  fix the profile first. It has been wrong four times — three understated, one
+  (NBS 7) overstated, which nothing downstream can catch.
+- **Copy a letter before editing it** — `copy_for_editing`, or
+  `cp cover_letter.md cover_letter.sent.md`. Never rename, never edit in
+  place. A form gets the reviewed copy, through `prepare_letter`.
 - **Never hand-edit `resume.pdf`.** Fix the bank, the variant ordering, or
   `skills` tags, then regenerate.
-- **Never run `cli daily`, `cli score`, or `cli calibrate`** by hand — prepaid
-  balance, ~85¢ for a full re-score. The 11:30 cron no longer scores (§7).
+- **Never run `cli daily`, `cli score`, `cli calibrate` or `cli ground`**
+  unless Anish asks for that run. They spend money — ~85¢ for a full
+  re-score — and the first three write corpus-wide. The 11:30 cron no longer
+  scores (§7). `CLAUDE.md` has the full rule.
 - No LinkedIn/Indeed scraping, no CAPTCHA bypass, secrets stay in `.env`.
 
 ---
@@ -268,7 +285,8 @@ The historical figures below were measured on the Developer API and 3.x models
 and are kept for comparison only: daily scoring ~2.5¢/day at ~0.18¢/posting,
 bullet selection ~0.4¢/resume at 79% cache hit, letters ~2¢ each.
 
-Total Gemini spend across all 22 applications: **~53¢.** Prompt caching does
+Total Gemini spend across the first 22 applications, to 2026-08-31:
+**~53¢.** Prompt caching does
 most of the work — the ~10,204-token profile prefix is byte-identical on every
 call and hits at ~40–79%.
 
@@ -492,7 +510,7 @@ and addendum §6 (SmartRecruiters fetcher shipped).
 > the queue backfill. **Track B complete, all four slices**: five read-only
 > tools, `copy_for_editing` + `advance_status`, `render_resume` with the seven
 > reviewed orderings and the header generator, and `save_cover_letter` +
-> `check_grounding` shipped together. Ten tools on the surface.
+> `check_grounding` shipped together. Ten tools on the surface then.
 >
 > **Track C built 2026-09-10** — `form_answers`, `save_short_answer`, the
 > answers file and the form rules; thirteen tools with `prepare_letter`. One
