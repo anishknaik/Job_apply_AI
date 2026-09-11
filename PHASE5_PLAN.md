@@ -636,6 +636,14 @@ If the sheet's `status` column is to be machine-written, that is a deliberate
 change to who owns that column and should be decided on its own, not as a side
 effect of adding a status tool.
 
+**Found 2026-09-10: the premise above did not hold.** `cli sync` never
+rendered the status column — it read it, and compared each cell with the
+database's current status, so an untouched cell reverted the first status
+`advance_status` recorded. The mirror now records only a cell that changed
+since the last sync (`status_mirror.py`). The column is still never written,
+so the sheet can show a status behind the database, and `sync` reports each
+such row. The ownership decision above is still open.
+
 ---
 
 ## 7. Tool surface
@@ -869,13 +877,57 @@ Gemini. Run them in parallel.
    first edit-distance data points, which will tell you whether §5.4's
    two-distance scheme and the slot labels are right before more is built on
    them.
+
+   **DONE 2026-08-30** (`5e3640b`), exercised on a real application in
+   `ec674e7`. The PostHog draft passed grounding, `copy_for_editing`
+   released it, and it became the first `.sent.md` in the project's history
+   and the first row `measure` has ever had — with the seven block labels on
+   the right blocks, which confirms the Slice 0 slot fix on real output.
+   Using it found one defect the offline tests could not: the copy was
+   rewritten with CRLF, so a whole-file diff showed every line changed. The
+   copy is now byte-identical, and a test asserts bytes.
+
+   `measure` has two data points — PostHog 0.032, University of Utah 0.033 —
+   and only the first counts toward the per-slot means, because the Utah
+   letter was written outside `letters.assemble()`. Slices 3 and 4 went
+   ahead on that deliberately: more letters are only useful once they come
+   out in the assembled shape, and slice 4 is what enforces it
+   (`HANDOFF.md` §3).
 3. **`render_resume`.** Split `pipeline_tailor.generate_resume` into selection
    and render — the pieces are already separable (`bank.select`,
    `resume.render`, `db.insert_document`), so this is decomposition, not
    rewrite. Build the seven variants (§4.2).
+
+   **DONE 2026-09-01**, `2854c75` through `c5769fd`. `render_and_record`
+   split out of `generate_resume`; the seven orderings in
+   `jobpipe/variants.py`, reviewed and signed off; the header generated from
+   `master_profile.md` §12 by `jobpipe/header.py` into
+   `config/header.generated.yaml`, which `load_bank()` overlays.
+   `render_resume` takes a variant and has no `bullet_ids` parameter.
+
+   Rendering the orderings for real overturned §4.2's premise that an
+   ordering is a selection: handed all 21 bullets, the loop cut by
+   within-role `rank`, and since every role has a rank-1 bullet, every role
+   survived every cut. The cut now keys on position (`c5769fd`), with
+   relevance promoting a matching bullet up to four slots. `HANDOFF.md` §5.
 4. **`save_cover_letter` + `check_grounding`, shipped together, never
    separately.** The letter path has an independent checker today; a write
    tool without one is the only configuration worse than the status quo.
+
+   **DONE 2026-09-01** (`58fead2`), shipped together. Ten tools on the
+   surface. `save_cover_letter` takes the four body paragraphs and assembles
+   the header, date, salutation and sign-off server-side; `banned_used()`
+   refuses a draft, while word count is reported and never enforced.
+   `check_grounding` takes no letter text — it checks the stored draft, so
+   the verdict attaches to the bytes it came from — and routes to Gemini on
+   the server's own credentials. §5.2's gate is covered end to end,
+   including save, check, rewrite, copy: the rewrite clears the verdict and
+   the copy is refused.
+
+   §5.4's storage is done — every save is its own revision and earlier
+   drafts survive — but the first-save-to-final-save distance is not built.
+   `measure` still reads only the live row, and no MCP-written letter exists
+   yet to measure.
 
 Tests stay offline throughout — call the tool functions directly, do not stand
 up a transport.
@@ -897,6 +949,19 @@ it does not — but because the artifacts it attaches are the ones slices 3 and
 4 produce, and because filling a form with a resume whose variant set is still
 being reshaped means redoing it. Start with two or three applications filled
 under close supervision before treating the instructions as settled.
+
+**BUILT 2026-09-10, one supervised fill of two or three.** The answers file
+is `config/answers.yaml` (gitignored; `answers.example.yaml` ships), read
+through `form_answers` — a read-only tool rather than the MCP resource
+§6.1.1 names, because a tool behaves the same in every client. Identity and
+work authorization come from §12, read live. Short answers go through
+`save_short_answer` and `check_grounding(question=…)`. The rules are in
+`CLAUDE.md` and the server instructions.
+
+Fill 1 was LangChain, submitted 2026-09-10, and it found what the offline
+suite could not: a single-line answer box strips paragraph breaks, dropdown
+wording is set per company, Ashby carries a hidden reCAPTCHA field, and the
+premise of §6.2 did not hold. `HANDOFF.md` §4–§5 has the account.
 
 ---
 

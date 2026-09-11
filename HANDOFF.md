@@ -1,25 +1,30 @@
-# Handoff — 2026-09-01
+# Handoff — 2026-09-10
 
 Where Phase 5 actually stands, what is verified against what is assumed, and
 what in the session transcript has since been overturned.
+
+**Updated 2026-09-10: Track C is built, and the first application has gone
+through it end to end** — resume, two grounded form answers, a supervised
+fill, submitted by Anish. That run found three defects the offline suite
+could not; they are in §4 and §5. §5a is rewritten for what comes next.
 
 Read this before `session_2026-08-31_phase5.txt`. The transcript is a record of
 what was *said*, and several things in it were corrected by later turns — a
 fresh reader going straight through will absorb the wrong versions. The
 corrections are in §5.
 
-Read after `PROJECT.md` and `PHASE5_PLAN.md`. `CONTEXT.md` is now the stalest
-of the three: §7's Vertex question is settled, and §9 is superseded by
-`PHASE5_PLAN.md`.
+Read after `PROJECT.md` and `PHASE5_PLAN.md`. `CONTEXT.md` §2 and §4 were
+remeasured on 2026-09-10; its §9 is superseded by `PHASE5_PLAN.md`.
 
 ---
 
 ## 1. State
 
 ```
-46 commits, 777 tests passing, branch phase5/track-a-step5
-  (13 ahead of master, a fast-forward; phase5/slice-0 trails at 8d3deee)
-16,669 postings | 625 past Stage A | 635 scored | 2 letters measured
+837 tests passing, 12 tools on the MCP surface, branch phase5/track-c
+  (off master at 476df9b; master and origin/master unmoved)
+18,330 postings | 714 past Stage A | 645 scored (625 of them survivors)
+89 survivors unscored | 23 applied | 2 letters measured
   (only 1 of the 2 counts toward the per-slot means — see §3)
 ```
 
@@ -42,7 +47,9 @@ script outside the repo root silently gets nothing.
 Scheduled run is 11:30, S4U, **fetch/filter/sync only — it scores nothing.**
 That is a deliberate temporary posture while calibration settles;
 `register-task.ps1 -Spend` puts scoring back. Consequence: an unscored backlog
-grows about 3/day and nothing reaches the sheet until someone runs `cli score`.
+grows, and nothing new reaches the sheet until someone runs `cli score`. It
+stood at 89 on 2026-09-10, ten days after the last scoring run — about 9 a
+day, three times the rate first estimated.
 
 ---
 
@@ -56,6 +63,8 @@ grows about 3/day and nothing reaches the sheet until someone runs `cli score`.
 | **Track A, all 6** | probe, `VertexGeminiProvider`, rubric + `domain`, holdout gate, recalibration, queue backfill |
 | **Track B slice 3** | `render_resume`, the seven reviewed orderings, the header generator |
 | **Track B slice 4** | `save_cover_letter` + `check_grounding`, shipped together |
+| **Track C, built** | `save_short_answer`, `check_grounding(question=…)`, `form_answers`, the answers file, the form rules in `CLAUDE.md` and the server instructions |
+| **Track C, fill 1 of 2–3** | LangChain Deployed Engineer (Early Career-NYC), submitted 2026-09-10 |
 
 Verified means observed, not inferred:
 
@@ -89,12 +98,30 @@ Verified means observed, not inferred:
   direction. An overstating profile is the more dangerous failure, because
   nothing downstream can catch it: the fabrication firewall checks that a
   bullet *exists*, never that it is *true*.
+- **The first application through Track C, observed at every step**
+  (posting 1642). `render_resume` ran live for the first time at 9.0pt, so
+  the server's `.env` fix holds; 14 bullets, drop list reviewed. Two form
+  answers were saved, passed Gemini's check, were typed in, and were
+  compared with the stored copies by SHA-256. `form_answers` read the real
+  files. reCAPTCHA was left alone, Anish submitted, and `advance_status`
+  recorded it. **The letter path did not run** — the form asked for no
+  letter — so `save_cover_letter` and `copy_for_editing` are still
+  exercised offline only.
+- **The profile was wrong a fourth time — understating, like the first
+  two.** "Have you shipped and operated production software?" turned on a
+  fact §2 did not hold: the client hosted the lesson-plan pipeline, and
+  Gradient Tensor kept developer access and fixed and updated it while it
+  was in use. §2 says so now, with a precision point forbidding "hosted" or
+  "ran the infrastructure". §12 also gained `work_authorization` and
+  `github`.
 
 ---
 
 ## 3. Open
 
-**Track B is complete, all four slices. Next is Track C.**
+**Track B is complete, all four slices. Track C is built and has one
+supervised fill behind it; two more before its rules are settled.** What is
+still open in it is listed under Track C below.
 
 **Slice 3 — DONE 2026-09-01.** `render_and_record` split out of
 `generate_resume`; seven orderings in `jobpipe/variants.py`, reviewed and
@@ -130,9 +157,33 @@ earlier drafts survive intact — but `measure` still only reads the live row,
 and there are no MCP-written letters yet to measure. Small addition when
 there is data.
 
-**Track C** — form filling, `PHASE5_PLAN` §6.1. The answers resource and the
-session instructions. Sequenced after slice 4 because it attaches the
-artifacts slices 3 and 4 produce.
+**Track C — BUILT 2026-09-10**, `PHASE5_PLAN` §6.1. Twelve tools now.
+`save_short_answer` stores each form answer under its question — a
+`documents.question` column keys supersession, so answering Q2 never retires
+Q1 — and `check_grounding(question=…)` checks it with the letter's checker.
+`form_answers` is read-only: §12 of the profile read live, plus the
+gitignored `config/answers.yaml`, which holds self-ID as the form's exact
+option text behind a loader that refuses a YAML boolean. It is a tool rather
+than the MCP resource §6.1.1 names, because a tool behaves the same in every
+client. The rules are a section of `CLAUDE.md` and, shorter, the server
+instructions, so a Cowork session gets them too.
+
+Open in Track C:
+
+- **Two more supervised fills.** Prefer forms that ask for a letter, so the
+  letter path finally runs live — which needs the next item first.
+- **A letter as a file.** Letters are stored as markdown, so a form that
+  wants a letter *upload* has no tool-produced file to attach. Paste where a
+  text box is offered, or render the edited `.sent.md` to PDF with the
+  resume renderer — undecided.
+- **Who owns the sheet's status column** (§6.2). `sync` no longer reverts a
+  tool-recorded status (§5), but it still never writes the cell, so the
+  sheet shows a status behind the database until Anish updates it; `sync`
+  reports each such row. Leave it, or let `sync` write that column — an
+  ownership decision, deliberately not taken as a side effect.
+- **The answers file holds no reusable answers yet** (§6.1.1 constraint 2).
+  LangChain's customer-experience answer is the obvious first entry, and
+  would still be re-checked on every use.
 
 **Track A step 5 — DONE 2026-08-31**, against `2026-08-31.3` over the merged
 56-posting set. Rank agreement +0.808, the best any configuration has
@@ -153,15 +204,7 @@ and gave it a variant on that basis. Two live postings is not yet evidence
 against it — but if it stays at 2 after a few more fetches, the variant's
 priority is wrong.
 
-Track A is complete. **Next is Track B slice 3.**
-
-**Track B slice 3** — `render_resume`: split `pipeline_tailor.generate_resume`,
-build the seven variant orderings, add the header generator from
-`master_profile.md` §12. The orderings need a human review; that is the part
-where being wrong makes every resume in a lane wrong the same way.
-
-**Track B slice 4** — `save_cover_letter` + `check_grounding`, shipped
-together, never separately.
+Track A is complete.
 
 **More measured letters — and they have to be assembled ones.** The open
 question is still `why this role` at 0.110 against ~0.01 elsewhere, ten times
@@ -178,10 +221,11 @@ counting. The whole-document distances do aggregate, and the two agree closely
 (0.032 and 0.033).
 
 So the two or three letters that settle this must come out of the assembled
-seven-block shape. That is an argument for **slice 4 before more letters**:
-`save_cover_letter` takes the four body paragraphs and assembles the
-scaffolding server-side, which makes the mismatch structurally impossible
-rather than something to remember.
+seven-block shape. That was the argument for **slice 4 before more
+letters**, and slice 4 has shipped: `save_cover_letter` takes the four body
+paragraphs and assembles the scaffolding server-side, so the mismatch is now
+structurally impossible rather than something to remember. The next letters
+written through it are the ones that settle the question.
 
 ---
 
@@ -193,8 +237,29 @@ make — the sheet ranks. Spread already matches (2.401 vs 2.43) and both false
 negatives are fixed, so this is cosmetic for a ranked sheet. **Two attempts to
 fix it both made ranking worse** (§5).
 
-**`CONTEXT.md` is stale.** §7's open Vertex question is answered; §9 is
-superseded.
+**Posting text is frozen at first sight.** `db.upsert_posting` only touches
+`last_seen_at` when a posting is seen again, so an employer's later edit
+never lands. LangChain rewrote the Deployed Engineer posting on 08-17 —
+"3+ years" became "1-3 years", "Sales Engineers" became "Deployed Engineers",
+the pay band rose — and the 08-31 score, `get_posting` and grounding's
+employer evidence all carried the 08-12 text. The fix is a decision, not a
+patch: the stored text is what the score was computed from and what repost
+detection hashes, and overwriting it loses both.
+
+**`tests/test_grounding.py` fails run on its own.** It needs
+`JOBPIPE_GEMINI_BACKEND`, and passes in the full suite only because an earlier
+test loads `.env` into the process. A test-order dependency.
+
+**One false event in the status log.** Event 116 is a sheet-sourced
+`not_applied` for LangChain, thirteen seconds after `advance_status`
+recorded `applied` — the mirror bug in §5. The log is append-only, so it
+stays, and the advance-rate history shows one regression that never
+happened.
+
+**Comments in `mcp_server.py` promise resources that do not exist.** Two
+say the banned phrases and the letter word target are "in the resources";
+no MCP resource is registered. A session writing a letter finds that
+guidance only by reading files.
 
 **Two experiments are off by default, with the mechanism kept and tested:**
 `JOBPIPE_CALIBRATION_EXAMPLES` and `JOBPIPE_SCOPE_CEILING`.
@@ -301,40 +366,52 @@ absolute scores degraded rank. **The profile fix was the only change that
 helped, and it worked by removing a rule the model was misreading rather than
 by adding one.**
 
+**The checker was told it was reading a letter — a fifth instance of the
+pattern above.** `check_grounding` gained a heading for form answers while
+the system prompt still said "a cover letter" and the `claim` field "from
+the letter". With no section called a letter, Flash Lite took 38 of 45
+claims from the job posting's requirement list and judged them as the
+candidate's, and a clean answer failed on "You've deployed AI agents in
+production", a line it never contained. Fixed by relocation again: one
+`kind` drives the prompt, the schema and the heading, and an answer's
+`claim` field carries the rule that the posting is evidence, never a source
+of claims. The letter's request is byte-identical, checked by hash.
+
+**§6.2's premise was never implemented.** "`advance_status` appends to
+SQLite, and `cli sync` renders it" — but `sync` never wrote the status
+column, and it did read it, comparing each cell with the database's
+*current* status and recording any difference as a human edit. So the first
+application recorded through the tool was reverted thirteen seconds later,
+by the untouched cell it had superseded. The mirror had no tests: it was a
+closure inside `cli sync`. It is `status_mirror.py` now, with nine, and only
+a cell that changed since the last sync counts as an edit — `sheet_status`
+remembers each reading. **A path with two writers was designed on paper and
+tested with one.**
+
 ---
 
 ## 5a. Start here next session
 
-**Track C, form filling** (`PHASE5_PLAN` §6.1). Two pieces, and neither is
-code:
+**Track C's second supervised fill** — and choose the posting for what it
+exercises: a form that asks for a cover letter. That runs the one path still
+untested live — `save_cover_letter`, `check_grounding`, `copy_for_editing`,
+Anish's edit, `measure` — and produces the first letter in the assembled
+seven-block shape, which is what the open `why this role` question needs
+(§3). Settle the letter-as-a-file question (§3) before that form, not during
+it.
 
-1. **The answers resource** (§6.1.1) — reusable short answers, the four
-   self-ID answers as verbatim option text, and an ATS-shaped profile view
-   that does not fork from `master_profile.md`. Note §12 deliberately
-   excludes the self-ID answers: that file is the system prefix on every
-   Stage B call, so anything in it reaches the scorer ~10 times a day, and
-   protected-characteristic data has no bearing on a score.
-2. **The session instructions** — field classes, the untrusted-page rule,
-   the attachment rule, tab scoping, stop-before-submit.
+Then the third fill, and then mark the rules settled in `CLAUDE.md`.
 
-The browser surface is the Claude extension in Chrome. It exposes the whole
-logged-in browser rather than one tab, so the instructions must scope work to
-the application tab. Start with two or three applications filled under close
-supervision before treating the instructions as settled.
-
-**Before that, two cheap things worth doing first.** Use the new tools on one
-real application end to end — `render_resume`, `save_cover_letter`,
-`check_grounding`, `copy_for_editing` — because everything in Track B is
-tested offline and only slices 1 and 2 have ever been exercised live. And
-that produces the first letter written through the assembled seven-block
-shape, which is what the `why this role` question needs (§3).
+Three decisions are Anish's and waiting: who owns the sheet's status column
+(§3), the stale-posting fix (§4), and when to score the backlog of 89 —
+`cli score` spends money, so price it first and run it only when asked.
 
 Tests stay offline: call the tool functions directly, do not stand up a
 transport.
 
 `cli score --queue` is the tool for a rubric change from here — it rescores
 only queued postings off the current rubric, deletes nothing, and is safe to
-re-run. `--rescore` still means "delete all 635 scores"; it is almost never
+re-run. `--rescore` still means "delete all 645 scores"; it is almost never
 what you want.
 
 ---

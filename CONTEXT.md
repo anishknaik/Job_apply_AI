@@ -1,6 +1,7 @@
 # jobpipe — Context
 
-> Written 2026-08-29, **§2 and §7 remeasured 2026-08-31.** Every number in §2
+> Written 2026-08-29, **§2 and §7 remeasured 2026-08-31; §2 and §4 again on
+> 2026-09-10.** Every number in §2
 > was read from the live system on that date rather than copied forward,
 > because several figures in `PHASE1_SUMMARY.md` and `POST_PHASE2_FIXES.md`
 > had drifted.
@@ -37,37 +38,37 @@ metric is interviews per hour spent, not applications per day.
 |---|---|---|
 | 1 | Discovery → dedupe → filters → LLM scoring → Google Sheet | Fetch/filter/sync unattended daily 11:30; scoring on demand |
 | 2 | Queued role → tailored resume PDF → cover letter → grounding check | Running on demand |
-| 3 | Application form fill, human clicks submit | Not started, deliberately blocked (§8.4) |
+| 3 | Application form fill, human clicks submit | Built as Phase 5 Track C; one supervised fill (LangChain, 2026-09-10) |
 | 4 | Recruiter research → outreach drafts | Not started |
-| 5 | **MCP server + Cowork — the final version** | Slice 0 + Tracks A and B done; Track C (form filling) not started |
+| 5 | **MCP server + Cowork — the final version** | Slice 0 + Tracks A, B and C built; Track C has 1 of 2–3 supervised fills |
 
 ---
 
-## 2. Where it stands today (2026-08-31, remeasured)
+## 2. Where it stands today (2026-09-10, remeasured)
 
 | | |
 |---|---|
-| Postings ingested | 16,669 |
-| Stage A survivors / scored | 625 / 635 |
+| Postings ingested | 18,330 |
+| Stage A survivors / scored | 714 / 645 — 625 of the survivors scored, 89 not |
 | Scoring models in the corpus | `3.1-flash-lite` 427, `3.5-flash-lite` 138, `2.5-pro` 56, `2.5-flash` 14 |
 | Rubric versions in the corpus | none 565, `2026-08-31.3` 66, `.2` 3, `.4` 1 |
-| Applications | 22 applied, 1 drafted, 44 not_applied (113 status events) |
-| Documents | 53 rows — 28 resumes, 25 letters |
+| Applications | 23 applied, 1 drafted, 44 not_applied (117 status events) |
+| Documents | 58 rows — 29 resumes, 25 letters, 4 form answers |
 | Letters with stored content | 13 (the `content` column postdates the first batch) |
 | **Edit distances computed** | **2** — PostHog 0.032, U. of Utah 0.033 |
 | Targets | 143 companies — tier 1: 8, tier 2: 93, tier 3: 42 |
 | ATS split | greenhouse 72, ashby 70, smartrecruiters 1 |
 | Bullet bank | 21 bullets across 10 roles |
-| Tests | **777 pass, 0 fail** |
-| Last scheduled run | 2026-08-31 15:30 UTC — 13,899 fetched, 40 new, **0 scored** |
+| Tests | **837 pass, 0 fail** |
+| Last scheduled run | 2026-09-10 15:30 UTC — 13,661 fetched, 208 new, **0 scored** |
 | Billing | Vertex, GCP credit. The prepaid AI Studio balance is no longer drawn on |
 
 **The scheduled run no longer scores.** It fetches, filters and syncs only, so
 an unscored backlog accumulates until someone runs `cli score` deliberately.
 That is a temporary posture while calibration settles; `register-task.ps1
--Spend` puts scoring back. As of this measurement the backlog is 0 — recent
-fetches have produced no Stage A survivors — so the 3/day estimate in
-`HANDOFF.md` is a historical average, not a current rate.
+-Spend` puts scoring back. On 2026-09-10 the backlog was 89 — about 9 a day
+across the ten daily runs since scoring stopped, three times the rate first
+estimated.
 
 The mixed provenance in rows 3 and 4 is deliberate, not drift: `PHASE5_PLAN`
 §3.5 keeps the 3.1-era corpus as historical record and rescores only what
@@ -125,32 +126,35 @@ max 3 per company applied *during* selection rather than after truncation.
 
 ## 4. Module map
 
-9,895 lines of Python across 33 modules, 777 offline tests.
+10,410 lines of Python across 35 modules, 837 offline tests.
 
 | Module | Lines | Does |
 |---|---|---|
-| `cli.py` | 1075 | 17 subcommands; the only entry point |
-| `db.py` | 684 | Schema, migrations, sheet-row ranking, documents, status log |
-| `scoring.py` | 610 | Stage B rubric, escalation, spend cap, cache accounting |
+| `cli.py` | 1274 | 18 subcommands; the only entry point |
+| `db.py` | 871 | Schema, migrations, sheet-row ranking, documents, status log |
+| `scoring.py` | 901 | Stage B rubric, escalation, spend cap, cache accounting |
 | `sheets.py` | 518 | Service-account sync; never writes human columns |
-| `letters.py` | 470 | Prompt, banned phrases, closing-shape rule, assembly |
-| `resume.py` | 463 | HTML → Playwright PDF, one-page loop, ATS parse check |
-| `calibrate.py` | 433 | Hand-scored set vs model — MAE, bias, recall/precision |
+| `letters.py` | 544 | Prompt, banned phrases, closing-shape rule, assembly |
+| `resume.py` | 521 | HTML → Playwright PDF, one-page loop, ATS parse check |
+| `calibrate.py` | 552 | Hand-scored set vs model — MAE, bias, recall/precision |
 | `filters.py` | 333 | Stage A rules from `config/filters.yaml` |
-| `tailor.py` | 262 | Bullet selection; ids compiled into the response schema |
-| `measure.py` | 251 | Levenshtein per letter and per paragraph slot |
-| `bullets.py` | 235 | The bank; `Bank.select` raises on an unknown id |
-| `grounding.py` | 210 | Claim extraction and routing to evidence |
-| `pipeline.py` / `pipeline_tailor.py` | 148 / 131 | The two runs |
-| `providers/` | 256 | Gemini + Anthropic behind one interface |
-| `mcp_server.py` | 831 | The 10-tool MCP surface. Thin: imports and calls |
+| `tailor.py` | 283 | Bullet selection; ids compiled into the response schema |
+| `measure.py` | 274 | Levenshtein per letter and per paragraph slot |
+| `bullets.py` | 249 | The bank; `Bank.select` raises on an unknown id |
+| `grounding.py` | 280 | Claim extraction and routing to evidence — letters and form answers |
+| `pipeline.py` / `pipeline_tailor.py` | 148 / 163 | The two runs |
+| `providers/` | 671 | Gemini (Developer API and Vertex) + Anthropic behind one interface |
+| `mcp_server.py` | 1010 | The 12-tool MCP surface. Thin: imports and calls |
 | `variants.py` | 233 | The seven orderings, headlines, `(lane, domain)` grid |
-| `header.py` | 214 | Generates the resume header from `master_profile.md` §12 |
-| `fetchers/` | 515 | Greenhouse, Ashby, SmartRecruiters, SSRF-guarded HTTP |
+| `header.py` | 225 | The one parser for §12; generates the resume header from it |
+| `answers.py` | 138 | Form answers: the answers file, the §12 view, short-answer keys |
+| `status_mirror.py` | 80 | Sheet status column → event log, edits only |
+| `fetchers/` | 535 | Greenhouse, Ashby, SmartRecruiters, SSRF-guarded HTTP |
 
-Config: `master_profile.md` (534 lines, gitignored, source of truth for every
-claim), `bullets.yaml` (568), `filters.yaml` (432), `states.yml` (108),
-`targets.csv` (143 rows).
+Config: `master_profile.md` (646 lines, gitignored, source of truth for every
+claim), `bullets.yaml` (570), `filters.yaml` (458), `states.yml` (108),
+`targets.csv` (143 rows), and `answers.yaml` (gitignored; self-ID and form
+logistics, never in a prompt).
 
 ---
 
@@ -366,6 +370,7 @@ Everything here was reproduced on 2026-08-29. **Status as of 2026-08-31:**
 | 8.6 grounding not independent of the writer | **fixed by inversion** — slice 4: Claude writes, `check_grounding` routes to Gemini |
 | 8.7 smaller confirmed items | mostly closed in Slice 0; `title_exclude 'lead'` audited and kept, `63fa270` |
 | 8.8 already done but not recorded | still accurate |
+| 8.9 posting text frozen at first sight | **open** — found 2026-09-10, `HANDOFF.md` §4 |
 
 **8.5 deserves a specific note**, because its conclusion was inverted twice.
 It reported the model over-scoring and recommended tightening. Two attempts to
@@ -488,9 +493,9 @@ and addendum §6 (SmartRecruiters fetcher shipped).
 > reviewed orderings and the header generator, and `save_cover_letter` +
 > `check_grounding` shipped together. Ten tools on the surface.
 >
-> **Next is Track C**, form filling (§6.1 of the plan) — the answers resource
-> and the session instructions. Sequenced here deliberately: it attaches the
-> artifacts slices 3 and 4 produce.
+> **Track C built 2026-09-10** — `form_answers`, `save_short_answer`, the
+> answers file and the form rules; twelve tools. One supervised fill is done
+> (LangChain, submitted), with two more before the rules are settled.
 
 The end state is that the human work left in this project — reviewing a resume
 against the real posting, writing and tightening a letter, deciding what to
