@@ -21,7 +21,7 @@ python -m jobpipe.cli tailor --cover-letter <id> --yes
 python -m jobpipe.cli measure [--detail]           # edit distance, free
 python -m jobpipe.cli status                       # where applications stand
 python -m jobpipe.cli sync                         # mirror the sheet, free
-python -m pytest tests/ -q                         # 847 tests, no network
+python -m pytest tests/ -q                         # 864 tests, no network
 ```
 
 Posting ids come from `postings.id` in `jobpipe.db`.
@@ -244,10 +244,13 @@ a hidden `g-recaptcha-response` textarea, which is bot detection; any
 challenge at submit is Anish's.
 
 **Attachments.** Only the files the tools produced for *this* posting: the
-`resume.pdf` from `render_resume`, and a letter only if the form asks for one
-and it has passed `check_grounding`. Never a file from anywhere else, never
-an older draft. Letters are stored as markdown, so a form that wants the
-letter as a file upload is not solved yet — stop and ask.
+`resume.pdf` from `render_resume`, and a letter only if the form asks for
+one. The letter always comes from `prepare_letter`, which reads the copy
+Anish reviewed (`cover_letter.sent.md`) and refuses anything else. Where the
+form has a letter text box, paste its `text` exactly. Where the form wants a
+file, call it with `pdf=true` and upload the PDF it renders — one page, and
+read back against the approved text before it is handed over. Never a file
+from anywhere else, never an older draft.
 
 **Stop before submit.** Fill, then go through the whole form once and report
 to Anish: what was filled from which source, what was left blank and why,

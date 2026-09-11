@@ -59,7 +59,7 @@ metric is interviews per hour spent, not applications per day.
 | Targets | 143 companies — tier 1: 8, tier 2: 93, tier 3: 42 |
 | ATS split | greenhouse 72, ashby 70, smartrecruiters 1 |
 | Bullet bank | 21 bullets across 10 roles |
-| Tests | **847 pass, 0 fail** |
+| Tests | **864 pass, 0 fail** |
 | Last scheduled run | 2026-09-10 15:30 UTC — 13,661 fetched, 208 new, **0 scored** |
 | Billing | Vertex, GCP credit. The prepaid AI Studio balance is no longer drawn on |
 
@@ -126,7 +126,7 @@ max 3 per company applied *during* selection rather than after truncation.
 
 ## 4. Module map
 
-10,494 lines of Python across 35 modules, 847 offline tests.
+10,660 lines of Python across 36 modules, 864 offline tests.
 
 | Module | Lines | Does |
 |---|---|---|
@@ -144,11 +144,12 @@ max 3 per company applied *during* selection rather than after truncation.
 | `grounding.py` | 280 | Claim extraction and routing to evidence — letters and form answers |
 | `pipeline.py` / `pipeline_tailor.py` | 148 / 163 | The two runs |
 | `providers/` | 671 | Gemini (Developer API and Vertex) + Anthropic behind one interface |
-| `mcp_server.py` | 1011 | The 12-tool MCP surface. Thin: imports and calls |
+| `mcp_server.py` | 1099 | The 13-tool MCP surface. Thin: imports and calls |
 | `variants.py` | 233 | The seven orderings, headlines, `(lane, domain)` grid |
 | `header.py` | 225 | The one parser for §12; generates the resume header from it |
 | `answers.py` | 159 | Form answers: the answers file, reusable answers, the §12 view |
 | `status_mirror.py` | 122 | Sheet status ↔ event log: edits in, newer statuses written back |
+| `letter_pdf.py` | 78 | The reviewed letter as a one-page PDF, read back before it is used |
 | `fetchers/` | 535 | Greenhouse, Ashby, SmartRecruiters, SSRF-guarded HTTP |
 
 Config: `master_profile.md` (646 lines, gitignored, source of truth for every
@@ -494,7 +495,8 @@ and addendum §6 (SmartRecruiters fetcher shipped).
 > `check_grounding` shipped together. Ten tools on the surface.
 >
 > **Track C built 2026-09-10** — `form_answers`, `save_short_answer`, the
-> answers file and the form rules; twelve tools. One supervised fill is done
+> answers file and the form rules; thirteen tools with `prepare_letter`. One
+> supervised fill is done
 > (LangChain, submitted), with two more before the rules are settled.
 
 The end state is that the human work left in this project — reviewing a resume

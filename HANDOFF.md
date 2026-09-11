@@ -21,7 +21,7 @@ remeasured on 2026-09-10; its §9 is superseded by `PHASE5_PLAN.md`.
 ## 1. State
 
 ```
-847 tests passing, 12 tools on the MCP surface, on master
+864 tests passing, 13 tools on the MCP surface, on master
   (phase5/track-c fast-forwarded into it and pushed, 2026-09-10)
 18,330 postings | 714 past Stage A | 645 scored (625 of them survivors)
 89 survivors unscored | 23 applied | 2 letters measured
@@ -157,7 +157,7 @@ earlier drafts survive intact — but `measure` still only reads the live row,
 and there are no MCP-written letters yet to measure. Small addition when
 there is data.
 
-**Track C — BUILT 2026-09-10**, `PHASE5_PLAN` §6.1. Twelve tools now.
+**Track C — BUILT 2026-09-10**, `PHASE5_PLAN` §6.1. Thirteen tools now.
 `save_short_answer` stores each form answer under its question — a
 `documents.question` column keys supersession, so answering Q2 never retires
 Q1 — and `check_grounding(question=…)` checks it with the letter's checker.
@@ -171,13 +171,17 @@ instructions, so a Cowork session gets them too.
 Open in Track C:
 
 - **Two more supervised fills.** Prefer forms that ask for a letter, so the
-  letter path finally runs live — which needs the next item first.
-- **A letter as a file.** Letters are stored as markdown, so a form that
-  wants a letter *upload* has no tool-produced file to attach. Paste where a
-  text box is offered, or render the edited `.sent.md` to PDF with the
-  resume renderer — undecided.
+  letter path finally runs live.
 
 Decided and done the same day:
+
+- **A letter goes in as text or as a PDF — Anish's call.** `prepare_letter`
+  returns the reviewed copy (`cover_letter.sent.md`, never the draft) to
+  paste where a form has a letter box, and with `pdf=true` renders it for a
+  file field: one page via the resume's Chromium path, then read back and
+  refused unless its text is the approved letter word for word. It refuses
+  an ungrounded draft, a missing reviewed copy, or a copy older than the
+  draft. Checked on the real PostHog letter: 423 words, one page at 11pt.
 
 - **`sync` writes the sheet's status column — for untouched cells only.**
   Anish's call (§6.2). A cell nobody edited since the last sync, whose
@@ -403,8 +407,8 @@ exercises: a form that asks for a cover letter. That runs the one path still
 untested live — `save_cover_letter`, `check_grounding`, `copy_for_editing`,
 Anish's edit, `measure` — and produces the first letter in the assembled
 seven-block shape, which is what the open `why this role` question needs
-(§3). Settle the letter-as-a-file question (§3) before that form, not during
-it.
+(§3). Whether the form wants the letter pasted or uploaded, it comes from
+`prepare_letter`.
 
 Then the third fill, and then mark the rules settled in `CLAUDE.md`.
 

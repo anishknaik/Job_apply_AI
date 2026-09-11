@@ -621,6 +621,14 @@ was not produced by `render_resume` / `save_cover_letter`,** and never attach a
 `.sent.md` that predates the current draft. Uploading a stale file is the
 `measure` failure mode wearing a different hat.
 
+**Decided 2026-09-10 (Anish): text where the form has a box, a PDF where it
+wants a file.** Both come from `prepare_letter`, which reads the reviewed
+`.sent.md` behind the same gates as `copy_for_editing` — a passing grounding
+verdict, a copy that exists, a copy no older than the draft. The PDF is
+rendered at fill time on the resume's Chromium path, one page, and read back
+against the approved text before it is handed over; a file whose text differs
+is discarded, not uploaded.
+
 ### 6.2 Status goes to SQLite, and `sync` renders it
 
 "Cowork edits the Google Sheet and changes status to applied" breaks two
