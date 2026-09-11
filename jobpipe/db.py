@@ -115,6 +115,15 @@ CREATE TABLE IF NOT EXISTS status_events (
     noted_at    TEXT NOT NULL,
     source      TEXT NOT NULL DEFAULT 'sheet'
 );
+
+-- The last value read from the sheet's status column, per posting. Not
+-- history - status_events is the history - but the one fact needed to tell a
+-- human edit from a cell nobody touched. See status_mirror.py.
+CREATE TABLE IF NOT EXISTS sheet_status (
+    posting_id  INTEGER PRIMARY KEY REFERENCES postings (id),
+    status      TEXT NOT NULL,
+    read_at     TEXT NOT NULL
+);
 """
 
 
@@ -728,6 +737,27 @@ def current_statuses(conn: sqlite3.Connection) -> dict[int, str]:
         WHERE id IN (SELECT MAX(id) FROM status_events GROUP BY posting_id)
     """).fetchall()
     return {row["posting_id"]: row["status"] for row in rows}
+
+
+def sheet_readings(conn: sqlite3.Connection) -> dict[int, str]:
+    """What the sheet's status cell said at the last sync, per posting."""
+    return {row["posting_id"]: row["status"] for row in conn.execute(
+        "SELECT posting_id, status FROM sheet_status").fetchall()}
+
+
+def record_sheet_reading(conn: sqlite3.Connection, posting_id: int,
+                         status: str) -> None:
+    """Remember this sync's reading of one status cell.
+
+    Updated in place: it is a cache of the sheet's last value, not a record of
+    anything that happened. Transitions live in status_events and are never
+    overwritten.
+    """
+    conn.execute(
+        "INSERT INTO sheet_status (posting_id, status, read_at) "
+        "VALUES (?, ?, ?) ON CONFLICT (posting_id) DO UPDATE SET "
+        "status = excluded.status, read_at = excluded.read_at",
+        (posting_id, status, utcnow()))
 
 
 def record_status(conn: sqlite3.Connection, posting_id: int, status: str,

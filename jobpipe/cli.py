@@ -452,45 +452,32 @@ def cmd_sync(args) -> int:
         return 0
 
     def mirror_status(rows_by_url: dict) -> None:
-        """Copy the sheet's status column into the DB (addendum 4.3).
+        """Copy human edits on the sheet's status column into the DB
+        (addendum 4.3). One-way: the pipeline never writes that column.
 
-        Strictly one-way. The sheet remains authoritative for status and the
-        pipeline never writes that column; this only reads it so advance rates
-        have transitions to count. Reading for analytics is not the same as
-        letting the sheet drive the pipeline, which the spec forbids.
+        Only a cell that CHANGED since the last sync is an edit - see
+        status_mirror for why comparing against the database's current
+        status reverted an advance_status write thirteen seconds after it
+        was made.
         """
-        from . import states
+        from . import status_mirror
 
-        known = db.current_statuses(conn)
-        id_by_url = {r["url"]: r["id"] for r in conn.execute(
-            "SELECT id, url FROM postings").fetchall()}
-        changed, unknown, backwards = 0, [], []
-
-        for url, raw in rows_by_url.items():
-            posting_id = id_by_url.get(url)
-            if posting_id is None:
-                continue
-            try:
-                status = states.normalise(raw)
-            except states.UnknownStatus:
-                unknown.append(raw)
-                continue
-            previous = known.get(posting_id)
-            if previous and states.is_regression(previous, status):
-                backwards.append(f"{raw} (was {previous})")
-            if db.record_status(conn, posting_id, status, previous):
-                changed += 1
-        conn.commit()
-
-        if changed:
-            print(f"  mirrored {changed} status change(s) into the database")
-        if unknown:
+        result = status_mirror.mirror(conn, rows_by_url)
+        if result.changed:
+            print(f"  mirrored {result.changed} status change(s) into the "
+                  f"database")
+        if result.unknown:
             print(f"  ! unrecognised status value(s): "
-                  f"{', '.join(sorted(set(unknown))[:5])} — add an alias in "
-                  f"config/states.yml or these rows stay uncounted")
-        if backwards:
-            print(f"  ! status moved backwards: {'; '.join(backwards[:5])} "
-                  f"— usually a typo")
+                  f"{', '.join(sorted(set(result.unknown))[:5])} — add an "
+                  f"alias in config/states.yml or these rows stay uncounted")
+        if result.backwards:
+            print(f"  ! status moved backwards: "
+                  f"{'; '.join(result.backwards[:5])} — usually a typo")
+        if result.behind:
+            print(f"  ~ {len(result.behind)} row(s) show an older status on "
+                  f"the sheet than the database holds (recorded through "
+                  f"advance_status). The cell is yours to update: "
+                  f"{'; '.join(result.behind[:5])}")
 
     def refresh(urls):
         """Bring rows that have dropped out of the top N up to date.
