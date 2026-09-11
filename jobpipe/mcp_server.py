@@ -81,6 +81,9 @@ TOOL_ALLOWLIST = (
     # Track C. Read-only: the fields a form is filled from - §12 of the
     # profile plus the gitignored answers file - and nothing that writes.
     "form_answers",
+    # Track C. The approved letter for a form: text to paste, or a PDF to
+    # upload. Reads the reviewed copy, never the draft.
+    "prepare_letter",
 )
 
 # Which of the above write. Declared rather than inferred, so the annotation
@@ -88,7 +91,8 @@ TOOL_ALLOWLIST = (
 # being edited to agree every time a write tool is added - which would make it
 # a record of what happened rather than a check on it.
 WRITE_TOOLS = ("copy_for_editing", "advance_status", "render_resume",
-               "save_cover_letter", "check_grounding", "save_short_answer")
+               "save_cover_letter", "check_grounding", "save_short_answer",
+               "prepare_letter")
 
 # snake_case: mcp 2.x accepts the camelCase aliases but exposes the fields as
 # read_only_hint / destructive_hint, and mixing the two reads like a bug.
@@ -673,6 +677,73 @@ def form_answers(answers_path=None, profile_path=None) -> dict[str, Any]:
         raise ToolError(str(exc)) from exc
 
 
+def prepare_letter(conn, posting_id: int, pdf: bool = False) -> dict[str, Any]:
+    """The letter Anish approved, ready for a form: its text to paste into a
+    letter box, and with `pdf` a PDF to upload where the form wants a file
+    (PHASE5_PLAN §6.1; Anish's decision, 2026-09-10).
+
+    The source is cover_letter.sent.md, the copy he reviewed - so the gates
+    that stand in front of that copy stand in front of this: the current
+    draft passed grounding, the copy exists, and it does not predate the
+    draft. A form never receives the raw draft, and never an edit of an
+    earlier one.
+    """
+    row = db.get_posting(conn, posting_id)
+    if row is None:
+        raise ToolError(f"no posting with id {posting_id}")
+
+    doc = db.current_document(conn, posting_id, "cover_letter")
+    if doc is None:
+        raise ToolError(f"posting {posting_id} has no cover letter. Write one "
+                        f"with save_cover_letter first.")
+    if doc["grounding_ok"] != 1:
+        raise ToolError(
+            f"draft {doc['id']} has no passing grounding verdict, so no "
+            f"version of it can go into a form. Run check_grounding and fix "
+            f"what it finds.")
+
+    generated = Path(doc["generated_path"] or "")
+    sent = _measure.sent_path_for(generated) if generated.name else None
+    if sent is None or not sent.exists():
+        raise ToolError(
+            f"posting {posting_id} has no reviewed copy. Call copy_for_editing "
+            f"and let Anish review cover_letter.sent.md - that copy, not the "
+            f"draft, is what goes into a form.")
+    if _measure._is_stale(sent, doc["generated_at"]):
+        raise ToolError(
+            f"{sent} predates the current draft (generated "
+            f"{doc['generated_at']}): it is an edit of an earlier letter. "
+            f"Copy the current draft and have Anish review it again.")
+
+    text = sent.read_text(encoding="utf-8")
+    if not text.strip():
+        raise ToolError(f"{sent} is empty")
+
+    out = {
+        "posting_id": posting_id,
+        "company": row["company"],
+        "source": str(sent),
+        "text": text,
+        "words": len(text.split()),
+    }
+    if pdf:
+        from . import letter_pdf
+        try:
+            rendered = letter_pdf.render(text, sent.parent / "cover_letter.pdf")
+        except RuntimeError as exc:
+            raise ToolError(f"the letter PDF was not produced: {exc}") from exc
+        out.update(pdf_path=rendered["path"], pages=rendered["pages"],
+                   font_pt=rendered["font_pt"])
+        if rendered["pages"] != 1:
+            out["warning"] = (
+                f"the letter runs to {rendered['pages']} pages even at "
+                f"{rendered['font_pt']}pt. Tighten it before uploading.")
+    out["next"] = ("Paste `text` exactly into a letter text box, or upload "
+                   "`pdf_path` into a file field for the letter. When the "
+                   "application is recorded, pass letter_required=true.")
+    return out
+
+
 def _current_answer(conn, posting_id: int, question: str):
     """The live answer to `question`, or a refusal that names what is saved."""
     key = _answers.normalise_question(question)
@@ -812,8 +883,10 @@ def build_server(db_path: str | None = None) -> MCPServer:
             "check_grounding - including one taken from form_answers' "
             "reusable_answers. Type only a passing answer, exactly as "
             "stored.\n"
-            "- Attach only what render_resume or save_cover_letter produced "
-            "for this posting.\n"
+            "- Attach only what render_resume produced for this posting. A "
+            "letter comes from prepare_letter: paste its text where the form "
+            "has a letter box, or upload the PDF it renders (pdf=true) where "
+            "the form wants a file.\n"
             "- Never fill salary, government ids, payment details, or "
             "attestation and signature boxes. Leave them for Anish.\n"
             "- Stop before submit, and report what was filled from where and "
@@ -964,6 +1037,21 @@ def build_server(db_path: str | None = None) -> MCPServer:
                              "file. Also lists what to leave for Anish.")
     def _form_answers() -> dict:
         return form_answers()
+
+    @server.tool(name="prepare_letter", annotations=WRITES,
+                 description="The cover letter Anish approved, ready for an "
+                             "application form: its text to paste into a "
+                             "letter box, and with pdf=true a PDF to upload "
+                             "where the form wants a file. Reads "
+                             "cover_letter.sent.md, never the draft; refuses "
+                             "an ungrounded draft, a missing reviewed copy, "
+                             "or a copy older than the draft.")
+    def _prepare_letter(posting_id: int, pdf: bool = False) -> dict:
+        conn = _conn(db_path)
+        try:
+            return prepare_letter(conn, posting_id, pdf=pdf)
+        finally:
+            conn.close()
 
     @server.tool(name="save_short_answer", annotations=WRITES,
                  description="Store your answer to one open-ended question "

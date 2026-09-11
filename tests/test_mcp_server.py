@@ -1083,3 +1083,76 @@ class TestFormAnswers:
         with pytest.raises(mcp_server.ToolError, match="quote it"):
             mcp_server.form_answers(answers_path=answers_file,
                                     profile_path=tmp_path / "none.md")
+
+
+class TestPrepareLetter:
+    """The reviewed copy goes into a form - never the draft, never an edit of
+    an earlier draft, never a draft that failed its check."""
+
+    def _approved(self, conn, tmp_path, edited="Dear Team,\n\nEdited.\n"):
+        pid = seed(conn)
+        doc, path = letter(conn, pid, tmp_path)
+        out = mcp_server.copy_for_editing(conn, pid)
+        Path(out["sent_path"]).write_text(edited, encoding="utf-8")
+        return pid, Path(out["sent_path"])
+
+    def test_no_letter_is_refused(self, conn):
+        pid = seed(conn)
+        with pytest.raises(mcp_server.ToolError, match="save_cover_letter"):
+            mcp_server.prepare_letter(conn, pid)
+
+    def test_an_unchecked_draft_is_refused(self, conn, tmp_path):
+        pid = seed(conn)
+        letter(conn, pid, tmp_path, ok=None)
+        with pytest.raises(mcp_server.ToolError, match="grounding"):
+            mcp_server.prepare_letter(conn, pid)
+
+    def test_no_reviewed_copy_is_refused(self, conn, tmp_path):
+        pid = seed(conn)
+        letter(conn, pid, tmp_path)
+        with pytest.raises(mcp_server.ToolError, match="copy_for_editing"):
+            mcp_server.prepare_letter(conn, pid)
+
+    def test_a_copy_older_than_the_draft_is_refused(self, conn, tmp_path):
+        pid, _ = self._approved(conn, tmp_path)
+        conn.execute("UPDATE documents SET generated_at = '2999-01-01T00:00:00"
+                     "+00:00' WHERE posting_id = ?", (pid,))
+        conn.commit()
+        with pytest.raises(mcp_server.ToolError, match="predates"):
+            mcp_server.prepare_letter(conn, pid)
+
+    def test_the_text_is_the_reviewed_copy_not_the_draft(self, conn,
+                                                          tmp_path):
+        pid, sent = self._approved(conn, tmp_path, edited="Dear Team,\n\n"
+                                                          "His edit.\n")
+        out = mcp_server.prepare_letter(conn, pid)
+        assert out["text"] == "Dear Team,\n\nHis edit.\n"
+        assert "pdf_path" not in out, "no file unless the form wants one"
+
+    def test_the_pdf_is_rendered_from_the_reviewed_copy(self, conn, tmp_path,
+                                                        monkeypatch):
+        from jobpipe import letter_pdf
+        pid, sent = self._approved(conn, tmp_path)
+        seen = {}
+
+        def fake_render(text, out):
+            seen.update(text=text, out=Path(out))
+            return {"path": str(out), "pages": 1, "font_pt": 11.0}
+
+        monkeypatch.setattr(letter_pdf, "render", fake_render)
+        out = mcp_server.prepare_letter(conn, pid, pdf=True)
+        assert seen["text"] == sent.read_text(encoding="utf-8")
+        assert seen["out"] == sent.parent / "cover_letter.pdf"
+        assert out["pdf_path"] == str(sent.parent / "cover_letter.pdf")
+
+    def test_a_render_that_fails_its_read_back_is_a_refusal(
+            self, conn, tmp_path, monkeypatch):
+        from jobpipe import letter_pdf
+        pid, _ = self._approved(conn, tmp_path)
+
+        def bad_render(text, out):
+            raise letter_pdf.LetterRenderError("did not read back")
+
+        monkeypatch.setattr(letter_pdf, "render", bad_render)
+        with pytest.raises(mcp_server.ToolError, match="not produced"):
+            mcp_server.prepare_letter(conn, pid, pdf=True)
