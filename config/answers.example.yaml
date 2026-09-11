@@ -49,3 +49,22 @@ logistics:
   # Kept here rather than in the profile: scoring has no use for it, and the
   # profile reaches Gemini on every scoring call.
   work_authorization_expires: ""   # STEM OPT end date, if a form asks
+
+# ---------------------------------------------------------------------------
+# Reusable answers to open-ended questions that recur across forms (PHASE5_PLAN
+# §6.1.1 constraint 2). Only text you have already approved.
+#
+# Using one is not an exemption from the check: on each new form it is saved
+# with save_short_answer and checked with check_grounding like any other
+# answer, because it may have gone out of date, and adapting it to a posting
+# makes a new claim. "Why this company?" never belongs here.
+#
+# Shape, per answer:
+#   customer_experience:
+#     asked_as:            # the questions it has answered, as the form put them
+#       - "Please describe any experience you have working with customers."
+#     answer: |
+#       First paragraph.
+#
+#       Second paragraph.
+reusable_answers: {}

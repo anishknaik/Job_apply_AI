@@ -103,7 +103,23 @@ def load(path: Path | str = ANSWERS_PATH) -> dict:
             value = value.isoformat()   # a bare 2027-06-30 parses as a date
         logistics[key] = "" if value is None else str(value)
 
-    return {"self_identification": self_id, "logistics": logistics}
+    reusable = {}
+    for key, entry in (raw.get("reusable_answers") or {}).items():
+        if not isinstance(entry, dict):
+            raise AnswersError(f"reusable_answers.{key} must be a mapping with "
+                               f"an `answer`")
+        text = entry.get("answer")
+        if not isinstance(text, str) or not text.strip():
+            raise AnswersError(f"reusable_answers.{key} has no answer text")
+        asked = entry.get("asked_as") or []
+        if not isinstance(asked, list) or not all(
+                isinstance(q, str) and q.strip() for q in asked):
+            raise AnswersError(f"reusable_answers.{key}.asked_as must list "
+                               f"the questions it has answered, as text")
+        reusable[key] = {"answer": text.strip(), "asked_as": asked}
+
+    return {"self_identification": self_id, "logistics": logistics,
+            "reusable_answers": reusable}
 
 
 def form_view(profile_text: str, answers: dict) -> dict:
@@ -133,6 +149,11 @@ def form_view(profile_text: str, answers: dict) -> dict:
         "experience": list(block.get("experience") or []),
         "self_identification": answers["self_identification"],
         "logistics": answers["logistics"],
+        # Text Anish already approved, for questions that recur. Using one is
+        # still a save_short_answer + check_grounding, never an exemption
+        # (§6.1.1 constraint 3): it may have gone stale, and adapting it
+        # makes a new claim.
+        "reusable_answers": answers.get("reusable_answers", {}),
         "leave_for_anish": missing,
         "never_fill": list(NEVER_FILL),
     }

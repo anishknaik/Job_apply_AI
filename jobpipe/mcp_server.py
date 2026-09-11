@@ -809,7 +809,8 @@ def build_server(db_path: str | None = None) -> MCPServer:
             "self-identification, select the option whose text exactly "
             "matches an entry; if none does, leave it blank and say so.\n"
             "- Open-ended answers go through save_short_answer, then "
-            "check_grounding. Type only a passing answer, exactly as "
+            "check_grounding - including one taken from form_answers' "
+            "reusable_answers. Type only a passing answer, exactly as "
             "stored.\n"
             "- Attach only what render_resume or save_cover_letter produced "
             "for this posting.\n"
@@ -817,7 +818,7 @@ def build_server(db_path: str | None = None) -> MCPServer:
             "attestation and signature boxes. Leave them for Anish.\n"
             "- Stop before submit, and report what was filled from where and "
             "what was left blank. Anish clicks submit; advance_status comes "
-            "after, never before."),
+            "after the confirmation page, never before."),
     )
 
     @server.tool(name="list_queue", annotations=READ_ONLY,

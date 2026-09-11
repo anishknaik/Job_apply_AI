@@ -126,6 +126,7 @@ class TestTheTemplate:
         out = answers.load(answers.EXAMPLE_PATH)
         assert all(v == [] for v in out["self_identification"].values())
         assert all(v == "" for v in out["logistics"].values())
+        assert out["reusable_answers"] == {}
 
     def test_the_real_file_is_gitignored(self):
         text = Path(".gitignore").read_text(encoding="utf-8")
@@ -180,3 +181,50 @@ class TestFormView:
         with pytest.raises(header.HeaderError):
             answers.form_view("# no section 12 here\n", answers.load(
                 write(tmp_path, "self_identification: {}\n")))
+
+
+class TestReusableAnswers:
+    """§6.1.1 constraint 2: approved text for questions that recur."""
+
+    def test_one_loads_with_its_questions(self, tmp_path):
+        path = write(tmp_path, """\
+            reusable_answers:
+              customer_experience:
+                asked_as: ["Describe your customer experience."]
+                answer: |
+                  First paragraph.
+
+                  Second paragraph.
+            """)
+        entry = answers.load(path)["reusable_answers"]["customer_experience"]
+        assert entry["answer"] == "First paragraph.\n\nSecond paragraph."
+        assert entry["asked_as"] == ["Describe your customer experience."]
+
+    def test_an_entry_without_answer_text_is_refused(self, tmp_path):
+        path = write(tmp_path, """\
+            reusable_answers:
+              customer_experience:
+                asked_as: ["Describe your customer experience."]
+            """)
+        with pytest.raises(answers.AnswersError, match="no answer text"):
+            answers.load(path)
+
+    def test_asked_as_must_be_a_list_of_text(self, tmp_path):
+        path = write(tmp_path, """\
+            reusable_answers:
+              customer_experience:
+                asked_as: Describe your customer experience.
+                answer: Something true.
+            """)
+        with pytest.raises(answers.AnswersError, match="asked_as"):
+            answers.load(path)
+
+    def test_the_form_view_carries_them(self, tmp_path):
+        path = write(tmp_path, """\
+            reusable_answers:
+              customer_experience:
+                answer: Something true.
+            """)
+        view = answers.form_view(PROFILE, answers.load(path))
+        assert view["reusable_answers"]["customer_experience"][
+            "answer"] == "Something true."
