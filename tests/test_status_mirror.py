@@ -84,7 +84,8 @@ class TestAnUntouchedCellDoesNotRevertTheDatabase:
         result = status_mirror.mirror(conn, {URL: ""})
         assert status(conn, pid) == "applied"
         assert result.changed == 0
-        assert result.behind and "database says applied" in result.behind[0]
+        assert result.behind and result.behind[0].database == "applied"
+        assert "database says applied" in str(result.behind[0])
 
     def test_a_blank_first_reading_does_not_unapply(self, conn, pid):
         """Advanced through a session before the row ever reached the sheet:
@@ -111,3 +112,75 @@ class TestAnUntouchedCellDoesNotRevertTheDatabase:
         advance(conn, pid, "interview")
         status_mirror.mirror(conn, {URL: "applied"})   # untouched since
         assert status(conn, pid) == "interview"
+
+
+class FakeWorksheet:
+    """A url and a status column - all set_cells needs to find and write."""
+
+    def __init__(self, status=""):
+        self.values = [["url", "status"], [URL, status]]
+
+    def row_values(self, n):
+        return list(self.values[n - 1])
+
+    def get_all_values(self):
+        return [list(r) for r in self.values]
+
+    def batch_update(self, updates):
+        for u in updates:
+            cell = u["range"]
+            column, row = ord(cell[0]) - 64, int(cell[1:])
+            self.values[row - 1][column - 1] = u["values"][0][0]
+
+    @property
+    def cell(self):
+        return self.values[1][1]
+
+
+class TestWriteBack:
+    """Anish's decision (2026-09-10): sync writes the status column, but only
+    to bring a cell nobody edited up to a status recorded through a tool."""
+
+    def _behind(self, conn, pid, ws):
+        status_mirror.mirror(conn, {URL: ws.cell})
+        advance(conn, pid, "applied")
+        return status_mirror.mirror(conn, {URL: ws.cell}).behind
+
+    def test_an_untouched_cell_gets_the_databases_status(self, conn, pid):
+        ws = FakeWorksheet("")
+        written, skipped = status_mirror.write_back(
+            conn, ws, self._behind(conn, pid, ws))
+        assert (written, skipped) == (1, [])
+        assert ws.cell == "Applied", "the dropdown's label, not the id"
+
+    def test_the_written_cell_reads_as_unchanged_next_sync(self, conn, pid):
+        """Otherwise the next sync would take its own write for an edit."""
+        ws = FakeWorksheet("")
+        status_mirror.write_back(conn, ws, self._behind(conn, pid, ws))
+        events = conn.execute("SELECT COUNT(*) FROM status_events").fetchone()
+        result = status_mirror.mirror(conn, {URL: ws.cell})
+        assert result.changed == 0 and result.behind == []
+        assert conn.execute(
+            "SELECT COUNT(*) FROM status_events").fetchone()[0] == events[0]
+
+    def test_a_cell_edited_mid_sync_keeps_the_edit(self, conn, pid):
+        """Read blank, then Anish types Interview before the write lands."""
+        ws = FakeWorksheet("")
+        behind = self._behind(conn, pid, ws)
+        ws.values[1][1] = "Interview"
+        written, skipped = status_mirror.write_back(conn, ws, behind)
+        assert (written, len(skipped)) == (0, 1)
+        assert ws.cell == "Interview"
+        status_mirror.mirror(conn, {URL: ws.cell})
+        assert status(conn, pid) == "interview", "his edit wins next run"
+
+    def test_an_edited_cell_is_never_written(self, conn, pid):
+        """A changed cell is an edit and flows INTO the database; there is
+        nothing behind to write back."""
+        ws = FakeWorksheet("")
+        status_mirror.mirror(conn, {URL: ""})
+        advance(conn, pid, "applied")
+        ws.values[1][1] = "Responded"
+        result = status_mirror.mirror(conn, {URL: ws.cell})
+        assert result.behind == []
+        assert status(conn, pid) == "responded"

@@ -116,3 +116,12 @@ def is_regression(old: str, new: str, path: str | Path = DEFAULT_PATH) -> bool:
 def labels(path: str | Path = DEFAULT_PATH) -> list[str]:
     """Canonical labels, in lifecycle order — the sheet's dropdown."""
     return [s.label for s in load_states(path)]
+
+
+def label(status_id: str, path: str | Path = DEFAULT_PATH) -> str:
+    """The display text for a status id - what the sheet's dropdown offers,
+    and so what a write to the status column must use."""
+    for state in load_states(path):
+        if state.id == status_id:
+            return state.label
+    raise UnknownStatus(f"no status with id {status_id!r}")

@@ -451,18 +451,17 @@ def cmd_sync(args) -> int:
         print("nothing to sync — run `score --yes` first?")
         return 0
 
-    def mirror_status(rows_by_url: dict) -> None:
-        """Copy human edits on the sheet's status column into the DB
-        (addendum 4.3). One-way: the pipeline never writes that column.
+    def mirror_status(worksheet) -> None:
+        """Reconcile the sheet's status column with the DB (addendum 4.3).
 
-        Only a cell that CHANGED since the last sync is an edit - see
-        status_mirror for why comparing against the database's current
-        status reverted an advance_status write thirteen seconds after it
-        was made.
+        A cell that CHANGED since the last sync is Anish's edit and goes into
+        the DB. A cell nobody touched, whose status the DB has moved past
+        through advance_status, is brought up to date - compare-and-set, so a
+        cell edited mid-sync keeps its edit. See status_mirror.
         """
         from . import status_mirror
 
-        result = status_mirror.mirror(conn, rows_by_url)
+        result = status_mirror.mirror(conn, sheets.read_statuses(worksheet))
         if result.changed:
             print(f"  mirrored {result.changed} status change(s) into the "
                   f"database")
@@ -474,10 +473,16 @@ def cmd_sync(args) -> int:
             print(f"  ! status moved backwards: "
                   f"{'; '.join(result.backwards[:5])} — usually a typo")
         if result.behind:
-            print(f"  ~ {len(result.behind)} row(s) show an older status on "
-                  f"the sheet than the database holds (recorded through "
-                  f"advance_status). The cell is yours to update: "
-                  f"{'; '.join(result.behind[:5])}")
+            written, skipped = status_mirror.write_back(conn, worksheet,
+                                                        result.behind)
+            if written:
+                print(f"  wrote {written} newer status(es) from the database "
+                      f"into the sheet: "
+                      f"{'; '.join(str(b) for b in result.behind[:5])}")
+            if skipped:
+                print(f"  ! left {len(skipped)} status cell(s) alone - edited "
+                      f"while syncing, so the edit wins next run: "
+                      f"{'; '.join(str(b) for b in skipped[:5])}")
 
     def refresh(urls):
         """Bring rows that have dropped out of the top N up to date.
@@ -493,7 +498,7 @@ def cmd_sync(args) -> int:
                              refresh_by_url=refresh)
         # After the write, so a status typed in this morning is picked up in
         # the same run rather than a day late.
-        mirror_status(sheets.read_statuses(worksheet))
+        mirror_status(worksheet)
         sheets.ensure_status_dropdown(worksheet)
         if not args.no_sort:
             sheets.sort_by_score(worksheet)

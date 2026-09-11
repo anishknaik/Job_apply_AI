@@ -8,6 +8,10 @@ Two rules govern this module, both from the spec:
   * **The `status` column is human-owned and must never be overwritten.** This
     is why the sync is an upsert keyed on `url` rather than a rewrite: a
     full-sheet write is one bug away from erasing a week of hand-tracking.
+    The one write it takes is conditional and per cell (`set_cells`): to move
+    a row tailor advanced, or to bring a cell nobody edited up to a status
+    recorded through advance_status (status_mirror.write_back). A human's
+    edit is never written over.
 
 Auth is a service account, chosen over OAuth because this runs unattended
 under cron: no browser, no consent screen, no refresh token to expire at 6am.
@@ -303,12 +307,14 @@ def set_cells(worksheet, url: str, values: dict[str, str],
               expect: dict[str, str] | None = None) -> bool:
     """Write specific cells on the row with this url. Compare-and-set.
 
-    The ONLY place the pipeline writes a human-owned column, and it exists
+    The ONLY place the pipeline writes a human-owned column. It exists
     because Phase 2 §1 needs `tailor` to advance queued -> drafted and to
-    record `resume_version`. That does not weaken Phase 1's rule: `sync` still
-    never touches these columns. The distinction is that sync is a bulk
-    rewrite of a rendered view, where a bug erases a week of hand-tracking,
-    while this is one row, named columns, and conditional.
+    record `resume_version`, and status_mirror.write_back uses it to bring an
+    untouched status cell up to what advance_status recorded. That does not
+    weaken Phase 1's rule: the bulk `sync` still never touches these columns.
+    The distinction is that sync is a bulk rewrite of a rendered view, where a
+    bug erases a week of hand-tracking, while this is one row, named columns,
+    and conditional.
 
     `expect` makes it conditional. If the sheet no longer holds the value we
     read a moment ago — because the human retyped it while a batch of fifteen

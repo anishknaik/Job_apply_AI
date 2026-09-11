@@ -345,3 +345,15 @@ class TestRevisionIndex:
         fresh = db.insert_document(conn, pid, "cover_letter", content="new")
         assert conn.execute("SELECT revision FROM documents WHERE id = ?",
                             (fresh,)).fetchone()[0] == 3
+
+
+class TestLabel:
+    """A write to the sheet's status column must use the dropdown's text."""
+
+    def test_an_id_maps_to_its_label(self):
+        assert states.label("applied") == "Applied"
+        assert states.label("not_applied") == "Not applied"
+
+    def test_an_unknown_id_is_refused(self):
+        with pytest.raises(states.UnknownStatus):
+            states.label("hired-on-the-spot")
