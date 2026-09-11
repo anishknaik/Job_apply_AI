@@ -640,9 +640,15 @@ effect of adding a status tool.
 rendered the status column — it read it, and compared each cell with the
 database's current status, so an untouched cell reverted the first status
 `advance_status` recorded. The mirror now records only a cell that changed
-since the last sync (`status_mirror.py`). The column is still never written,
-so the sheet can show a status behind the database, and `sync` reports each
-such row. The ownership decision above is still open.
+since the last sync (`status_mirror.py`).
+
+**Decided 2026-09-10 (Anish): `sync` writes the column, for untouched cells
+only.** A cell nobody edited since the last sync, whose status the database
+has moved past, is written with the database's status — compare-and-set
+through `sheets.set_cells`, the same conditional path `tailor` uses, so a
+cell edited mid-sync keeps its edit. A cell he has edited is never written;
+his edit flows into the database. The bulk `sync` upsert still never touches
+a human column.
 
 ---
 
@@ -956,7 +962,9 @@ through `form_answers` — a read-only tool rather than the MCP resource
 §6.1.1 names, because a tool behaves the same in every client. Identity and
 work authorization come from §12, read live. Short answers go through
 `save_short_answer` and `check_grounding(question=…)`. The rules are in
-`CLAUDE.md` and the server instructions.
+`CLAUDE.md` and the server instructions. Reusable answers (constraint 2)
+live in the same file, under `reusable_answers`, and are still checked on
+every use (constraint 3).
 
 Fill 1 was LangChain, submitted 2026-09-10, and it found what the offline
 suite could not: a single-line answer box strips paragraph breaks, dropdown

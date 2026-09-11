@@ -59,7 +59,7 @@ metric is interviews per hour spent, not applications per day.
 | Targets | 143 companies — tier 1: 8, tier 2: 93, tier 3: 42 |
 | ATS split | greenhouse 72, ashby 70, smartrecruiters 1 |
 | Bullet bank | 21 bullets across 10 roles |
-| Tests | **837 pass, 0 fail** |
+| Tests | **847 pass, 0 fail** |
 | Last scheduled run | 2026-09-10 15:30 UTC — 13,661 fetched, 208 new, **0 scored** |
 | Billing | Vertex, GCP credit. The prepaid AI Studio balance is no longer drawn on |
 
@@ -126,14 +126,14 @@ max 3 per company applied *during* selection rather than after truncation.
 
 ## 4. Module map
 
-10,410 lines of Python across 35 modules, 837 offline tests.
+10,494 lines of Python across 35 modules, 847 offline tests.
 
 | Module | Lines | Does |
 |---|---|---|
-| `cli.py` | 1274 | 18 subcommands; the only entry point |
+| `cli.py` | 1279 | 18 subcommands; the only entry point |
 | `db.py` | 871 | Schema, migrations, sheet-row ranking, documents, status log |
 | `scoring.py` | 901 | Stage B rubric, escalation, spend cap, cache accounting |
-| `sheets.py` | 518 | Service-account sync; never writes human columns |
+| `sheets.py` | 524 | Service-account sync; human columns written only by `set_cells`, conditionally |
 | `letters.py` | 544 | Prompt, banned phrases, closing-shape rule, assembly |
 | `resume.py` | 521 | HTML → Playwright PDF, one-page loop, ATS parse check |
 | `calibrate.py` | 552 | Hand-scored set vs model — MAE, bias, recall/precision |
@@ -144,11 +144,11 @@ max 3 per company applied *during* selection rather than after truncation.
 | `grounding.py` | 280 | Claim extraction and routing to evidence — letters and form answers |
 | `pipeline.py` / `pipeline_tailor.py` | 148 / 163 | The two runs |
 | `providers/` | 671 | Gemini (Developer API and Vertex) + Anthropic behind one interface |
-| `mcp_server.py` | 1010 | The 12-tool MCP surface. Thin: imports and calls |
+| `mcp_server.py` | 1011 | The 12-tool MCP surface. Thin: imports and calls |
 | `variants.py` | 233 | The seven orderings, headlines, `(lane, domain)` grid |
 | `header.py` | 225 | The one parser for §12; generates the resume header from it |
-| `answers.py` | 138 | Form answers: the answers file, the §12 view, short-answer keys |
-| `status_mirror.py` | 80 | Sheet status column → event log, edits only |
+| `answers.py` | 159 | Form answers: the answers file, reusable answers, the §12 view |
+| `status_mirror.py` | 122 | Sheet status ↔ event log: edits in, newer statuses written back |
 | `fetchers/` | 535 | Greenhouse, Ashby, SmartRecruiters, SSRF-guarded HTTP |
 
 Config: `master_profile.md` (646 lines, gitignored, source of truth for every

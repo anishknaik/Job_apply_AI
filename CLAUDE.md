@@ -21,7 +21,7 @@ python -m jobpipe.cli tailor --cover-letter <id> --yes
 python -m jobpipe.cli measure [--detail]           # edit distance, free
 python -m jobpipe.cli status                       # where applications stand
 python -m jobpipe.cli sync                         # mirror the sheet, free
-python -m pytest tests/ -q                         # 837 tests, no network
+python -m pytest tests/ -q                         # 847 tests, no network
 ```
 
 Posting ids come from `postings.id` in `jobpipe.db`.
@@ -225,6 +225,11 @@ fields it belongs in.
 | Open-ended questions ("describe…", "anything else…") | Drafted for this posting | `save_short_answer`, then `check_grounding(question=…)`. Only a passing answer goes in, typed exactly as stored. A single-line box cannot hold paragraph breaks — the browser strips them and runs sentences together — so re-save the answer as one paragraph, same words, and re-check it first |
 | Salary, SSN or any government id, payment details, "I certify…" and signature boxes | — | **Never fill**, even when required. Leave for Anish |
 
+When `form_answers` holds a reusable answer for the question being asked,
+start from it — it is text Anish already approved — but it still goes
+through `save_short_answer` and `check_grounding` on every form. It may have
+gone stale, and adapting it to a posting makes a new claim.
+
 A required field in the last row, or any field with no source, is a stop and
 a question — never a guess. Short answers get no exemption for being short:
 §6.1, "do not let a 200-character box become the one place fabrication is
@@ -254,7 +259,7 @@ what was put in it.
 
 **Only after the ATS shows its confirmation page:**
 `advance_status(posting_id, "applied", letter_required=…)`, then `cli sync`.
-The sheet's status cell is his and is never written, so `sync` reports the
-row as behind the database until he updates the cell. It no longer reverts
-the database: only a cell that changed since the last sync counts as his
-edit (`status_mirror.py`).
+`sync` then writes the new status into the sheet's cell — but only a cell
+nobody edited since the last sync, and only if it still holds what was just
+read. A cell he changed is his edit, and it flows the other way, into the
+database (`status_mirror.py`).

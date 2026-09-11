@@ -21,8 +21,8 @@ remeasured on 2026-09-10; its §9 is superseded by `PHASE5_PLAN.md`.
 ## 1. State
 
 ```
-837 tests passing, 12 tools on the MCP surface, branch phase5/track-c
-  (off master at 476df9b; master and origin/master unmoved)
+847 tests passing, 12 tools on the MCP surface, on master
+  (phase5/track-c fast-forwarded into it and pushed, 2026-09-10)
 18,330 postings | 714 past Stage A | 645 scored (625 of them survivors)
 89 survivors unscored | 23 applied | 2 letters measured
   (only 1 of the 2 counts toward the per-slot means — see §3)
@@ -176,14 +176,20 @@ Open in Track C:
   wants a letter *upload* has no tool-produced file to attach. Paste where a
   text box is offered, or render the edited `.sent.md` to PDF with the
   resume renderer — undecided.
-- **Who owns the sheet's status column** (§6.2). `sync` no longer reverts a
-  tool-recorded status (§5), but it still never writes the cell, so the
-  sheet shows a status behind the database until Anish updates it; `sync`
-  reports each such row. Leave it, or let `sync` write that column — an
-  ownership decision, deliberately not taken as a side effect.
-- **The answers file holds no reusable answers yet** (§6.1.1 constraint 2).
-  LangChain's customer-experience answer is the obvious first entry, and
-  would still be re-checked on every use.
+
+Decided and done the same day:
+
+- **`sync` writes the sheet's status column — for untouched cells only.**
+  Anish's call (§6.2). A cell nobody edited since the last sync, whose
+  status the database moved past through `advance_status`, is brought up to
+  date by `status_mirror.write_back`, compare-and-set through
+  `sheets.set_cells`. A cell he edited is never written; his edit goes into
+  the database. Verified live: LangChain's blank cell became "Applied", and
+  the next sync was a no-op.
+- **Reusable answers.** `answers.yaml` has a `reusable_answers` section and
+  `form_answers` returns it. The first entry is LangChain's
+  customer-experience answer, copied from its checked database row. Using
+  one is still a save and a check on every form.
 
 **Track A step 5 — DONE 2026-08-31**, against `2026-08-31.3` over the merged
 56-posting set. Rank agreement +0.808, the best any configuration has
@@ -402,9 +408,9 @@ it.
 
 Then the third fill, and then mark the rules settled in `CLAUDE.md`.
 
-Three decisions are Anish's and waiting: who owns the sheet's status column
-(§3), the stale-posting fix (§4), and when to score the backlog of 89 —
-`cli score` spends money, so price it first and run it only when asked.
+Two decisions are Anish's and waiting: the stale-posting fix (§4), and when
+to score the backlog of 89 — `cli score` spends money, so price it first and
+run it only when asked.
 
 Tests stay offline: call the tool functions directly, do not stand up a
 transport.
