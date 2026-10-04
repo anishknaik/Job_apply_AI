@@ -1,7 +1,7 @@
 # jobpipe — Context
 
 > Written 2026-08-29, **§2 and §7 remeasured 2026-08-31; §2 and §4 again on
-> 2026-09-10.** Every number in §2
+> 2026-09-10 and 2026-10-04.** Every number in §2
 > was read from the live system on that date rather than copied forward,
 > because several figures in `PHASE1_SUMMARY.md` and `POST_PHASE2_FIXES.md`
 > had drifted.
@@ -36,7 +36,7 @@ metric is interviews per hour spent, not applications per day.
 
 | Phase | Scope | State |
 |---|---|---|
-| 1 | Discovery → dedupe → filters → LLM scoring → Google Sheet | Fetch/filter/sync unattended daily 11:30; scoring on demand |
+| 1 | Discovery → dedupe → filters → LLM scoring → Google Sheet | Fetch/filter/sync unattended daily 11:30; scoring on demand. Two lanes since 2026-10-03: US (main tab) and India (its own tab) |
 | 2 | Queued role → tailored resume PDF → cover letter → grounding check | Running on demand |
 | 3 | Application form fill, human clicks submit | Built as Phase 5 Track C; one supervised fill (LangChain, 2026-09-10) |
 | 4 | Recruiter research → outreach drafts | Not started |
@@ -44,31 +44,36 @@ metric is interviews per hour spent, not applications per day.
 
 ---
 
-## 2. Where it stands today (2026-09-10, remeasured)
+## 2. Where it stands today (2026-10-04, remeasured)
 
 | | |
 |---|---|
-| Postings ingested | 18,330 |
-| Stage A survivors / scored | 714 / 645 — 625 of the survivors scored, 89 not |
-| Scoring models in the corpus | `3.1-flash-lite` 427, `3.5-flash-lite` 138, `2.5-pro` 56, `2.5-flash` 14 |
-| Rubric versions in the corpus | none 565, `2026-08-31.3` 66, `.2` 3, `.4` 1 |
-| Applications | 23 applied, 1 drafted, 44 not_applied (117 status events) |
+| Postings ingested | 24,100 |
+| Stage A survivors / scored | 973 / 1,179 — 953 of the survivors scored; the 20 not are closed postings |
+| India lane | 170 live roles, all scored — 226 scores sit outside Stage A's survivors, most of them these |
+| Scoring models in the corpus | `3.1-flash-lite` 454, `3.5-flash-lite` 149, `2.5-flash` 299, `2.5-pro` 277 |
+| Rubric versions in the corpus | none 603, `2026-10-03.5` 494, `2026-08-31.3` 78, `.2` 3, `.4` 1 |
+| Applications | 23 applied, 1 drafted, 71 not_applied (144 status events) |
 | Documents | 58 rows — 29 resumes, 25 letters, 4 form answers |
 | Letters with stored content | 13 (the `content` column postdates the first batch) |
 | **Edit distances computed** | **2** — PostHog 0.032, U. of Utah 0.033 |
-| Targets | 143 companies — tier 1: 8, tier 2: 93, tier 3: 42 |
-| ATS split | greenhouse 72, ashby 70, smartrecruiters 1 |
+| Targets | 169 companies — tier 1: 8, tier 2: 93, tier 3: 68 (the 26 added 2026-10-03 are all tier 3, unreviewed) |
+| ATS split | greenhouse 82, ashby 79, smartrecruiters 6, workday 2 |
 | Bullet bank | 21 bullets across 10 roles |
-| Tests | **864 pass, 0 fail** |
-| Last scheduled run | 2026-09-10 15:30 UTC — 13,661 fetched, 208 new, **0 scored** |
+| Tests | **907** |
+| Last scheduled run | 2026-10-03 15:30 UTC — 13,354 fetched, 167 new, **0 scored** |
 | Billing | Vertex, GCP credit. The prepaid AI Studio balance is no longer drawn on |
 
-**The scheduled run no longer scores.** It fetches, filters and syncs only, so
-an unscored backlog accumulates until someone runs `cli score` deliberately.
-That is a temporary posture while calibration settles; `register-task.ps1
--Spend` puts scoring back. On 2026-09-10 the backlog was 89 — about 9 a day
-across the ten daily runs since scoring stopped, three times the rate first
-estimated.
+**The scheduled run no longer scores.** It fetches, filters, syncs and
+refreshes the india tab, so an unscored backlog accumulates until someone
+runs `cli score` or `cli score --india` deliberately. `register-task.ps1
+-Spend` puts scoring back. The backlog was 89 on 2026-09-10 and 352 by
+2026-10-03, when both queues were scored; it is 0 now.
+
+**The scoring queue is open postings only.** `get_unscored` applies the
+sheet's own 7-day `last_seen_at` window, so a posting that left its board
+while it waited is never paid for. 20 survivors are unscored for that reason
+and will stay so.
 
 The mixed provenance in rows 3 and 4 is deliberate, not drift: `PHASE5_PLAN`
 §3.5 keeps the 3.1-era corpus as historical record and rescores only what
@@ -94,23 +99,27 @@ consequence is in `HANDOFF.md` §3: on slots the sample is still n=1.
 ## 3. Data flow
 
 ```
-config/targets.csv  (143 companies, board tokens verified live)
+config/targets.csv  (169 companies, board tokens verified live)
       |
       v
-Greenhouse / Ashby / SmartRecruiters public JSON       no scraping, no LinkedIn
+Greenhouse / Ashby / SmartRecruiters / Workday public JSON
+                                                       no scraping, no LinkedIn
       |
       v
 normalize -> Posting  ->  dedupe (ats_type+source_id, then content_hash)
       |
       v
 Stage A  deterministic word-boundary regex              ~95% kill, $0
-      |
+      |    US lane: every rule. India lane (`india.select`): every rule but
+      |    location, over postings Stage A excluded for being in India
       v
 Stage B  gemini-2.5-flash on Vertex, escalating 5-7 to 2.5-pro
-         on demand (`cli score`) — the 11:30 cron no longer scores
+         on demand — `cli score` (US), `cli score --india`; open postings
+         only. The 11:30 cron no longer scores
       |
       v
 SQLite jobpipe.db  (source of truth)  <->  Google Sheet (rendered view)
+      |                     two tabs: `roles` (US) and `india`
       |                     status: a changed cell is Anish's edit and flows
       |                     in; an untouched one is written back
       v
@@ -127,19 +136,22 @@ Anish submits -> advance_status -> sync
 Sheet selection (`db.get_sheet_rows`): `apply_score >= 4` floor, optional
 per-company tier threshold, `last_seen_at` within 7 days, **top 25 by rank**,
 max 3 per company applied *during* selection rather than after truncation.
+India-only roles are excluded before the cap (`india.lane_only`). The india
+tab is not ranked down to 25: it lists every live India role, scored first.
 
 ---
 
 ## 4. Module map
 
-10,660 lines of Python across 36 modules, 864 offline tests.
+11,134 lines of Python across 38 modules, 907 offline tests.
 
 | Module | Lines | Does |
 |---|---|---|
-| `cli.py` | 1279 | 18 subcommands; the only entry point |
-| `db.py` | 871 | Schema, migrations, sheet-row ranking, documents, status log |
-| `scoring.py` | 901 | Stage B rubric, escalation, spend cap, cache accounting |
-| `sheets.py` | 524 | Service-account sync; human columns written only by `set_cells`, conditionally |
+| `cli.py` | 1377 | 19 subcommands; the only entry point |
+| `db.py` | 889 | Schema, migrations, sheet-row ranking, documents, status log |
+| `scoring.py` | 914 | Stage B rubric, escalation, spend cap, cache accounting |
+| `sheets.py` | 529 | Service-account sync; human columns written only by `set_cells`, conditionally. A tab may bring its own columns |
+| `india.py` | 122 | The India lane: selection, its scoring queue, its tab's rows |
 | `letters.py` | 544 | Prompt, banned phrases, closing-shape rule, assembly |
 | `resume.py` | 521 | HTML → Playwright PDF, one-page loop, ATS parse check |
 | `calibrate.py` | 552 | Hand-scored set vs model — MAE, bias, recall/precision |
@@ -156,11 +168,11 @@ max 3 per company applied *during* selection rather than after truncation.
 | `answers.py` | 159 | Form answers: the answers file, reusable answers, the §12 view |
 | `status_mirror.py` | 122 | Sheet status ↔ event log: edits in, newer statuses written back |
 | `letter_pdf.py` | 78 | The reviewed letter as a one-page PDF, read back before it is used |
-| `fetchers/` | 535 | Greenhouse, Ashby, SmartRecruiters, SSRF-guarded HTTP |
+| `fetchers/` | 738 | Greenhouse, Ashby, SmartRecruiters, Workday, SSRF-guarded HTTP |
 
-Config: `master_profile.md` (646 lines, gitignored, source of truth for every
+Config: `master_profile.md` (657 lines, gitignored, source of truth for every
 claim), `bullets.yaml` (570), `filters.yaml` (458), `states.yml` (108),
-`targets.csv` (143 rows), and `answers.yaml` (gitignored; self-ID and form
+`targets.csv` (169 rows), and `answers.yaml` (gitignored; self-ID and form
 logistics, never in a prompt).
 
 ---
@@ -171,6 +183,16 @@ logistics, never in a prompt).
 the public endpoints that power companies' own careers widgets. No scraping,
 no blocking, no HTML parsing. The single biggest simplification in the
 project. LinkedIn and Indeed are out on terms, staleness and legality.
+Workday (2026-10-03) is the same kind of source with one difference that
+matters: every company has its own host, so the SSRF allowlist lists each
+one and a new Workday company is refused until its host is added.
+
+**India is a second lane, not a looser filter.** Stage A's verdict keeps
+meaning "actionable in the US"; `filters.yaml` still excludes India. The
+India lane re-reads the postings Stage A excluded for location, applies the
+other rules, and has its own scoring queue and its own tab. Loosening the
+location rule instead would have put India roles into the US top 25 and
+changed what `stage_a_passed` means for every number computed from it.
 
 **Two-stage scoring.** An `if` statement kills 95% for free; only survivors
 reach a model. Tightening Stage A is always cheaper than changing models.
@@ -250,9 +272,9 @@ These hold across every phase and are not negotiable per-task.
 - **Never hand-edit `resume.pdf`.** Fix the bank, the variant ordering, or
   `skills` tags, then regenerate.
 - **Never run `cli daily`, `cli score`, `cli calibrate` or `cli ground`**
-  unless Anish asks for that run. They spend money — ~85¢ for a full
-  re-score — and the first three write corpus-wide. The 11:30 cron no longer
-  scores (§7). `CLAUDE.md` has the full rule.
+  unless Anish asks for that run. They spend money — dollars, not cents, for
+  a few hundred postings (§7) — and the first three write corpus-wide. The
+  11:30 cron no longer scores (§7). `CLAUDE.md` has the full rule.
 - No LinkedIn/Indeed scraping, no CAPTCHA bypass, secrets stay in `.env`.
 
 ---
@@ -280,6 +302,15 @@ prose model (`1bb0f0a`).
 set and 84% of the live queue, because scores cluster in the 5–7 band. 2.5 Pro
 is the expensive rung, so it dominates the cost of any scoring run — budget
 from the escalation rate, not the posting count.
+
+**Measured on 2026-10-03, the first large run on 2.5:** 502 postings used
+10.05 million input tokens (4.0 million read from cache) and 162,000 output
+tokens, with 210 escalated to Pro — about 20,000 input tokens per posting.
+That is several dollars at list prices; the exact charge is on the GCP
+billing page and has not been read. The "~85¢ full re-score" figure this
+project quoted until then was a 3.x-era number and under-priced that run by
+several times (`HANDOFF.md` §5). **Price a run from tokens, never from that
+figure.**
 
 The historical figures below were measured on the Developer API and 3.x models
 and are kept for comparison only: daily scoring ~2.5¢/day at ~0.18¢/posting,
@@ -390,6 +421,10 @@ Everything here was reproduced on 2026-08-29. **Status as of 2026-08-31:**
 | 8.7 smaller confirmed items | mostly closed in Slice 0; `title_exclude 'lead'` audited and kept, `63fa270` |
 | 8.8 already done but not recorded | still accurate |
 | 8.9 posting text frozen at first sight | **open** — found 2026-09-10, `HANDOFF.md` §4 |
+
+Defects found on 2026-10-03 are in `HANDOFF.md` §4, not here: closed rows on
+the main tab, eight boards returning nothing, and Barclays titles Stage A
+lets through.
 
 **8.5 deserves a specific note**, because its conclusion was inverted twice.
 It reported the model over-scoring and recommended tightening. Two attempts to

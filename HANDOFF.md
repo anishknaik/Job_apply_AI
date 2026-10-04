@@ -1,4 +1,4 @@
-# Handoff — 2026-09-10
+# Handoff — 2026-10-04
 
 Where Phase 5 actually stands, what is verified against what is assumed, and
 what in the session transcript has since been overturned.
@@ -7,6 +7,15 @@ what in the session transcript has since been overturned.
 through it end to end** — resume, two grounded form answers, a supervised
 fill, submitted by Anish. That run found three defects the offline suite
 could not; they are in §4 and §5. §5a is rewritten for what comes next.
+
+**Updated 2026-10-04: India is a second lane, Workday is a fourth board, and
+the whole open backlog was scored.** Anish opened the search to India on
+2026-10-03. India roles get a tab of their own and a scoring queue of their
+own; Stage A's US verdict is untouched. 26 companies were added, two of them
+on a new Workday fetcher. The rubric moved to `2026-10-03.5` and was
+calibrated the next day. Track C did not move: still one supervised fill.
+What was built is in §2 and §3 ("The India lane"); what a reader would get
+wrong is at the end of §5.
 
 Read this before `session_2026-08-31_phase5.txt`. The transcript is a record of
 what was *said*, and several things in it were corrected by later turns — a
@@ -21,10 +30,11 @@ remeasured on 2026-09-10; its §9 is superseded by `PHASE5_PLAN.md`.
 ## 1. State
 
 ```
-864 tests passing, 13 tools on the MCP surface, on master and pushed
-  (phase5/track-c, then phase5/letter-pdf, fast-forwarded in 2026-09-10)
-18,330 postings | 714 past Stage A | 645 scored (625 of them survivors)
-89 survivors unscored | 23 applied | 2 letters measured
+907 tests, 13 tools on the MCP surface, on master
+24,100 postings | 973 past Stage A | 1,179 scored (953 of them survivors)
+0 open survivors unscored (20 closed ones left unscored on purpose)
+170 live India roles, all scored | 169 targets on 4 boards
+23 applied | 2 letters measured
   (only 1 of the 2 counts toward the per-slot means — see §3)
 ```
 
@@ -33,7 +43,7 @@ Shipped configuration — all four models resolve on Vertex:
 ```
 JOBPIPE_GEMINI_BACKEND=vertex        scoring    gemini-2.5-flash
 GOOGLE_CLOUD_LOCATION=global         escalation gemini-2.5-pro
-RUBRIC_VERSION=2026-08-31.4          grounding  gemini-2.5-flash-lite
+RUBRIC_VERSION=2026-10-03.5          grounding  gemini-2.5-flash-lite
                                      prose      gemini-2.5-flash
 ```
 
@@ -45,11 +55,12 @@ searches upward from the **calling file**, not the working directory, so a
 script outside the repo root silently gets nothing.
 
 Scheduled run is 11:30, S4U, **fetch/filter/sync only — it scores nothing.**
-That is a deliberate temporary posture while calibration settles;
+Since 2026-10-03 it ends with an `india` stage that refreshes the india tab.
 `register-task.ps1 -Spend` puts scoring back. Consequence: an unscored backlog
-grows, and nothing new reaches the sheet until someone runs `cli score`. It
-stood at 89 on 2026-09-10, ten days after the last scoring run — about 9 a
-day, three times the rate first estimated.
+grows, and nothing new reaches either tab's score column until someone runs
+`cli score` (US) or `cli score --india`. The backlog reached 352 before both
+queues were scored on 2026-10-03; it is 0 now and will grow again, faster
+than before - 26 more boards feed it.
 
 ---
 
@@ -66,6 +77,9 @@ day, three times the rate first estimated.
 | **Track C, built** | `save_short_answer`, `check_grounding(question=…)`, `form_answers`, the answers file, the form rules in `CLAUDE.md` and the server instructions |
 | **Track C, fill 1 of 2–3** | LangChain Deployed Engineer (Early Career-NYC), submitted 2026-09-10 |
 | **Track C, after fill 1** | `sync` writes untouched status cells back; reusable answers; `prepare_letter` — the letter as text or a read-back PDF |
+| **The India lane** | `india.py`, `cli india [--sync]`, `cli score --india`, the `india` tab, the daily stage. 170 roles scored and synced live |
+| **Workday fetcher** | Barclays (763) and Broadridge (284) fetched live, filtered and scored |
+| **Open-only scoring** | `get_unscored` skips postings off their board for 7 days; 20 closed ones were not paid for |
 
 Verified means observed, not inferred:
 
@@ -196,6 +210,72 @@ Decided and done the same day:
   customer-experience answer, copied from its checked database row. Using
   one is still a save and a check on every form.
 
+**The India lane — BUILT 2026-10-03.** Anish's decision: India joins the US
+as a place he will work, and he needs no sponsorship there. Profile §10 and
+§12 say so, and `form_answers` returns it.
+
+The design is a second lane, not a looser filter. `filters.yaml` still
+excludes India and `stage_a_passed` still means "actionable in the US".
+`india.select` is the India lane's Stage A: live postings whose location
+names India, passed through every Stage A rule EXCEPT location. Three things
+follow from keeping the lanes apart:
+
+- **Scoring is a separate queue.** The default queue is Stage A's survivors,
+  so it never reaches an India role. `cli score --india` scores them, and it
+  needs `--yes` like every other spend.
+- **A scored India role stays off the main tab.** `get_sheet_rows` takes an
+  `exclude` predicate and `sync` passes `india.lane_only`, applied before
+  the cap and the limit so the top 25 still fills. A role open in both
+  countries passed Stage A on its US location and shows on both tabs.
+- **The india tab has its own columns** - location, `last_seen`, then the
+  human ones, then score, fit and reasoning - through a `columns` parameter
+  on `sheets.sync`. Rows are never deleted; `last_seen` is how a closed one
+  shows.
+
+Open in it:
+
+- **The india tab's status column goes nowhere.** `status_mirror` reads the
+  main tab only, so "Applied" typed there is not in the event log and
+  `cli status` does not count it. Mirroring it is a decision, not a patch:
+  a role on both tabs would then have two cells for one status.
+- **No India role has been hand-scored**, so the calibration below speaks to
+  whether the rubric change hurt US ranking and says nothing about whether
+  India scores rank well. A hand-scored India set is the missing piece.
+- **Tiers are placeholders.** All 26 new companies are tier 3.
+- **Accenture is deliberately out.** Its board lists 36,099 roles in India
+  alone; a Workday query returns at most 2,000 and each posting needs its
+  own request. The fetcher refuses a board past the cap rather than
+  collecting the first 2,000.
+
+**Workday — BUILT 2026-10-03.** `fetchers/workday.py`, `board_token` as
+`tenant/wd/site`. The list is a POST (`get_json(body=...)`), 20 per page, and
+`total` is only true on the first page - Broadridge reports 0 on every later
+one. Each tenant has its own host, so the SSRF allowlist names the two hosts
+exactly; a third Workday company needs its host added, and is refused until
+then. `cli verify` probes it.
+
+**Calibration of `2026-10-03.5` - DONE 2026-10-04**, over the merged
+56-posting set (55 scored, 33 by Pro), result in
+`calibration_merged56_v1003_5_result.json`. Against the `.3` baseline:
+
+| | `.3` | `.5` |
+|---|---|---|
+| Rank agreement (Spearman) | +0.808 | +0.760 |
+| False negatives at the cutoff | 0 | 0 |
+| Recall / precision at >= 9 | 100% / 38% | 100% / 43% |
+| Apply MAE / bias | 1.44 / +0.42 | 1.51 / +0.49 |
+| Fit MAE / bias | 1.28 / +0.81 | 1.09 / +0.63 |
+| Precision@5 / @10 | 40% / 70% | 20% / 60% |
+
+Read it as: nothing broke, and ranking is a little lower. No posting was
+missed, no posting drew a location dealbreaker, and the two holdout roles
+hold (Ramp 7 against a hand 8, Scale AI's Advisory Consultant 5 against 6).
+Rank agreement is down 0.05 and 14 of 55 postings moved by two points or
+more in both directions. **One run each, so that gap cannot be told apart
+from run-to-run variance** - nobody has scored the same set twice on one
+rubric to measure it. The set is all US postings: this says the India
+wording did not damage US ranking, and nothing about India ranking.
+
 **Track A step 5 — DONE 2026-08-31**, against `2026-08-31.3` over the merged
 56-posting set. Rank agreement +0.808, the best any configuration has
 measured, and zero false negatives. The gain generalises: on the 36 postings
@@ -274,6 +354,27 @@ guidance only by reading files.
 
 **Two experiments are off by default, with the mechanism kept and tested:**
 `JOBPIPE_CALIBRATION_EXAMPLES` and `JOBPIPE_SCOPE_CEILING`.
+
+**Closed rows stay on the main tab when they carry anything hand-typed.** On
+2026-10-03, 22 of its 81 rows were postings no longer on their board. The 10
+with no status, notes or other human cell were deleted at Anish's request -
+a one-off, by hand, not a feature. 12 remain: 8 are his application record,
+4 have notes only. The sync still never deletes, and the main tab has no
+`last_seen` column, so a closed row there looks like an open one.
+
+**Eight boards returned nothing on 2026-10-03 and logged no error:**
+ClickHouse (last seen 08-31), Marqeta (08-31), Postman (09-16), World Labs
+(09-08), Amplitude (09-28), Wayve (10-01), Hightouch (10-02) and Temporal
+(the known 404). Their postings age out of the 7-day window and read as
+closed. Not investigated: a moved board and an empty one look the same.
+
+**Barclays lets non-engineering titles through Stage A.** "Equity Research
+AVP", "Tax Operations Analyst": `analyst` satisfies `title_require_any` and
+`avp` is not excluded. Scoring ranks them low, at a price. A filters change,
+so it wants the audit `CLAUDE.md` asks for.
+
+**The scoring corpus is now five rubrics deep.** none 603, `.2` 3, `.3` 78,
+`.4` 1, `2026-10-03.5` 494. The 603 are 3.x-era scores and many still rank.
 
 ---
 
@@ -399,6 +500,27 @@ a cell that changed since the last sync counts as an edit — `sheet_status`
 remembers each reading. **A path with two writers was designed on paper and
 tested with one.**
 
+**"A full re-score costs ~85¢" is a 3.x-era figure, and it priced a real
+run wrong.** `CLAUDE.md` and `CONTEXT.md` §6 both carried it. On 2026-10-03
+it was used to estimate 499 postings at about 65¢. The runs used 10.05
+million input tokens (4.0 million cached) and 162,000 output tokens, with
+210 escalations to 2.5 Pro - several dollars at list prices, not cents. The
+exact figure is on the GCP billing page and was not read. **Budget a scoring
+run from tokens: about 20,000 input tokens per posting including its share
+of escalations.** `CONTEXT.md` §7 already said to budget from the escalation
+rate; the cents figure sat beside that advice and contradicted it.
+
+**The rubric never treated a non-US location as a dealbreaker.** That was
+said, in the 2026-10-03 session, as the reason the india tab started
+unscored. The field said location is NEVER a dealbreaker because he
+"relocates anywhere in the US" - which leaves a Bengaluru role outside the
+sentence, not inside a ban. The exclusion of India lived in `filters.yaml`
+and nowhere else. `.5` names both countries on the field.
+
+**Deleting a row from the sheet does not stop it being scored.** Scoring
+reads the database, where nothing is deleted. What stops a closed posting
+being paid for is the `last_seen_at` window on `get_unscored`.
+
 ---
 
 ## 5a. Start here next session
@@ -413,16 +535,22 @@ seven-block shape, which is what the open `why this role` question needs
 
 Then the third fill, and then mark the rules settled in `CLAUDE.md`.
 
-Two decisions are Anish's and waiting: the stale-posting fix (§4), and when
-to score the backlog of 89 — `cli score` spends money, so price it first and
-run it only when asked.
+Decisions that are Anish's and waiting: the stale-posting fix (§4); whether
+the india tab's status column is mirrored (§3); tiers for the 26 new
+companies; and whether scoring goes back on the schedule now that two queues
+grow daily. `cli score` and `cli score --india` spend money - price a run
+from tokens (§5), say the figure, and run it only when asked.
+
+A hand-scored India set is what would let the India ranking be measured
+rather than assumed. `calibrate` skips any posting Stage A discards, which
+is every India-only role, so that needs a small change first.
 
 Tests stay offline: call the tool functions directly, do not stand up a
 transport.
 
 `cli score --queue` is the tool for a rubric change from here — it rescores
 only queued postings off the current rubric, deletes nothing, and is safe to
-re-run. `--rescore` still means "delete all 645 scores"; it is almost never
+re-run. `--rescore` still means "delete all 1,179 scores"; it is almost never
 what you want.
 
 ---
@@ -452,7 +580,8 @@ all 27 commits**; it is recovery-only and must not be pushed.
 The repo is private on GitHub. `config/bullets.yaml` was purged from all
 history — it is a resume — along with a real phone number in test fixtures.
 `targets.csv` is now personal and gitignored; `targets.example.csv` ships with
-143 companies and verified board tokens.
+143 companies and verified board tokens. The personal file has 169: the 26
+added on 2026-10-03 are not in the example.
 
 `README.md` is a setup guide with nine ordered steps. The step people miss is
 sharing the Google Sheet with the service account's email — Sheets permissions

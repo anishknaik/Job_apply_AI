@@ -25,7 +25,8 @@ python -m jobpipe.cli tailor --cover-letter <id> --yes
 python -m jobpipe.cli measure [--detail]           # edit distance, free
 python -m jobpipe.cli status                       # where applications stand
 python -m jobpipe.cli sync                         # mirror the sheet, free
-python -m pytest tests/ -q                         # 864 tests, no network
+python -m jobpipe.cli india [--sync]               # India roles in their own tab; free, and on the cron
+python -m pytest tests/ -q                         # 907 tests, no network
 ```
 
 Posting ids come from `postings.id` in `jobpipe.db`.
@@ -116,16 +117,23 @@ only one of them was about money.
 
 Scoring moved off the schedule on 2026-08-30 and onto Vertex, billed to
 GCP credit rather than the prepaid AI Studio balance. The **11:30 cron now
-fetches, filters and syncs only** — it scores nothing — so the unscored backlog
-grows until someone runs `cli score` deliberately. It began as a temporary
+fetches, filters, syncs and refreshes the india tab only** — it scores
+nothing — so the unscored backlog grows until someone runs `cli score`
+deliberately. It began as a temporary
 posture while Track A recalibrated; Track A finished on 2026-08-31 and the
 posture has not been lifted. `register-task.ps1 -Spend` puts scoring back. The
-backlog was 89 on 2026-09-10. The same cron's `sync` also writes a newer
+backlog was 89 on 2026-09-10 and was cleared on 2026-10-03. The same cron's `sync` also writes a newer
 status into any sheet status cell nobody edited (`status_mirror.py`).
 
-A full re-score costs ~85¢ and `calibrate` is comparable. Document generation
-is cheap by comparison — a resume is ~0.4¢, a cover letter ~2¢ — so `tailor` is
-fine to run.
+A scoring run costs dollars, not cents: about 20,000 input tokens per
+posting once escalations are counted, measured on 2026-10-03 (`CONTEXT.md`
+§7). Price a run from that, not from the old "~85¢ full re-score" figure,
+which was a 3.x-era number. `calibrate` scores 56 postings the same way.
+Document generation is cheap by comparison — a resume is ~0.4¢, a cover
+letter ~2¢ — so `tailor` is fine to run.
+
+`cli score --india` is the same spend on a different queue: the India
+lane's roles, which the default queue never reaches (`HANDOFF.md` §3).
 
 `measure`, `status`, `sync` and the test suite cost nothing.
 
@@ -159,7 +167,7 @@ The server loads `.env` itself; nothing else that is not the CLI does
 |---|---|
 | `config/master_profile.md` | source of truth for every claim. Gitignored |
 | `config/bullets.yaml` | the bullet bank — immutable text, hand-edited |
-| `config/targets.csv` | 143 companies, `tier` drives queue order |
+| `config/targets.csv` | 169 companies, `tier` drives queue order |
 | `config/filters.yaml` | Stage A rules. Do not loosen without an audit |
 | `config/answers.yaml` | self-ID, form logistics and reusable answers. Gitignored; never in a prompt |
 | `output/applications/<role>/` | `resume.pdf`, and `cover_letter.md` → `.sent.md` → `.pdf` when a form wants one |
