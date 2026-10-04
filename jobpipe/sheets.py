@@ -188,19 +188,23 @@ def build_row(posting) -> dict:
     }
 
 
-def ensure_header(worksheet) -> list[str]:
+def ensure_header(worksheet, columns: list[str] | None = None) -> list[str]:
     """Write the header if the sheet is empty; verify and extend it if not.
 
     Missing columns are appended rather than treated as fatal, so adding a
     field in a later version does not strand a sheet full of hand-typed notes.
+
+    `columns` is for a tab with a schema of its own (the india tab); the main
+    tab's is COLUMNS.
     """
+    columns = COLUMNS if columns is None else columns
     existing = worksheet.row_values(1)
     if not existing:
-        worksheet.update([COLUMNS], "A1")
+        worksheet.update([columns], "A1")
         _freeze_header(worksheet)
-        return list(COLUMNS)
+        return list(columns)
 
-    missing = [c for c in COLUMNS if c not in existing]
+    missing = [c for c in columns if c not in existing]
     if missing:
         log.info("adding column(s) %s to the sheet", missing)
         extended = list(existing) + missing
@@ -226,7 +230,8 @@ def _freeze_header(worksheet) -> None:
         log.debug("could not freeze the header row: %s", exc)
 
 
-def sync(worksheet, rows: list[dict], refresh_by_url=None) -> SyncResult:
+def sync(worksheet, rows: list[dict], refresh_by_url=None,
+         columns: list[str] | None = None) -> SyncResult:
     """Upsert `rows` into the worksheet, keyed on url.
 
     Human-owned columns are never written, on either an insert or an update.
@@ -242,7 +247,7 @@ def sync(worksheet, rows: list[dict], refresh_by_url=None) -> SyncResult:
     before this existed: 10 -> 4, 9 -> 5, 9 -> 7, 9 -> 7.
     """
     result = SyncResult()
-    header = ensure_header(worksheet)
+    header = ensure_header(worksheet, columns)
     index = {name: i for i, name in enumerate(header)}
 
     existing = worksheet.get_all_values()[1:]          # skip header

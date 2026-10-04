@@ -96,7 +96,18 @@ DOMAINS = ["ai_infra", "ai_saas", "data_infra", "product_saas",
 #                 fills. Cost a real role: Verkada's CV posting scored
 #                 overall 8 / apply 2 on a five-days-onsite line, dropping it
 #                 below the sheet's floor of 4 entirely.
-RUBRIC_VERSION = "2026-08-31.4"
+#   2026-10-03.5  India joins the US as a place he will work (profile 10,
+#                 his decision). `dealbreakers` said location is never one
+#                 because he "relocates anywhere in the US", which left a
+#                 Bengaluru role to be read as outside that sentence. The
+#                 field now names both countries, and says the one case
+#                 where location does block: every location the posting
+#                 names is outside both. Stated on the field, per .3 and .4.
+#                 Profile 10 also says he needs no sponsorship in India, so
+#                 the sponsorship dealbreaker is a US rule.
+#                 Calibrated 2026-10-04: rank +0.760 against .3's
+#                 +0.808, no false negatives (HANDOFF 3).
+RUBRIC_VERSION = "2026-10-03.5"
 
 LEGITIMACY = ["ok", "suspicious", "likely_ghost"]
 
@@ -212,10 +223,13 @@ SCORE_SCHEMA = {
                            "requirements, fluency in a language the candidate "
                            "does not speak, years of experience far beyond "
                            "the profile. Empty if none. LOCATION IS NEVER ONE "
-                           "- the candidate relocates anywhere in the US "
-                           "without qualification, so on-site, hybrid, "
+                           "for a role in the US or in India - the candidate "
+                           "relocates anywhere in either country without "
+                           "qualification, so on-site, hybrid, "
                            "five-days-a-week and required-relocation are all "
-                           "fully in scope and must not appear here.",
+                           "fully in scope and must not appear here. Location "
+                           "is a blocker only when EVERY location the posting "
+                           "names is outside both the US and India.",
         },
         "overall": {"type": "integer",
                     "minimum": 0, "maximum": 10,

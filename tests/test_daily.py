@@ -28,12 +28,12 @@ def stages(monkeypatch):
     ran = []
 
     def ok(name):
-        def run(_a):
+        def run(_a, **_kw):
             ran.append(name)
             return 0
         return run
 
-    for name in ("fetch", "filter", "score", "sync"):
+    for name in ("fetch", "filter", "score", "sync", "india"):
         monkeypatch.setattr(cli, f"cmd_{name}", ok(name))
     return ran
 
@@ -45,17 +45,17 @@ class TestStageIsolation:
 
         monkeypatch.setattr(cli, "cmd_fetch", boom)
         assert cli.cmd_daily(args(yes=True)) == 1
-        assert stages == ["filter", "score", "sync"]
+        assert stages == ["filter", "score", "sync", "india"]
 
     def test_a_failing_sync_still_reports_but_runs_everything(self, stages,
                                                               monkeypatch):
         monkeypatch.setattr(cli, "cmd_sync", lambda _a: 1)
         assert cli.cmd_daily(args(yes=True)) == 1
-        assert stages == ["fetch", "filter", "score"]
+        assert stages == ["fetch", "filter", "score", "india"]
 
     def test_a_clean_run_exits_zero(self, stages):
         assert cli.cmd_daily(args(yes=True)) == 0
-        assert stages == ["fetch", "filter", "score", "sync"]
+        assert stages == ["fetch", "filter", "score", "sync", "india"]
 
 
 class TestSpendGate:
@@ -64,7 +64,7 @@ class TestSpendGate:
     def test_score_is_skipped_without_yes(self, stages):
         assert cli.cmd_daily(args(yes=False)) == 0
         assert "score" not in stages
-        assert stages == ["fetch", "filter", "sync"]
+        assert stages == ["fetch", "filter", "sync", "india"]
 
     def test_the_free_stages_still_run_without_yes(self, stages):
         cli.cmd_daily(args(yes=False))

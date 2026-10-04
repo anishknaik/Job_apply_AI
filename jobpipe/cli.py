@@ -181,6 +181,71 @@ def cmd_audit(args) -> int:
     return 0
 
 
+def cmd_india(args, sync: bool | None = None) -> int:
+    """List the live India roles, or with --sync put them in their own tab.
+
+    Free: no model call, and nothing in the database is written. Stage A's
+    verdicts and the main tab are untouched - see `india`.
+    """
+    from . import india
+
+    sync = args.sync if sync is None else sync
+
+    conn = db.connect(args.db)
+    db.init_schema(conn)
+    targets = load_targets(args.targets)
+    rows = india.select(conn, filters.load_rules(args.filters),
+                        tier_by_company={t.company: t.tier for t in targets})
+    if not rows:
+        print("no live India postings pass the title, age and experience "
+              "rules")
+        return 0
+
+    if not sync:
+        scored = sum(1 for row in rows if row["apply_score"] is not None)
+        print(f"{len(rows)} live India role(s), {scored} scored - by score, "
+              f"then tier, then newest\n")
+        print(f"{'apply':>5} {'found':10s}  {'company':16s} {'role':40s} "
+              f"location")
+        print("-" * 104)
+        for row in rows:
+            score = "-" if row["apply_score"] is None else row["apply_score"]
+            line = (f"{score:>5} {row['first_seen_at'][:10]}  "
+                    f"{row['company'][:15]:16s} {row['title'][:39]:40s} "
+                    f"{(row['location'] or '-')[:26]}")
+            # A Windows console is cp1252, and a title can carry a character
+            # it cannot encode (Barclays: a zero-width space).
+            encoding = sys.stdout.encoding or "utf-8"
+            print(line.encode(encoding, "replace").decode(encoding))
+        print("\n--sync writes these to the sheet's india tab")
+        return 0
+
+    from . import sheets
+
+    _load_env()
+    try:
+        worksheet = sheets.open_worksheet(
+            tab=os.environ.get("GOOGLE_SHEET_TAB_INDIA", "india"))
+        result = sheets.sync(
+            worksheet, [india.build_row(r) for r in rows],
+            # A role that has closed is refreshed too, so its last_seen stops
+            # at the day it left the board rather than freezing arbitrarily.
+            refresh_by_url=lambda urls: [
+                india.build_row(r) for r in india.rows_by_url(conn, urls)],
+            columns=india.COLUMNS)
+        sheets.ensure_status_dropdown(worksheet)
+        sheets.sort_by_score(worksheet)
+        sheets.color_by_tier(worksheet, {t.company: t.tier for t in targets})
+    except sheets.SheetError as exc:
+        print(f"sheet sync failed:\n  {exc}")
+        return 1
+
+    print(f"india tab: {result.appended} added, "
+          f"{result.updated + result.refreshed} updated, "
+          f"{result.unchanged} unchanged")
+    return 0
+
+
 def _load_env() -> None:
     """Load .env so no key needs to live in the shell.
 
@@ -252,6 +317,11 @@ def cmd_score(args) -> int:
               "queue and keeps everything else, the other discards the whole "
               "table. Pick the one you mean.")
         return 1
+    india_only = getattr(args, "india", False)
+    if india_only and (args.queue or args.rescore):
+        print("--india scores the india tab's roles and nothing else; it does "
+              "not combine with --queue or --rescore.")
+        return 1
 
     if args.rescore:
         # Scores are derived data, so clearing them is recoverable by paying
@@ -295,6 +365,19 @@ def cmd_score(args) -> int:
         if len(targeted) > cap:
             print(f"{len(targeted)} exceeds the {cap} cap; nothing scored.")
             return 1
+        if not args.yes:
+            print("Add --yes to confirm the spend. Nothing has been scored.")
+            return 1
+
+    if india_only:
+        from . import india
+
+        targeted = india.unscored(conn, filters.load_rules(args.filters),
+                                  limit=cap)
+        print(f"india: {len(targeted)} live India role(s) have no score")
+        if not targeted:
+            print("nothing to do.")
+            return 0
         if not args.yes:
             print("Add --yes to confirm the spend. Nothing has been scored.")
             return 1
@@ -397,6 +480,7 @@ def cmd_sheet(args) -> int:
 
     Same query the sync uses, so what you see here is what lands in the sheet.
     """
+    from . import india
     from .targets import tier_thresholds
 
     conn = db.connect(args.db)
@@ -406,7 +490,8 @@ def cmd_sheet(args) -> int:
     rows = db.get_sheet_rows(conn, min_score=args.min_score,
                              tier_thresholds=tier_thresholds(targets),
                              limit=args.limit,
-                             per_company=args.per_company or None)
+                             per_company=args.per_company or None,
+                             exclude=india.lane_only)
     if not rows:
         print("nothing to surface — run `score --yes` first?")
         return 0
@@ -436,6 +521,7 @@ def cmd_sheet(args) -> int:
 def cmd_sync(args) -> int:
     """Push the ranked shortlist to the Google Sheet."""
     from . import sheets
+    from . import india
     from .targets import tier_thresholds
 
     _load_env()
@@ -446,7 +532,8 @@ def cmd_sync(args) -> int:
     rows = db.get_sheet_rows(conn, min_score=args.min_score,
                              tier_thresholds=tier_thresholds(targets),
                              limit=args.limit,
-                             per_company=args.per_company or None)
+                             per_company=args.per_company or None,
+                             exclude=india.lane_only)
     if not rows:
         print("nothing to sync — run `score --yes` first?")
         return 0
@@ -986,6 +1073,7 @@ def cmd_daily(args) -> int:
     else:
         print("--- score ---\n  skipped: pass --yes to authorise spending\n")
     stage("sync", lambda: cmd_sync(args))
+    stage("india", lambda: cmd_india(args, sync=True))
 
     # Counts come from timestamps, not from the stage functions, which return
     # exit codes. `last_seen_at` is rewritten for every posting the fetch saw,
@@ -1143,6 +1231,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_sync.add_argument("--no-sort", action="store_true")
     p_sync.set_defaults(func=cmd_sync)
 
+    p_india = sub.add_parser(
+        "india", help="live India roles, unscored; --sync writes the india tab")
+    p_india.add_argument("--sync", action="store_true",
+                         help="write the list to the sheet's india tab")
+    p_india.set_defaults(func=cmd_india)
+
     p_daily = sub.add_parser(
         "daily", help="one unattended run: fetch, filter, score, sync")
     p_daily.add_argument("--yes", action="store_true",
@@ -1160,7 +1254,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_daily.add_argument("--provider", default=None)
     p_daily.add_argument("--model", default=None)
     p_daily.add_argument("--escalation-model", default=None)
-    p_daily.set_defaults(func=cmd_daily, rescore=False)
+    p_daily.set_defaults(func=cmd_daily, rescore=False, queue=False)
 
     p_tailor = sub.add_parser(
         "tailor", help="generate tailored documents for queued roles")
@@ -1220,6 +1314,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_score.add_argument("--rescore", action="store_true",
                          help="discard existing scores and score everything "
                               "again; needed after a rubric change")
+    p_score.add_argument("--india", action="store_true",
+                         help="score only the india tab's roles that have no "
+                              "score yet. They fail Stage A on location, so "
+                              "the default queue never reaches them")
     p_score.add_argument("--queue", action="store_true",
                          help="rescore only the application queue - postings "
                               "carrying a status - that are not already on "

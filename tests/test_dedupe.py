@@ -22,7 +22,10 @@ def make(source_id="1", company="Stripe", title="Software Engineer",
     return Posting(
         ats_type=ats, source_id=source_id, company=company, title=title,
         location=location, remote_flag=False, description="body",
-        url=f"https://example.com/{source_id}", posted_at="2026-08-01T00:00:00+00:00",
+        url=f"https://example.com/{source_id}",
+        # Never a literal date: Stage A drops a posting older than
+        # max_age_days, so a fixed one turns into a failure a month later.
+        posted_at=db.utcnow(),
     )
 
 

@@ -394,18 +394,29 @@ def get_unfiltered(conn: sqlite3.Connection):
     ).fetchall()
 
 
-def get_unscored(conn: sqlite3.Connection, limit: int | None = None):
-    """Stage A survivors with no score yet. This is the Stage B work queue."""
+def get_unscored(conn: sqlite3.Connection, limit: int | None = None,
+                 max_stale_days: int | None = 7):
+    """Stage A survivors with no score yet. This is the Stage B work queue.
+
+    Only postings still on their board, by the same `last_seen_at` window the
+    sheet uses: a role that has closed cannot be applied to, so scoring it
+    buys nothing. With scoring off the schedule the backlog sits for weeks,
+    and on 2026-10-03 twenty of its 352 postings had already closed.
+    """
     sql = """
         SELECT p.*
         FROM postings p
         LEFT JOIN scores s ON s.posting_id = p.id
         WHERE p.stage_a_passed = 1 AND s.posting_id IS NULL
-        ORDER BY p.id
     """
+    params: list = []
+    if max_stale_days is not None:
+        sql += " AND p.last_seen_at >= ?"
+        params.append(utc_days_ago(max_stale_days))
+    sql += " ORDER BY p.id"
     if limit is not None:
         sql += f" LIMIT {int(limit)}"
-    return conn.execute(sql).fetchall()
+    return conn.execute(sql, params).fetchall()
 
 
 def get_queue_off_rubric(conn: sqlite3.Connection, rubric_version: str,
@@ -506,7 +517,7 @@ def copy_score(conn: sqlite3.Connection, from_posting_id: int,
 # write different columns depending on how a row got there.
 _SHEET_SELECT = """
     SELECT p.id, p.first_seen_at, p.company, p.title, p.location, p.url,
-           s.overall, s.reasoning, s.dealbreakers,
+           p.stage_a_passed, s.overall, s.reasoning, s.dealbreakers,
            COALESCE(s.apply_score, s.overall) AS apply_score,
            s.apply_reason, s.archetype, s.engagement, s.legitimacy,
            s.legitimacy_reason
@@ -540,7 +551,7 @@ def get_rows_by_url(conn: sqlite3.Connection, urls) -> list:
 def get_sheet_rows(conn: sqlite3.Connection, min_score: int = 4,
                    tier_thresholds: dict[str, int] | None = None,
                    limit: int = 25, max_stale_days: int | None = 7,
-                   per_company: int | None = 3):
+                   per_company: int | None = 3, exclude=None):
     """The top `limit` postings by apply_score, above a low hard floor.
 
     **Rank, not threshold.** The spec asks for "5-20 new roles" each morning,
@@ -556,6 +567,10 @@ def get_sheet_rows(conn: sqlite3.Connection, min_score: int = 4,
     needs to appear at all, so the `tier` column in targets.csv does real
     work: tier 3 ("would consider") can be made to require an 8 while tier 1
     still surfaces at the floor.
+
+    `exclude` is a predicate over a row; a row it accepts is left out BEFORE
+    the cap and the limit, so the list still fills. It keeps roles that belong
+    to the india tab out of this one.
     """
     # Surfacing is driven by apply_score, not overall: the sheet answers
     # "what should I apply to today". `overall` rides along as a column so the
@@ -585,6 +600,9 @@ def get_sheet_rows(conn: sqlite3.Connection, min_score: int = 4,
         """,
         params,
     ).fetchall()
+
+    if exclude is not None:
+        rows = [row for row in rows if not exclude(row)]
 
     if tier_thresholds:
         rows = [row for row in rows
