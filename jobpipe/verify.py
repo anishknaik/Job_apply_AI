@@ -31,7 +31,7 @@ def _row_count(ats_type: str, payload) -> int | None:
     if isinstance(payload, list):
         return len(payload)
     if isinstance(payload, dict):
-        for key in ("jobs", "content"):
+        for key in ("jobs", "content", "jobPostings"):
             value = payload.get(key)
             if isinstance(value, list):
                 return len(value)
@@ -41,14 +41,29 @@ def _row_count(ats_type: str, payload) -> int | None:
 def probe(target: Target) -> dict:
     """Return {status, rows, note} for one board. Never raises."""
     template = PROBE_URLS.get(target.ats_type)
-    if template is None:
+    data = None
+    if target.ats_type == "workday":
+        # The one board probed with a POST, and whose URL is not a template
+        # over the token alone. Rows is the first page, not the board's size.
+        parts = target.board_token.split("/")
+        if len(parts) != 3:
+            return {"status": "-", "rows": None,
+                    "note": "board_token must be tenant/wd/site"}
+        tenant, wd, site = parts
+        url = (f"https://{tenant.lower()}.{wd.lower()}.myworkdayjobs.com"
+               f"/wday/cxs/{tenant.lower()}/{site}/jobs")
+        data = json.dumps({"appliedFacets": {}, "limit": 20, "offset": 0,
+                           "searchText": ""}).encode()
+    elif template is None:
         return {"status": "-", "rows": None,
                 "note": f"no probe URL for ats_type {target.ats_type!r}"}
+    else:
+        url = template.format(token=target.board_token)
 
-    url = template.format(token=target.board_token)
     request = urllib.request.Request(
-        url, headers={"User-Agent": "jobpipe-verify/0.1",
-                      "Accept": "application/json"})
+        url, data=data, headers={"User-Agent": "jobpipe-verify/0.1",
+                                 "Accept": "application/json",
+                                 "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             status = response.status

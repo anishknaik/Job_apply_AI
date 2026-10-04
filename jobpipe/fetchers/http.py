@@ -40,6 +40,10 @@ ALLOWED_HOSTS = frozenset({
     "api.ashbyhq.com",
     "api.lever.co",
     "api.smartrecruiters.com",
+    # Workday gives every tenant its own host, so each company is listed.
+    # Deliberately not a *.myworkdayjobs.com wildcard: the set stays closed.
+    "barclays.wd3.myworkdayjobs.com",
+    "broadridge.wd5.myworkdayjobs.com",
 })
 
 
@@ -105,12 +109,21 @@ def _get_session() -> requests.Session:
     return session
 
 
-def _get_following_safe_redirects(session: requests.Session, url: str):
-    """GET with redirects validated one hop at a time rather than followed blindly."""
+def _get_following_safe_redirects(session: requests.Session, url: str,
+                                  body: dict | None = None):
+    """GET with redirects validated one hop at a time rather than followed blindly.
+
+    With a `body` the request is a POST of that JSON instead.
+    """
     current = url
     for _ in range(MAX_REDIRECTS + 1):
-        response = session.get(current, timeout=TIMEOUT_SECONDS,
-                               allow_redirects=False)
+        if body is None:
+            response = session.get(current, timeout=TIMEOUT_SECONDS,
+                                   allow_redirects=False)
+        else:
+            response = session.post(current, json=body,
+                                    timeout=TIMEOUT_SECONDS,
+                                    allow_redirects=False)
         if not response.is_redirect and not response.is_permanent_redirect:
             return response
 
@@ -128,11 +141,15 @@ def _get_following_safe_redirects(session: requests.Session, url: str):
     raise UnsafeURLError(f"too many redirects starting at {url!r}")
 
 
-def get_json(url: str, *, polite_delay: float = POLITE_DELAY_SECONDS):
+def get_json(url: str, *, polite_delay: float = POLITE_DELAY_SECONDS,
+             body: dict | None = None):
     """GET a URL and parse JSON, retrying 5xx and 429 with exponential backoff.
 
     4xx other than 429 is not retried — a 404 means the board token is wrong,
     and retrying it three more times just wastes time on every run.
+
+    `body` turns the request into a POST of that JSON. Workday's list endpoint
+    is a POST that reads like a GET; everything else here applies unchanged.
     """
     session = _get_session()
     last_error: Exception | None = None
@@ -140,7 +157,7 @@ def get_json(url: str, *, polite_delay: float = POLITE_DELAY_SECONDS):
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
-            response = _get_following_safe_redirects(session, url)
+            response = _get_following_safe_redirects(session, url, body)
 
             if response.status_code == 404:
                 raise FetchError(f"404 (board token likely wrong): {url}")

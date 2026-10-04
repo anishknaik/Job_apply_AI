@@ -140,6 +140,11 @@ class TestAllowlistContents:
         from urllib.parse import urlparse
 
         for name, module in self._modules().items():
+            if name == "workday":
+                # One host per company, so there is no single host to
+                # derive from the template. test_workday checks that an
+                # unlisted tenant is refused.
+                continue
             template = getattr(module, "URL", None) or module.BASE
             host = urlparse(template.format(token="x")).hostname
             assert host in ALLOWED_HOSTS, \
