@@ -1,4 +1,4 @@
-# Handoff — 2026-10-04
+# Handoff — 2026-10-05
 
 Where Phase 5 actually stands, what is verified against what is assumed, and
 what in the session transcript has since been overturned.
@@ -17,6 +17,15 @@ calibrated the next day. Track C did not move: still one supervised fill.
 What was built is in §2 and §3 ("The India lane"); what a reader would get
 wrong is at the end of §5.
 
+**Updated 2026-10-05: the server runs under the desktop app, and the second
+application went through Cowork.** jobpipe is registered in the desktop
+app's own config as well as `.mcp.json`, and a Cowork task worked LangChain's
+Agent Reliability Engineer role (posting 17754) to `applied` on 2026-10-04.
+Getting there found that `render_resume` took three minutes against Cowork's
+60-second limit on a tool call; it takes 13 seconds now. §3 ("Cowork") has
+the setup, §5 the defect. The form asked for no letter, so the letter path is
+still unexercised live.
+
 Read this before `session_2026-08-31_phase5.txt`. The transcript is a record of
 what was *said*, and several things in it were corrected by later turns — a
 fresh reader going straight through will absorb the wrong versions. The
@@ -34,7 +43,7 @@ remeasured on 2026-09-10; its §9 is superseded by `PHASE5_PLAN.md`.
 24,100 postings | 973 past Stage A | 1,179 scored (953 of them survivors)
 0 open survivors unscored (20 closed ones left unscored on purpose)
 170 live India roles, all scored | 169 targets on 4 boards
-23 applied | 2 letters measured
+24 applied | 2 letters measured
   (only 1 of the 2 counts toward the per-slot means — see §3)
 ```
 
@@ -77,6 +86,8 @@ than before - 26 more boards feed it.
 | **Track C, built** | `save_short_answer`, `check_grounding(question=…)`, `form_answers`, the answers file, the form rules in `CLAUDE.md` and the server instructions |
 | **Track C, fill 1 of 2–3** | LangChain Deployed Engineer (Early Career-NYC), submitted 2026-09-10 |
 | **Track C, after fill 1** | `sync` writes untouched status cells back; reusable answers; `prepare_letter` — the letter as text or a read-back PDF |
+| **Track C, fill 2** | LangChain Agent Reliability Engineer, GTM (17754), recorded `applied` 2026-10-04 from a Cowork task. No letter asked for |
+| **Cowork** | jobpipe registered in the desktop app's config; tools called from a Cowork task; `render_resume` brought under its 60-second limit |
 | **The India lane** | `india.py`, `cli india [--sync]`, `cli score --india`, the `india` tab, the daily stage. 170 roles scored and synced live |
 | **Workday fetcher** | Barclays (763) and Broadridge (284) fetched live, filtered and scored |
 | **Open-only scoring** | `get_unscored` skips postings off their board for 7 days; 20 closed ones were not paid for |
@@ -134,8 +145,9 @@ Verified means observed, not inferred:
 
 ## 3. Open
 
-**Track B is complete, all four slices. Track C is built and has one
-supervised fill behind it; two more before its rules are settled.** What is
+**Track B is complete, all four slices. Track C is built and has two
+supervised fills behind it; one more, with a letter, before its rules are
+settled.** What is
 still open in it is listed under Track C below.
 
 **Slice 3 — DONE 2026-09-01.** `render_and_record` split out of
@@ -185,8 +197,43 @@ instructions, so a Cowork session gets them too.
 
 Open in Track C:
 
-- **Two more supervised fills.** Prefer forms that ask for a letter, so the
-  letter path finally runs live.
+- **One more supervised fill, and it should be a form that asks for a
+  letter.** Two are done and neither did, so `save_cover_letter`,
+  `copy_for_editing` and `prepare_letter` have still only run offline.
+
+**Cowork — WORKING 2026-10-04.** `.mcp.json` is project-scoped: only a
+Claude Code session opened on this folder reads it. The desktop app and
+Cowork read `%APPDATA%\Claude\claude_desktop_config.json`, which now carries:
+
+```json
+"mcpServers": {
+  "jobpipe": {
+    "command": "cmd",
+    "args": ["/c", "cd /d D:\\Job_apply_AI && D:\\python_312\\python.exe -m jobpipe.mcp_server"]
+  }
+}
+```
+
+Three things about it that are not obvious:
+
+- **It goes at the top level of that file**, beside `preferences`. Nested
+  inside `preferences` it parses as valid JSON and is ignored.
+- **The `cd` is the point.** The app starts servers from its own directory.
+  `python -m jobpipe.mcp_server` only finds the package from the repo, and
+  `pipeline_tailor.OUTPUT_ROOT` is the relative `output/applications`, so
+  from anywhere else documents would be written somewhere else without an
+  error. Making that path absolute would remove the dependency; not done.
+- **The app reads the file at startup only, and closing the window does not
+  quit it.** Quit from the tray icon. The same applies after a change to the
+  server's code.
+
+A Cowork task does not load `CLAUDE.md` by itself; it gets the server
+instructions, and the prompt should tell it to read `CLAUDE.md` first. The
+queue comes from `list_queue`, never from the sheet in a browser tab.
+
+The posting 17754 run left four resume rows (59-62): three renders that
+finished after Cowork had stopped waiting, and the one that was used. Each
+superseded the last, so only 62 is live.
 
 Decided and done the same day:
 
@@ -517,6 +564,17 @@ unscored. The field said location is NEVER a dealbreaker because he
 sentence, not inside a ban. The exclusion of India lived in `filters.yaml`
 and nowhere else. `.5` names both countries on the field.
 
+**`render_resume` was reported hung, and it was only slow.** Cowork saw
+"device did not respond within 60s" three times and concluded the PDF step
+had stuck. Each of those renders finished and wrote its row. The one-page
+loop measures every font and short-text pair again after each dropped
+bullet - 80 measurements for a 21-bullet variant - and each one launched its
+own Chromium: 175 seconds, measured. `resume.one_browser()` now holds one
+open for the whole render: 13 seconds, same bullets, same drops. Nobody had
+noticed because Claude Code waits longer than Cowork does. **A tool that
+times out has not necessarily failed; look for what it wrote before
+retrying**, since every retry here was another full render and another row.
+
 **Deleting a row from the sheet does not stop it being scored.** Scoring
 reads the database, where nothing is deleted. What stops a closed posting
 being paid for is the `last_seen_at` window on `get_unscored`.
@@ -525,15 +583,22 @@ being paid for is the `last_seen_at` window on `get_unscored`.
 
 ## 5a. Start here next session
 
-**Track C's second supervised fill** — and choose the posting for what it
-exercises: a form that asks for a cover letter. That runs the one path still
+**Track C's third supervised fill** — and choose the posting for what it
+exercises: a form that asks for a cover letter. Fill 2 went to a form
+without one, and a Cowork task cannot tell from the queue which forms have a
+letter field; it has to open the form first. That runs the one path still
 untested live — `save_cover_letter`, `check_grounding`, `copy_for_editing`,
 Anish's edit, `measure` — and produces the first letter in the assembled
 seven-block shape, which is what the open `why this role` question needs
 (§3). Whether the form wants the letter pasted or uploaded, it comes from
 `prepare_letter`.
 
-Then the third fill, and then mark the rules settled in `CLAUDE.md`.
+Then mark the rules settled in `CLAUDE.md`, which is Anish's call.
+
+Two Perplexity roles were in progress in the same Cowork task when this was
+written: 19496 has a resume, and 19713 has a resume and two form answers
+that passed grounding. Neither has a status event, so check `status` before
+assuming either went out.
 
 Decisions that are Anish's and waiting: the stale-posting fix (§4); whether
 the india tab's status column is mirrored (§3); tiers for the 26 new

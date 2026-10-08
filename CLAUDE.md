@@ -139,8 +139,13 @@ lane's roles, which the default queue never reaches (`HANDOFF.md` §3).
 
 ## The MCP tools
 
-The jobpipe server (`.mcp.json`, stdio) is how a session works the queue.
-Thirteen tools. `TOOL_ALLOWLIST` in `jobpipe/mcp_server.py` is asserted
+The jobpipe server (stdio) is how a session works the queue. Thirteen tools.
+It is registered twice: `.mcp.json` for Claude Code sessions opened on this
+folder, and a top-level `mcpServers` entry in
+`%APPDATA%\Claude\claude_desktop_config.json` for the desktop app and Cowork.
+The desktop entry must `cd` into the repo before starting Python — the app
+launches servers from elsewhere, and `pipeline_tailor.OUTPUT_ROOT` is a
+relative path (`HANDOFF.md` §3, "Cowork"). `TOOL_ALLOWLIST` in `jobpipe/mcp_server.py` is asserted
 against the live registration by the tests, so the list cannot grow by
 accident — and there is no submit, send, score, calibrate or daily tool, on
 purpose.
@@ -159,7 +164,9 @@ purpose.
 | `advance_status` | Append a status transition — after the ATS confirms, never before | row |
 
 The server loads `.env` itself; nothing else that is not the CLI does
-(`HANDOFF.md` §5). After its code changes, `/mcp` reconnects it.
+(`HANDOFF.md` §5). After its code changes, `/mcp` reconnects it in Claude
+Code; the desktop app has to be quit from the tray and reopened, because
+closing its window leaves the old server running.
 
 ## Where things are
 
@@ -246,8 +253,10 @@ There is no submit tool, so **stop-before-submit is an instruction here, not
 a structure** — the one guardrail that reverted from absence to a rule, and
 the one to keep watching. These rules are not settled until two or three
 forms have been filled under close supervision; until then, check in with
-Anish after the first section of each form. One has been — LangChain,
-2026-09-10 — and what it taught is folded into the rules below.
+Anish after the first section of each form. Two have been — LangChain on
+2026-09-10 from Claude Code, and LangChain again on 2026-10-04 from Cowork —
+and what the first taught is folded into the rules below. Neither form asked
+for a letter.
 
 **Scope the browser.** The extension sees every tab in the logged-in
 browser. Open the application in a new tab of its own and work only there.

@@ -1,7 +1,8 @@
 # jobpipe — Context
 
 > Written 2026-08-29, **§2 and §7 remeasured 2026-08-31; §2 and §4 again on
-> 2026-09-10 and 2026-10-04.** Every number in §2
+> 2026-09-10 and 2026-10-04.** On 2026-10-05 only §2's applications and
+> documents rows and §4's line counts were re-read. Every number in §2
 > was read from the live system on that date rather than copied forward,
 > because several figures in `PHASE1_SUMMARY.md` and `POST_PHASE2_FIXES.md`
 > had drifted.
@@ -38,9 +39,9 @@ metric is interviews per hour spent, not applications per day.
 |---|---|---|
 | 1 | Discovery → dedupe → filters → LLM scoring → Google Sheet | Fetch/filter/sync unattended daily 11:30; scoring on demand. Two lanes since 2026-10-03: US (main tab) and India (its own tab) |
 | 2 | Queued role → tailored resume PDF → cover letter → grounding check | Running on demand |
-| 3 | Application form fill, human clicks submit | Built as Phase 5 Track C; one supervised fill (LangChain, 2026-09-10) |
+| 3 | Application form fill, human clicks submit | Built as Phase 5 Track C; two supervised fills (LangChain 2026-09-10; LangChain 2026-10-04, from Cowork) |
 | 4 | Recruiter research → outreach drafts | Not started |
-| 5 | **MCP server + Cowork — the final version** | Slice 0 + Tracks A, B and C built; Track C has 1 of 2–3 supervised fills |
+| 5 | **MCP server + Cowork — the final version** | Slice 0 + Tracks A, B and C built; Track C has 2 of 2–3 supervised fills, none with a letter. Runs under the desktop app and Cowork since 2026-10-04 |
 
 ---
 
@@ -53,8 +54,8 @@ metric is interviews per hour spent, not applications per day.
 | India lane | 170 live roles, all scored — 226 scores sit outside Stage A's survivors, most of them these |
 | Scoring models in the corpus | `3.1-flash-lite` 454, `3.5-flash-lite` 149, `2.5-flash` 299, `2.5-pro` 277 |
 | Rubric versions in the corpus | none 603, `2026-10-03.5` 494, `2026-08-31.3` 78, `.2` 3, `.4` 1 |
-| Applications | 23 applied, 1 drafted, 71 not_applied (144 status events) |
-| Documents | 58 rows — 29 resumes, 25 letters, 4 form answers |
+| Applications | 24 applied (146 status events), read 2026-10-05 |
+| Documents | 66 rows — 35 resumes, 25 letters, 6 form answers, read 2026-10-05 |
 | Letters with stored content | 13 (the `content` column postdates the first batch) |
 | **Edit distances computed** | **2** — PostHog 0.032, U. of Utah 0.033 |
 | Targets | 169 companies — tier 1: 8, tier 2: 93, tier 3: 68 (the 26 added 2026-10-03 are all tier 3, unreviewed) |
@@ -143,7 +144,7 @@ tab is not ranked down to 25: it lists every live India role, scored first.
 
 ## 4. Module map
 
-11,134 lines of Python across 38 modules, 907 offline tests.
+11,192 lines of Python across 38 modules, 907 offline tests.
 
 | Module | Lines | Does |
 |---|---|---|
@@ -153,7 +154,7 @@ tab is not ranked down to 25: it lists every live India role, scored first.
 | `sheets.py` | 529 | Service-account sync; human columns written only by `set_cells`, conditionally. A tab may bring its own columns |
 | `india.py` | 122 | The India lane: selection, its scoring queue, its tab's rows |
 | `letters.py` | 544 | Prompt, banned phrases, closing-shape rule, assembly |
-| `resume.py` | 521 | HTML → Playwright PDF, one-page loop, ATS parse check |
+| `resume.py` | 575 | HTML → Playwright PDF, one-page loop on one held Chromium, ATS parse check |
 | `calibrate.py` | 552 | Hand-scored set vs model — MAE, bias, recall/precision |
 | `filters.py` | 333 | Stage A rules from `config/filters.yaml` |
 | `tailor.py` | 283 | Bullet selection; ids compiled into the response schema |

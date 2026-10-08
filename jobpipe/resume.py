@@ -22,6 +22,8 @@ import html
 import logging
 import os
 import re
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -254,6 +256,53 @@ def _playwright():
     return sync_playwright
 
 
+# One Chromium for a whole render. The one-page loop measures every
+# (font, short) pair again after each dropped bullet - 80 measurements for a
+# 21-bullet variant - and launching a browser for each took 175 seconds, past
+# the 60 a Cowork tool call is allowed. Per thread, because Playwright's sync
+# API is bound to the thread that started it.
+_held = threading.local()
+
+
+@contextmanager
+def one_browser():
+    """Hold one Chromium open for everything rendered inside the block.
+
+    Launched on first use, not on entry, so a caller that never reaches
+    Chromium - a test with the two functions below stubbed - never starts it.
+    """
+    if getattr(_held, "depth", 0):
+        yield
+        return
+    _held.depth, _held.pw, _held.browser = 1, None, None
+    try:
+        yield
+    finally:
+        browser, pw = _held.browser, _held.pw
+        _held.depth, _held.pw, _held.browser = 0, None, None
+        if browser is not None:
+            browser.close()
+        if pw is not None:
+            pw.stop()
+
+
+@contextmanager
+def _browser():
+    """A Chromium to work in: the held one, else one for this call alone."""
+    if getattr(_held, "depth", 0):
+        if _held.browser is None:
+            _held.pw = _playwright()().start()
+            _held.browser = _held.pw.chromium.launch()
+        yield _held.browser
+        return
+    with _playwright()() as p:
+        browser = p.chromium.launch()
+        try:
+            yield browser
+        finally:
+            browser.close()
+
+
 # Letter minus the @page margins, at 96 CSS px/inch. WIDTH matters as much as
 # height: measuring at the default 1280px viewport lets text wrap far less
 # than it will at 7.4in, which understates the height badly — the first
@@ -285,25 +334,23 @@ def measure_px(html_text: str) -> float:
     PDF rather than the screen. The loop uses this to decide how much to trim;
     page count alone is far too coarse a signal to converge on.
     """
-    with _playwright()() as p:
-        browser = p.chromium.launch()
+    with _browser() as browser:
+        page = browser.new_page(
+            viewport={"width": PRINT_WIDTH_PX, "height": int(USABLE_PX)})
         try:
-            page = browser.new_page(
-                viewport={"width": PRINT_WIDTH_PX, "height": int(USABLE_PX)})
             page.emulate_media(media="print")
             page.set_content(html_text, wait_until="load")
             return float(page.evaluate("document.body.scrollHeight"))
         finally:
-            browser.close()
+            page.close()
 
 
 def _render_pdf(html_text: str, out: Path) -> int:
     """HTML -> PDF via Chromium. Returns the page count."""
     out.parent.mkdir(parents=True, exist_ok=True)
-    with _playwright()() as p:
-        browser = p.chromium.launch()
+    with _browser() as browser:
+        page = browser.new_page()
         try:
-            page = browser.new_page()
             page.set_content(html_text, wait_until="load")
             page.pdf(path=str(out), format="Letter",
                      print_background=False,
@@ -312,7 +359,7 @@ def _render_pdf(html_text: str, out: Path) -> int:
                      # two disagree silently.
                      prefer_css_page_size=True)
         finally:
-            browser.close()
+            page.close()
 
     from pypdf import PdfReader
     return len(PdfReader(str(out)).pages)
@@ -473,7 +520,14 @@ def render(bank: Bank, selected: list[Bullet], out: Path,
     bullet. Never shrink below the floor — a 9pt resume that parses badly has
     traded the only thing that matters for the appearance of fitting.
     """
-    out = Path(out)
+    with one_browser():
+        return _render(bank, selected, Path(out), variant, skill_order,
+                       emphasise, verify)
+
+
+def _render(bank: Bank, selected: list[Bullet], out: Path, variant: str,
+            skill_order: list[str] | None, emphasise: list[str] | None,
+            verify: bool) -> RenderResult:
     working = list(selected)
     dropped: list[str] = []
 
