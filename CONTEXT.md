@@ -61,7 +61,7 @@ metric is interviews per hour spent, not applications per day.
 | Targets | 169 companies — tier 1: 8, tier 2: 93, tier 3: 68 (the 26 added 2026-10-03 are all tier 3, unreviewed) |
 | ATS split | greenhouse 82, ashby 79, smartrecruiters 6, workday 2 |
 | Bullet bank | 21 bullets across 10 roles |
-| Tests | **907** |
+| Tests | **909** |
 | Last scheduled run | 2026-10-03 15:30 UTC — 13,354 fetched, 167 new, **0 scored** |
 | Billing | Vertex, GCP credit. The prepaid AI Studio balance is no longer drawn on |
 
@@ -138,13 +138,14 @@ Sheet selection (`db.get_sheet_rows`): `apply_score >= 4` floor, optional
 per-company tier threshold, `last_seen_at` within 7 days, **top 25 by rank**,
 max 3 per company applied *during* selection rather than after truncation.
 India-only roles are excluded before the cap (`india.lane_only`). The india
-tab is not ranked down to 25: it lists every live India role, scored first.
+tab is not ranked down to 25: it lists every live India role scoring 6 or
+more (`india.MIN_SCORE`, since 2026-10-08) and any not yet scored, best first.
 
 ---
 
 ## 4. Module map
 
-11,192 lines of Python across 38 modules, 907 offline tests.
+11,192 lines of Python across 38 modules, 909 offline tests.
 
 | Module | Lines | Does |
 |---|---|---|

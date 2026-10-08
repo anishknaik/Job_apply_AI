@@ -150,6 +150,25 @@ class TestScoringLane:
         assert india.build_row(rows[0])["score"] == 8
         assert india.build_row(rows[1])["score"] == ""
 
+    def test_the_floor_drops_a_low_score_and_keeps_an_unscored_role(
+            self, conn, rules):
+        add(conn, 1)
+        add(conn, 2)
+        add(conn, 3)
+        add(conn, 4)
+        score(conn, 2, apply_score=india.MIN_SCORE)
+        score(conn, 3, apply_score=india.MIN_SCORE - 1)
+        rows = india.select(conn, rules, min_score=india.MIN_SCORE)
+        assert {r["url"] for r in rows} == {
+            "https://x/1", "https://x/2", "https://x/4"}
+        assert len(india.select(conn, rules)) == 4
+
+    def test_the_floor_leaves_the_scoring_queue_alone(self, conn, rules):
+        add(conn, 1)
+        add(conn, 2)
+        score(conn, 2, apply_score=2)
+        assert [r["source_id"] for r in india.unscored(conn, rules)] == ["1"]
+
     def test_a_scored_india_role_stays_off_the_main_tab(self, conn):
         add(conn, 1)
         add(conn, 2, location="New York, NY", stage_a=1)

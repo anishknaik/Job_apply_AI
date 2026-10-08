@@ -26,7 +26,7 @@ python -m jobpipe.cli measure [--detail]           # edit distance, free
 python -m jobpipe.cli status                       # where applications stand
 python -m jobpipe.cli sync                         # mirror the sheet, free
 python -m jobpipe.cli india [--sync]               # India roles in their own tab; free, and on the cron
-python -m pytest tests/ -q                         # 907 tests, no network
+python -m pytest tests/ -q                         # 909 tests, no network
 ```
 
 Posting ids come from `postings.id` in `jobpipe.db`.

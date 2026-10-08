@@ -39,7 +39,7 @@ remeasured on 2026-09-10; its §9 is superseded by `PHASE5_PLAN.md`.
 ## 1. State
 
 ```
-907 tests, 13 tools on the MCP surface, on master
+909 tests, 13 tools on the MCP surface, on master
 24,100 postings | 973 past Stage A | 1,179 scored (953 of them survivors)
 0 open survivors unscored (20 closed ones left unscored on purpose)
 170 live India roles, all scored | 169 targets on 4 boards
@@ -278,6 +278,13 @@ follow from keeping the lanes apart:
   human ones, then score, fit and reasoning - through a `columns` parameter
   on `sheets.sync`. Rows are never deleted; `last_seen` is how a closed one
   shows.
+
+- **The india tab has a floor of 6 on `score`** (`india.MIN_SCORE`), Anish's
+  call on 2026-10-08. A role scored below it is not added; one with no score
+  yet is. The sync still never deletes, so the 177 rows already below the
+  floor - none with a status or a note - were removed by hand that day, a
+  one-off. 23 remained. The scoring queue is unchanged: it is the unscored
+  roles, which the floor keeps.
 
 Open in it:
 

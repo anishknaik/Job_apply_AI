@@ -195,16 +195,18 @@ def cmd_india(args, sync: bool | None = None) -> int:
     db.init_schema(conn)
     targets = load_targets(args.targets)
     rows = india.select(conn, filters.load_rules(args.filters),
-                        tier_by_company={t.company: t.tier for t in targets})
+                        tier_by_company={t.company: t.tier for t in targets},
+                        min_score=india.MIN_SCORE)
     if not rows:
         print("no live India postings pass the title, age and experience "
-              "rules")
+              f"rules and score {india.MIN_SCORE} or more")
         return 0
 
     if not sync:
         scored = sum(1 for row in rows if row["apply_score"] is not None)
-        print(f"{len(rows)} live India role(s), {scored} scored - by score, "
-              f"then tier, then newest\n")
+        print(f"{len(rows)} live India role(s), {scored} scored "
+              f"{india.MIN_SCORE} or more - by score, then tier, then "
+              f"newest\n")
         print(f"{'apply':>5} {'found':10s}  {'company':16s} {'role':40s} "
               f"location")
         print("-" * 104)

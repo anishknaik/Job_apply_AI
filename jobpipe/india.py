@@ -39,6 +39,11 @@ COLUMNS = [
     "score", "fit", "reasoning",
 ]
 
+# The tab's floor, on `apply_score` like the main tab's - Anish's call,
+# 2026-10-08: below 6 he will not apply. A role with no score yet is not
+# below it; it shows blank until `cli score --india` has run.
+MIN_SCORE = 6
+
 _SELECT = """
     SELECT p.id, p.first_seen_at, p.last_seen_at, p.company, p.title,
            p.location, p.remote_flag, p.description, p.url, p.posted_at,
@@ -65,10 +70,13 @@ def lane_only(row) -> bool:
 
 
 def select(conn, rules: filters.FilterRules, max_stale_days: int = 7,
-           tier_by_company: dict[str, int] | None = None) -> list:
+           tier_by_company: dict[str, int] | None = None,
+           min_score: int | None = None) -> list:
     """Live India postings that pass every Stage A rule except location.
 
     Ordered by score where there is one, then company tier, then newest.
+    `min_score` leaves out a role scored below it and keeps an unscored one,
+    so the scoring queue, which is the unscored ones, is the same either way.
     """
     rules = dataclasses.replace(rules, location_allow=[], location_exclude=[])
     rows = conn.execute(
@@ -76,6 +84,9 @@ def select(conn, rules: filters.FilterRules, max_stale_days: int = 7,
         (db.utc_days_ago(max_stale_days),)).fetchall()
     kept = [row for row in rows
             if is_india(row["location"]) and filters.evaluate(row, rules)[0]]
+    if min_score is not None:
+        kept = [row for row in kept if row["apply_score"] is None
+                or row["apply_score"] >= min_score]
     tiers = tier_by_company or {}
     kept.sort(key=lambda row: row["first_seen_at"], reverse=True)
     kept.sort(key=lambda row: tiers.get(row["company"], 9))
