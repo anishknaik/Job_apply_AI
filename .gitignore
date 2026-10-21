@@ -92,3 +92,6 @@ open_questions_answered..txt
 
 # Orphaned SQLite -shm files left behind by a FUSE mount. Harmless, not ours.
 .fuse_hidden*
+
+# Personal notes for the Revenium take-home; not part of jobpipe.
+revenium-demo-context.md
