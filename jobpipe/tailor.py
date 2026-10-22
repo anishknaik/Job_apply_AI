@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import logging
 
-from . import variants
+from . import metering, variants
 from .bullets import Bank, Bullet, match_score
 from .providers import ScoringProvider, default_model
 
@@ -252,8 +252,10 @@ def select_bullets(provider: ScoringProvider, bank: Bank, row,
     model = model or default_model(provider.name)
     schema = build_selection_schema(bank)
 
-    response = provider.score(model=model, system_prompt=system_prompt,
-                              user_text=posting_message(row), schema=schema)
+    with metering.for_posting(row), metering.tagged(
+            task_type="bullet_selection", agent="resume_tailor"):
+        response = provider.score(model=model, system_prompt=system_prompt,
+                                  user_text=posting_message(row), schema=schema)
     if response.refused:
         raise RuntimeError(
             f"selection refused by {model}: {response.refusal_reason}")

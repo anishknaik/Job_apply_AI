@@ -30,6 +30,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 
+from . import metering
 from .bullets import Bank
 from .providers import ScoringProvider, default_grounding_model
 
@@ -259,8 +260,11 @@ def check(provider: ScoringProvider, bank: Bank, letter_text: str,
             f"{posting_text[:10_000]}\n\n"
             f"=== {k['heading']} ===\n{letter_text}")
 
-    response = provider.score(model=model, system_prompt=system_prompt,
-                              user_text=user, schema=schema_for(kind))
+    # The posting tag comes from the caller, which holds the row.
+    with metering.tagged(task_type="grounding_check",
+                         agent="grounding_checker", transaction_name=kind):
+        response = provider.score(model=model, system_prompt=system_prompt,
+                                  user_text=user, schema=schema_for(kind))
     if response.refused:
         raise RuntimeError(
             f"grounding check refused by {model}: {response.refusal_reason}")

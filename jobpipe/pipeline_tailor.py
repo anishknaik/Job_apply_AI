@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import bullets as bullets_mod
-from . import db, grounding, letters, resume, scoring, tailor
+from . import db, grounding, letters, metering, resume, scoring, tailor
 
 log = logging.getLogger(__name__)
 
@@ -133,8 +133,9 @@ def generate_cover_letter(provider, bank, row, letter_system, ground_system,
                                      content=result["text"])
     conn.commit()
 
-    check = grounding.check(provider, bank, result["text"],
-                            _description(row), ground_system)
+    with metering.for_posting(row):
+        check = grounding.check(provider, bank, result["text"],
+                                _description(row), ground_system)
     db.record_grounding(conn, document_id, check)
 
     return {"letter": result, "grounding": check, "path": path,

@@ -22,6 +22,10 @@ google-auth>=2.35
 playwright>=1.40
 pypdf>=4.0
 
+# Revenium metering of the Vertex calls (jobpipe/metering.py). Inert without
+# REVENIUM_METERING_API_KEY: the middleware is not even imported.
+revenium-python-sdk[google-genai]==0.10.1
+
 # Phase 5 - jobpipe over MCP (local stdio only; a custom connector is reached
 # from Anthropic's cloud, which cannot see this machine's SQLite file, its
 # Chromium, or a gitignored master_profile.md).

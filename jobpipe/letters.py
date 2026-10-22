@@ -28,6 +28,7 @@ import logging
 import re
 from pathlib import Path
 
+from . import metering
 from .bullets import Bank, Bullet
 from .providers import ScoringProvider
 
@@ -464,8 +465,10 @@ def generate_letter(provider: ScoringProvider, bank: Bank, row,
                        f"them. Do not simply reword around the same shape — "
                        f"change what the sentence does.")
 
-        response = provider.score(model=model, system_prompt=system_prompt,
-                                  user_text=text_in, schema=LETTER_SCHEMA)
+        with metering.for_posting(row), metering.tagged(
+                task_type="cover_letter", agent="letter_writer"):
+            response = provider.score(model=model, system_prompt=system_prompt,
+                                      user_text=text_in, schema=LETTER_SCHEMA)
         if response.refused:
             raise LetterError(
                 f"letter refused by {model}: {response.refusal_reason}")

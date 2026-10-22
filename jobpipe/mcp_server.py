@@ -807,7 +807,7 @@ def check_grounding(conn, posting_id: int,
             f"draft {doc['id']} has no stored content, so there is nothing to "
             f"check against. Re-save the letter.")
 
-    from . import grounding, scoring
+    from . import grounding, metering, scoring
     from .providers import ProviderError, get_provider
 
     bank = _bullets.load_bank()
@@ -823,11 +823,12 @@ def check_grounding(conn, posting_id: int,
     # request is byte-identical to before short answers existed.
     kind = {} if question is None else {"kind": "answer"}
     try:
-        result = grounding.check(provider, bank, text,
-                                 pipeline_tailor._description(row),
-                                 grounding.build_system_prompt(
-                                     bank, scoring.load_profile(), **kind),
-                                 **kind)
+        with metering.for_posting(row):
+            result = grounding.check(provider, bank, text,
+                                     pipeline_tailor._description(row),
+                                     grounding.build_system_prompt(
+                                         bank, scoring.load_profile(), **kind),
+                                     **kind)
     except Exception as exc:                                  # noqa: BLE001
         # Deliberately broad. Whatever went wrong, the outcome is the same:
         # no verdict is recorded, so the draft stays uncleared.
