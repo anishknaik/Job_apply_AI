@@ -133,7 +133,7 @@ class TestGreenhouse:
         assert spec.greenhouse_questions_url("alloy", 8495229002) == \
             "https://boards-api.greenhouse.io/v1/boards/alloy/jobs/8495229002?questions=true"
         assert spec.greenhouse_form_url("alloy", 8495229002) == \
-            "https://job-boards.greenhouse.io/alloy/jobs/8495229002"
+            "https://job-boards.greenhouse.io/embed/job_app?for=alloy&token=8495229002"
 
 
 class TestAshby:

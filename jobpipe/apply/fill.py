@@ -103,7 +103,9 @@ def form_root(page, ats: str):
 def collect_signals(page) -> _signals.Verdict:
     """Everything signals.detect wants, read without touching anything."""
     html = page.content()
-    frame_urls = [f.url for f in page.frames]
+    # Child frames only: the page's own URL is where the form is, not a
+    # challenge, whatever words it carries.
+    frame_urls = [f.url for f in page.frames if f != page.main_frame]
     try:
         globals_ = page.evaluate(
             "names => names.filter(n => typeof window[n] !== 'undefined')",

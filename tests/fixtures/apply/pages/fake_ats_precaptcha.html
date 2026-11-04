@@ -1,0 +1,13 @@
+<!doctype html>
+<!-- The fake Greenhouse form with a reCAPTCHA already on the page: the
+     runner must not click at all. -->
+<html lang="en"><head><meta charset="utf-8"><title>Fake ATS</title>
+<script>window.grecaptcha = {enterprise: {}};</script></head>
+<body>
+<form method="get" action="#" id="application-form">
+  <input id="first_name" value="Jane">
+  <textarea name="g-recaptcha-response" class="g-recaptcha-response"></textarea>
+  <button type="submit">Submit application</button>
+</form>
+<script>window.__submits = 0; document.querySelector('form').addEventListener('submit', function (e) { e.preventDefault(); window.__submits += 1; });</script>
+</body></html>

@@ -27,7 +27,7 @@ _HTML_PATTERNS: tuple[tuple[str, re.Pattern], ...] = tuple(
         ("hcaptcha", r"hcaptcha\.com|h-captcha|data-hcaptcha"),
         ("turnstile", r"challenges\.cloudflare\.com/turnstile|cf-turnstile|turnstile\.render"),
         ("arkose", r"arkoselabs|funcaptcha|arkose-?labs"),
-        ("challenge_iframe", r"<iframe\b[^>]*\bsrc=\"[^\"]*(?:recaptcha|hcaptcha|turnstile|arkose|challenge)[^\"]*\""),
+        ("challenge_iframe", r"<iframe\b[^>]*\bsrc=[\"'][^\"']*(?:recaptcha|hcaptcha|turnstile|arkose|challenge)[^\"']*[\"']"),
         ("verify_human_text", r"verify (?:that )?you(?:'| a)re (?:a )?human|are you a robot|i'm not a robot|prove you(?:'| a)re not a robot|complete the (?:security )?check"),
     ))
 _FRAME_PATTERN = re.compile(r"recaptcha|hcaptcha|turnstile|arkose|funcaptcha|challenge", re.I)

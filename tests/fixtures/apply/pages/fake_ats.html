@@ -1,0 +1,57 @@
+<!doctype html>
+<!-- A fake ATS for the submit tests. ?ats=greenhouse|ashby picks the form
+     shape; ?outcome=confirm|error|challenge|timeout picks what the page does
+     after the one click. Clicks are counted in window.__submits. The
+     success and error markup follow what was verified for Ashby
+     (ashby-application-form-success-container, "We couldn't submit your
+     form.") and the UNVERIFIED thank-you wording assumed for Greenhouse. -->
+<html lang="en"><head><meta charset="utf-8"><title>Fake ATS</title></head>
+<body>
+<div id="stage"></div>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var ats = q.get('ats') || 'greenhouse';
+  var outcome = q.get('outcome') || 'confirm';
+  var stage = document.getElementById('stage');
+  window.__submits = 0;
+  if (ats === 'greenhouse') {
+    stage.innerHTML = '<form method="get" action="#" id="application-form">' +
+      '<label for="first_name">First Name</label><input id="first_name" value="Jane">' +
+      '<button type="submit" class="btn btn--pill">Submit application</button></form>';
+    stage.querySelector('form').addEventListener('submit', function (e) { e.preventDefault(); clicked(); });
+  } else {
+    stage.innerHTML = '<div class="ashby-application-form-container">' +
+      '<div class="ashby-application-form-field-entry" data-field-path="_systemfield_name">' +
+      '<input id="_systemfield_name" name="_systemfield_name" value="Jane"></div>' +
+      '<button class="ashby-application-form-submit-button"><span>Submit Application</span></button></div>';
+    stage.querySelector('button').addEventListener('click', clicked);
+  }
+  function clicked() {
+    window.__submits += 1;
+    setTimeout(function () {
+      if (outcome === 'confirm') {
+        if (ats === 'greenhouse') {
+          stage.innerHTML = '<div id="application-confirmation"><h1>Thank you for applying!</h1><p>We have received your application.</p></div>';
+          history.replaceState({}, '', location.pathname + location.search + '#confirmation');
+        } else {
+          stage.innerHTML = '<div class="ashby-application-form-success-container"><div role="status" aria-live="polite"><h3>Success</h3>' +
+            "<p>Your application was successfully submitted. We'll contact you if there are next steps.</p></div></div>";
+        }
+      } else if (outcome === 'error') {
+        var msg = ats === 'greenhouse' ? '<p class="error">There was an error submitting your application. Please try again.</p>'
+                                       : "<div><h3>We couldn't submit your form.</h3><p>Resume is required.</p></div>";
+        stage.insertAdjacentHTML('afterbegin', msg);
+      } else if (outcome === 'challenge') {
+        // Assembled at runtime so the page's own source does not read as a
+        // challenge before the click (the detector scans raw HTML, scripts included).
+        var word = 'recap' + 'tcha';
+        stage.insertAdjacentHTML('afterbegin', '<div id="chall' + 'enge"><p>Please verify you are ' + 'human to continue.</p>' +
+          '<ifr' + 'ame src="' + word + '/api2/bframe?k=x" title="' + word + ' box"></ifr' + 'ame></div>');
+      }
+      // timeout: nothing happens, ever.
+    }, 300);
+  }
+})();
+</script>
+</body></html>

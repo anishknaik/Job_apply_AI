@@ -186,10 +186,13 @@ def greenhouse_questions_url(board_token: str, job_id: str | int) -> str:
 
 
 def greenhouse_form_url(board_token: str, job_id: str | int) -> str:
-    """Greenhouse's own hosting of the form. A board may redirect it to the
-    company's site, where the same form is embedded; fill.py looks for
-    `#application-form` in the page and in its frames either way."""
-    return f"https://job-boards.greenhouse.io/{board_token}/jobs/{job_id}"
+    """The form page the runner opens: Greenhouse's embed route, which
+    renders `#application-form` inline with no iframe (verified on Alloy,
+    2026-11-04). The `/{token}/jobs/{id}` route redirected to the company's
+    own site with the form embedded, which works too, but this one is the
+    form and nothing else. fill.py searches frames either way."""
+    return (f"https://job-boards.greenhouse.io/embed/job_app?for={board_token}"
+            f"&token={job_id}")
 
 
 # ---------------------------------------------------------------------------
