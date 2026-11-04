@@ -26,6 +26,19 @@ Getting there found that `render_resume` took three minutes against Cowork's
 the setup, §5 the defect. The form asked for no letter, so the letter path is
 still unexercised live.
 
+**Updated 2026-11-04: the five waiting decisions are made and built.**
+Anish's calls, in one session. (1) An employer's edit replaces the stored
+posting text, and an edit to the years or skills asked for sends it back to
+be scored - `posting_changes.py`, §4. (2) The india tab's status column is
+mirrored into the event log; a role on both tabs is left to the main tab.
+(3) The 26 India-lane companies are tiered by domain like the rest: 13 to
+tier 2, 13 stay tier 3. (4) Scoring goes back on the 11:30 schedule, US and
+India queues both - the GCP credit ends mid-November. (5) Stage A drops
+bank and back-office `analyst` titles and `avp`, after an audit; applied
+with `filter --refilter`, which took 31 live postings out and added none to
+the scoring queue. The scheduled task still has to be re-registered with
+`-Spend` from an elevated shell for (4) to take effect.
+
 Read this before `session_2026-08-31_phase5.txt`. The transcript is a record of
 what was *said*, and several things in it were corrected by later turns — a
 fresh reader going straight through will absorb the wrong versions. The
@@ -295,14 +308,19 @@ follow from keeping the lanes apart:
 
 Open in it:
 
-- **The india tab's status column goes nowhere.** `status_mirror` reads the
-  main tab only, so "Applied" typed there is not in the event log and
-  `cli status` does not count it. Mirroring it is a decision, not a patch:
-  a role on both tabs would then have two cells for one status.
+- **The india tab's status column is mirrored - BUILT 2026-11-04.**
+  `cli india --sync` runs `status_mirror` over the tab, with readings kept
+  per tab (`sheet_tab_status`) and events sourced `sheet_india`. A role on
+  both tabs is skipped there: the main tab's cell is its one status.
 - **No India role has been hand-scored**, so the calibration below speaks to
   whether the rubric change hurt US ranking and says nothing about whether
   India scores rank well. A hand-scored India set is the missing piece.
-- **Tiers are placeholders.** All 26 new companies are tier 3.
+- **Tiers - DONE 2026-11-04.** The 26 were classified by domain with the
+  definitions in `scripts/classify_targets.py`, and tier follows domain as
+  it does for the other 143: ai_infra, ai_saas and data_infra to tier 2
+  (13), fintech and product_saas stay tier 3 (13). Tier 1 is still a hand
+  pick and none was added. InfraCloud sits in data_infra as the nearest fit
+  and wants review. `config/targets.csv.pre-india-tiers` is the backup.
 - **Accenture is deliberately out.** Its board lists 36,099 roles in India
   alone; a Workday query returns at most 2,000 and each posting needs its
   own request. The fetcher refuses a board past the cap rather than
@@ -389,14 +407,24 @@ make — the sheet ranks. Spread already matches (2.401 vs 2.43) and both false
 negatives are fixed, so this is cosmetic for a ranked sheet. **Two attempts to
 fix it both made ranking worse** (§5).
 
-**Posting text is frozen at first sight.** `db.upsert_posting` only touches
-`last_seen_at` when a posting is seen again, so an employer's later edit
-never lands. LangChain rewrote the Deployed Engineer posting on 08-17 —
-"3+ years" became "1-3 years", "Sales Engineers" became "Deployed Engineers",
-the pay band rose — and the 08-31 score, `get_posting` and grounding's
-employer evidence all carried the 08-12 text. The fix is a decision, not a
-patch: the stored text is what the score was computed from and what repost
-detection hashes, and overwriting it loses both.
+**Posting text was frozen at first sight - FIXED 2026-11-04.** LangChain
+rewrote the Deployed Engineer posting on 08-17 ("3+ years" became "1-3
+years") and every score, `get_posting` and grounding's evidence kept the
+08-12 text. A live check before the fix found 30-40% of stored Anthropic,
+OpenAI and Scale AI postings edited since first sight: roles renamed, pay
+ranges filled in, "8+ years" lowered to "6+", and Cursor's boilerplate
+rewritten for SpaceXAI. Anish's call: one version, the current one.
+`upsert_posting` now replaces edited text (whitespace-only differences are
+not edits), re-hashes on a title change, and resets Stage A so the new text
+is re-judged - as of `first_seen_at`, so the age rule does not fail a role
+for having been open a while, and never clearing a `duplicate:` marking.
+If the years floor (`filters.minimum_years_required`) or the skills named
+(`posting_changes.SKILL_TERMS`, a fixed vocabulary that leaves out plain
+English words like "go" and "rest") changed, `rescore_requested_at` is set
+and the posting rejoins the US or India scoring queue; the old score stays
+on the sheet until the new one replaces it. Repost detection was never at
+risk: `content_hash` is company and normalized title, not the description.
+What is lost is the text an older score was computed from - accepted.
 
 **`tests/test_grounding.py` fails run on its own.** It needs
 `JOBPIPE_GEMINI_BACKEND`, and passes in the full suite only because an earlier
@@ -429,10 +457,13 @@ ClickHouse (last seen 08-31), Marqeta (08-31), Postman (09-16), World Labs
 (the known 404). Their postings age out of the 7-day window and read as
 closed. Not investigated: a moved board and an empty one look the same.
 
-**Barclays lets non-engineering titles through Stage A.** "Equity Research
-AVP", "Tax Operations Analyst": `analyst` satisfies `title_require_any` and
-`avp` is not excluded. Scoring ranks them low, at a price. A filters change,
-so it wants the audit `CLAUDE.md` asks for.
+**Barclays let non-engineering titles through Stage A - FIXED
+2026-11-04.** `analyst` satisfied `title_require_any` and `avp` was not
+excluded. `filters.yaml` now excludes `avp` and 32 narrow back-office
+phrases ("kyc analyst", "business analyst", "operations analyst", ...);
+the audit is written beside them. `filter --refilter` took 31 live postings
+out and re-admitted 6, all already scored, so it queued nothing.
+`--refilter` now judges age as of first sight too (`pipeline.filter_all`).
 
 **The scoring corpus is now five rubrics deep.** none 603, `.2` 3, `.3` 78,
 `.4` 1, `2026-10-03.5` 494. The 603 are 3.x-era scores and many still rank.
@@ -614,11 +645,10 @@ written: 19496 has a resume, and 19713 has a resume and two form answers
 that passed grounding. Neither has a status event, so check `status` before
 assuming either went out.
 
-Decisions that are Anish's and waiting: the stale-posting fix (§4); whether
-the india tab's status column is mirrored (§3); tiers for the 26 new
-companies; and whether scoring goes back on the schedule now that two queues
-grow daily. `cli score` and `cli score --india` spend money - price a run
-from tokens (§5), say the figure, and run it only when asked.
+The decisions that were waiting here were all made on 2026-11-04 (top of
+this file). Scoring is scheduled again; a manual `cli score` or
+`cli score --india` outside the schedule still spends money - price it from
+tokens (§5), say the figure, and run it only when asked.
 
 A hand-scored India set is what would let the India ranking be measured
 rather than assumed. `calibrate` skips any posting Stage A discards, which

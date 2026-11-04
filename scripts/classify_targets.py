@@ -68,6 +68,22 @@ DOMAIN = {
         "Squarespace", "Canva", "Duolingo", "Discord", "Pinterest",
         "Reddit", "Instacart", "Lyft", "DoorDash", "Drata", "Vanta",
         "Justworks", "Gusto"]},
+
+    # The 26 added 2026-10-03 for the India lane, classified 2026-11-04 by
+    # the same definitions. Tier follows domain as it does above: the core
+    # lanes are tier 2, fintech and product_saas tier 3; tier 1 stays a hand
+    # pick. InfraCloud is cloud-native services with no clean home -
+    # data_infra is the nearest fit and wants review.
+    **{c: "ai_infra" for c in [
+        "Sarvam AI", "Smallest AI", "Bolna", "TrueFoundry", "Composio"]},
+    **{c: "ai_saas" for c in ["SpotDraft", "Ema", "DevRev"]},
+    **{c: "data_infra" for c in ["Druva", "Sigmoid", "InfraCloud"]},
+    **{c: "fintech" for c in [
+        "Razorpay", "Groww", "HighRadius", "Bureau", "KredX", "Barclays",
+        "Broadridge"]},
+    **{c: "product_saas" for c in [
+        "InMobi", "Glance", "Atlys", "Zenoti", "Tekion", "Swiggy",
+        "Freshworks", "MindTickle"]},
 }
 
 rows = list(csv.DictReader(io.open("config/targets.csv", encoding="utf-8-sig")))

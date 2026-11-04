@@ -155,6 +155,54 @@ title_exclude:
   - risk analyst
   - product designer
   - deployment strategist
+  #
+  # Banking and back-office titles that pass the allowlist on `analyst` alone
+  # (HANDOFF §4, Barclays and Broadridge on Workday). AUDITED 2026-11-04 over
+  # every live posting in either lane and every scored posting: no term
+  # removes a role ever scored 7 or more, and the highest any scored at was 5
+  # (support analyst). Bare `analyst` stays allowed - Data Analyst and
+  # Product Analyst are real targets - so each entry is the narrow phrase,
+  # never the bare noun: `tax` would take a Stripe Tax engineer, `controller`
+  # a robotics controls role, `kyc` a KYC platform engineer, `credit risk` a
+  # credit-risk data scientist. `decision analyst` was in the candidate list
+  # and came out: it would have removed a posting scored 7.
+  #
+  # `avp` is assistant vice president - the bank seniority title above
+  # associate - and joins `vp` for the same reason `senior` is here: 21
+  # scored, none above 4.
+  - avp
+  - equity research
+  - kyc analyst
+  - kyc processing
+  - anti-money laundering
+  - financial crime analyst
+  - fraud & dispute
+  - fraud & scams
+  - fraud analyst
+  - compliance analyst
+  - financial control
+  - financial controller
+  - tax operations
+  - tax reporting
+  - tax analyst
+  - treasury operations
+  - treasury pc
+  - impairment
+  - liquidity risk
+  - market surveillance analyst
+  - sanctioning
+  - operations analyst
+  - payment analyst
+  - business analyst
+  - business management analyst
+  - pricing analyst
+  - revenue analyst
+  - financial analyst
+  - policy analyst
+  - trader analyst
+  - sales analyst
+  - inventory analyst
+  - support analyst
 
 # ---------------------------------------------------------------------------
 # 2b. Phrases that are masked out of the title BEFORE the blocklist runs.

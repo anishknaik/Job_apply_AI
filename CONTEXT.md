@@ -58,7 +58,7 @@ metric is interviews per hour spent, not applications per day.
 | Documents | 66 rows — 35 resumes, 25 letters, 6 form answers, read 2026-10-05 |
 | Letters with stored content | 13 (the `content` column postdates the first batch) |
 | **Edit distances computed** | **2** — PostHog 0.032, U. of Utah 0.033 |
-| Targets | 169 companies — tier 1: 8, tier 2: 93, tier 3: 68 (the 26 added 2026-10-03 are all tier 3, unreviewed) |
+| Targets | 169 companies — tier 1: 8, tier 2: 104, tier 3: 57 (the 26 added 2026-10-03 classified by domain on 2026-11-04: 13 to tier 2, 13 stay tier 3) |
 | ATS split | greenhouse 82, ashby 79, smartrecruiters 6, workday 2 |
 | Bullet bank | 21 bullets across 10 roles |
 | Tests | **909** |

@@ -160,6 +160,7 @@ class TestWriteBack:
         events = conn.execute("SELECT COUNT(*) FROM status_events").fetchone()
         result = status_mirror.mirror(conn, {URL: ws.cell})
         assert result.changed == 0 and result.behind == []
+        assert result.unknown == [], "skipped before it was even parsed"
         assert conn.execute(
             "SELECT COUNT(*) FROM status_events").fetchone()[0] == events[0]
 
@@ -184,3 +185,51 @@ class TestWriteBack:
         result = status_mirror.mirror(conn, {URL: ws.cell})
         assert result.behind == []
         assert status(conn, pid) == "responded"
+
+
+class TestIndiaTab:
+    """The india tab is mirrored too (Anish, 2026-11-04). Its readings are
+    its own, and a role on both tabs is left to the main tab."""
+
+    INDIA_URL = "https://x/in"
+
+    @pytest.fixture
+    def india_pid(self, conn):
+        posting = Posting(ats_type="ashby", source_id="in1", company="Swiggy",
+                          title="ML Engineer", location="Bengaluru, India",
+                          remote_flag=False, description="d",
+                          url=self.INDIA_URL, posted_at=None)
+        posting_id, _ = db.upsert_posting(conn, posting, posting.content_hash)
+        db.set_stage_a(conn, posting_id, False, "location")
+        conn.commit()
+        return posting_id
+
+    def _mirror(self, conn, cells):
+        from jobpipe import india
+        return status_mirror.mirror(
+            conn, cells, tab="india",
+            skip=lambda row: not india.lane_only(row), source="sheet_india")
+
+    def test_an_india_edit_reaches_the_database(self, conn, india_pid):
+        self._mirror(conn, {self.INDIA_URL: ""})
+        self._mirror(conn, {self.INDIA_URL: "applied"})
+        assert status(conn, india_pid) == "applied"
+        source = conn.execute(
+            "SELECT source FROM status_events WHERE posting_id = ? "
+            "ORDER BY id DESC LIMIT 1", (india_pid,)).fetchone()[0]
+        assert source == "sheet_india"
+
+    def test_readings_are_kept_per_tab(self, conn, india_pid):
+        self._mirror(conn, {self.INDIA_URL: "applied"})
+        assert db.sheet_readings(conn, "india") == {india_pid: "applied"}
+        assert db.sheet_readings(conn) == {}
+
+    def test_a_role_on_both_tabs_is_left_to_the_main_tab(self, conn, pid):
+        # `pid` passed Stage A on a US location, so it is on the main tab.
+        db.set_stage_a(conn, pid, True, "passed")
+        status_mirror.mirror(conn, {URL: "applied"})
+        result = self._mirror(conn, {URL: "rejected"})
+        assert status(conn, pid) == "applied"
+        assert result.changed == 0 and result.behind == []
+        assert result.unknown == [], "skipped before it was even parsed"
+        assert db.sheet_readings(conn, "india") == {}

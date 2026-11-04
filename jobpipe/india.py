@@ -44,11 +44,12 @@ COLUMNS = [
 # below it; it shows blank until `cli score --india` has run.
 MIN_SCORE = 6
 
-_SELECT = """
+_SELECT = f"""
     SELECT p.id, p.first_seen_at, p.last_seen_at, p.company, p.title,
            p.location, p.remote_flag, p.description, p.url, p.posted_at,
            p.stage_a_passed, s.overall, s.reasoning,
-           COALESCE(s.apply_score, s.overall) AS apply_score
+           COALESCE(s.apply_score, s.overall) AS apply_score,
+           {db.NEEDS_SCORE} AS needs_score
     FROM postings p
     LEFT JOIN scores s ON s.posting_id = p.id
 """
@@ -96,9 +97,9 @@ def select(conn, rules: filters.FilterRules, max_stale_days: int = 7,
 
 
 def unscored(conn, rules: filters.FilterRules, limit: int | None = None) -> list:
-    """The India scoring queue: live roles in `select` with no score yet."""
-    ids = [row["id"] for row in select(conn, rules)
-           if row["apply_score"] is None]
+    """The India scoring queue: live roles in `select` with no score yet,
+    or a score older than the employer's last edit to the years or skills."""
+    ids = [row["id"] for row in select(conn, rules) if row["needs_score"]]
     if limit is not None:
         ids = ids[:limit]
     # Full posting rows, the shape the scoring loop takes from get_unscored.

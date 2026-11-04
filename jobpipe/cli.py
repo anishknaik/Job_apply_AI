@@ -106,6 +106,7 @@ def cmd_fetch(args) -> int:
     print(f"\nfetched      {result.fetched}")
     print(f"new          {result.new_postings}")
     print(f"reposts      {result.reposts}")
+    print(f"edited       {result.updated}  ({result.rescore_flagged} to rescore: years or skills changed)")
     print(f"errors       {len(result.errors)}")
     for message in result.errors:
         print(f"  ! {message}")
@@ -184,8 +185,10 @@ def cmd_audit(args) -> int:
 def cmd_india(args, sync: bool | None = None) -> int:
     """List the live India roles, or with --sync put them in their own tab.
 
-    Free: no model call, and nothing in the database is written. Stage A's
-    verdicts and the main tab are untouched - see `india`.
+    Free: no model call. Stage A's verdicts and the main tab are untouched -
+    see `india`. With --sync the tab's status column is mirrored into the
+    event log, the way the main tab's is; a role on both tabs is left to the
+    main tab (status_mirror).
     """
     from . import india
 
@@ -235,6 +238,7 @@ def cmd_india(args, sync: bool | None = None) -> int:
             refresh_by_url=lambda urls: [
                 india.build_row(r) for r in india.rows_by_url(conn, urls)],
             columns=india.COLUMNS)
+        _mirror_india_status(conn, worksheet)
         sheets.ensure_status_dropdown(worksheet)
         sheets.sort_by_score(worksheet)
         sheets.color_by_tier(worksheet, {t.company: t.tier for t in targets})
@@ -246,6 +250,39 @@ def cmd_india(args, sync: bool | None = None) -> int:
           f"{result.updated + result.refreshed} updated, "
           f"{result.unchanged} unchanged")
     return 0
+
+
+def _mirror_india_status(conn, worksheet) -> None:
+    """The india tab's status column into the event log, then any untouched
+    cell the database has moved past back into the tab.
+
+    A role that is on the main tab as well - it passed Stage A on a US
+    location - is skipped: the main tab's cell is its one status.
+    """
+    from . import india, sheets, status_mirror
+
+    tab = "india"
+    result = status_mirror.mirror(
+        conn, sheets.read_statuses(worksheet), tab=tab,
+        skip=lambda row: not india.lane_only(row), source="sheet_india")
+    if result.changed:
+        print(f"  india tab: mirrored {result.changed} status change(s) into "
+              f"the database")
+    if result.unknown:
+        print(f"  ! india tab: unrecognised status value(s): "
+              f"{', '.join(sorted(set(result.unknown))[:5])}")
+    if result.backwards:
+        print(f"  ! india tab: status moved backwards: "
+              f"{'; '.join(result.backwards[:5])}")
+    if result.behind:
+        written, skipped = status_mirror.write_back(
+            conn, worksheet, result.behind, tab=tab)
+        if written:
+            print(f"  india tab: wrote {written} newer status(es) from the "
+                  f"database")
+        if skipped:
+            print(f"  ! india tab: left {len(skipped)} cell(s) alone - edited "
+                  f"while syncing")
 
 
 def _load_env() -> None:
@@ -374,17 +411,27 @@ def cmd_score(args) -> int:
     if india_only:
         from . import india
 
-        targeted = india.unscored(conn, filters.load_rules(args.filters),
-                                  limit=cap)
-        print(f"india: {len(targeted)} live India role(s) have no score")
+        targeted = india.unscored(conn, filters.load_rules(args.filters))
+        print(f"india: {len(targeted)} live India role(s) need a score "
+              f"(none yet, or the employer has since changed the years or "
+              f"skills asked for)")
         if not targeted:
             print("nothing to do.")
             return 0
+        # Its own cap, on its own queue. The shared gate below counts the US
+        # queue, so a US backlog used to block India scoring, and an India
+        # backlog of any size passed it.
+        if len(targeted) > cap:
+            print(f"{len(targeted)} exceeds the {cap} cap; nothing scored. "
+                  f"Raise JOBPIPE_MAX_SCORES_PER_RUN deliberately.")
+            return 1
         if not args.yes:
             print("Add --yes to confirm the spend. Nothing has been scored.")
             return 1
 
-    gate = pipeline.check_scoring_gate(conn, cap=cap, enabled=args.yes)
+    gate = (pipeline.ScoringGate(True, len(targeted), cap, "india queue")
+            if india_only
+            else pipeline.check_scoring_gate(conn, cap=cap, enabled=args.yes))
     if not gate.allowed:
         print(gate.reason)
         if not args.yes:
@@ -1073,6 +1120,12 @@ def cmd_daily(args) -> int:
     stage("filter", lambda: cmd_filter(args))
     if args.yes:
         stage("score", lambda: cmd_score(args))
+        # The India queue as well (Anish, 2026-11-04): both lanes grow daily,
+        # and an unscored India role reaches the tab with a blank score.
+        # Before the india stage, so today's scores reach the tab today.
+        stage("score india", lambda: cmd_score(argparse.Namespace(
+            **{**vars(args), "india": True, "queue": False,
+               "rescore": False})))
     else:
         print("--- score ---\n  skipped: pass --yes to authorise spending\n")
     stage("sync", lambda: cmd_sync(args))

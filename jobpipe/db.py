@@ -124,6 +124,17 @@ CREATE TABLE IF NOT EXISTS sheet_status (
     status      TEXT NOT NULL,
     read_at     TEXT NOT NULL
 );
+
+-- The same cache for every tab but the main one (the india tab, 2026-11-04).
+-- Kept apart so one tab's reading is never mistaken for the other's: a cell
+-- is "untouched" only against what THAT cell said last time.
+CREATE TABLE IF NOT EXISTS sheet_tab_status (
+    tab         TEXT NOT NULL,
+    posting_id  INTEGER NOT NULL REFERENCES postings (id),
+    status      TEXT NOT NULL,
+    read_at     TEXT NOT NULL,
+    PRIMARY KEY (tab, posting_id)
+);
 """
 
 
@@ -220,6 +231,15 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     # to one must not retire the answer to another. NULL for resumes and
     # letters, which keep one live document per posting as before.
     ("documents", "question", "TEXT"),
+
+    # An employer's later edit (posting_changes, 2026-11-04). The stored text
+    # is now the current text; these say when it last changed and when a
+    # change to the years or skills asked for sent it back to be scored. A
+    # score older than `rescore_requested_at` is stale and the posting is
+    # back in the scoring queue; the score row stays until the new one
+    # replaces it, so the sheet never goes blank in between.
+    ("postings", "text_changed_at", "TEXT"),
+    ("postings", "rescore_requested_at", "TEXT"),
 ]
 
 
@@ -265,28 +285,72 @@ def init_schema(conn: sqlite3.Connection) -> None:
 # ---------------------------------------------------------------------------
 
 def upsert_posting(conn: sqlite3.Connection, posting, content_hash: str,
-                   seen_at: str | None = None) -> tuple[int, bool]:
-    """Insert a posting, or touch `last_seen_at` if we have seen it before.
+                   seen_at: str | None = None,
+                   changes: list | None = None) -> tuple[int, bool]:
+    """Insert a posting, or refresh one we have seen before.
 
     Returns (posting_id, is_new). `is_new` drives everything downstream —
     only new postings are filtered and scored.
+
+    A posting seen again has `last_seen_at` touched, and if the employer has
+    edited it since, its text is replaced with the current version
+    (posting_changes): one version, the live one. An edit sends it back
+    through Stage A, and an edit to the years or skills asked for sends it
+    back to be scored. Each change is appended to `changes` as
+    (posting_id, Change) when the caller passes a list.
 
     Deliberately a SELECT-then-write rather than an upsert with RETURNING:
     the two-step version makes "was this new?" unambiguous, and this table is
     small enough that the extra query costs nothing.
     """
+    from . import posting_changes
+
     seen_at = seen_at or utcnow()
     cur = conn.execute(
-        "SELECT id FROM postings WHERE ats_type = ? AND source_id = ?",
+        "SELECT * FROM postings WHERE ats_type = ? AND source_id = ?",
         (posting.ats_type, posting.source_id),
     )
     row = cur.fetchone()
 
     if row is not None:
+        change = posting_changes.diff(row, posting)
+        if change is None:
+            conn.execute(
+                "UPDATE postings SET last_seen_at = ? WHERE id = ?",
+                (seen_at, row["id"]),
+            )
+            return row["id"], False
+
+        # Stage A is reset rather than left standing: a new title, location
+        # or years figure can change the verdict either way, and filter_all
+        # re-judges it as of first sight so the age rule does not fail a
+        # role merely for having been open a while. A duplicate marking is
+        # kept, as `filter --refilter` keeps it: it is a fact about the data,
+        # not a verdict, and clearing it would re-admit the duplicate for
+        # scoring.
         conn.execute(
-            "UPDATE postings SET last_seen_at = ? WHERE id = ?",
-            (seen_at, row["id"]),
+            """
+            UPDATE postings SET
+                title = ?, normalized_title = ?, location = ?,
+                remote_flag = ?, description = ?, url = ?, posted_at = ?,
+                content_hash = ?, last_seen_at = ?, text_changed_at = ?,
+                stage_a_passed = CASE WHEN stage_a_reason LIKE 'duplicate:%'
+                                 THEN stage_a_passed END,
+                stage_a_reason = CASE WHEN stage_a_reason LIKE 'duplicate:%'
+                                 THEN stage_a_reason END,
+                rescore_requested_at = COALESCE(?, rescore_requested_at)
+            WHERE id = ?
+            """,
+            (
+                posting.title, posting.normalized_title, posting.location,
+                int(posting.remote_flag), posting.description, posting.url,
+                posting.posted_at, content_hash, seen_at, seen_at,
+                seen_at if change.needs_rescore else None,
+                row["id"],
+            ),
         )
+        if changes is not None:
+            changes.append((row["id"], change))
         return row["id"], False
 
     cur = conn.execute(
@@ -394,6 +458,14 @@ def get_unfiltered(conn: sqlite3.Connection):
     ).fetchall()
 
 
+# "Needs a score": none yet, or one older than the employer's last edit to
+# the years or skills asked for. One home, so the US queue, the India queue
+# and the scoring gate's count cannot disagree. Expects `p` and `s` aliases.
+NEEDS_SCORE = """(s.posting_id IS NULL OR (p.rescore_requested_at IS NOT NULL
+                  AND (s.scored_at IS NULL
+                       OR s.scored_at < p.rescore_requested_at)))"""
+
+
 def get_unscored(conn: sqlite3.Connection, limit: int | None = None,
                  max_stale_days: int | None = 7):
     """Stage A survivors with no score yet. This is the Stage B work queue.
@@ -402,12 +474,16 @@ def get_unscored(conn: sqlite3.Connection, limit: int | None = None,
     sheet uses: a role that has closed cannot be applied to, so scoring it
     buys nothing. With scoring off the schedule the backlog sits for weeks,
     and on 2026-10-03 twenty of its 352 postings had already closed.
+
+    Also a scored posting whose years or skills the employer has since
+    edited (`rescore_requested_at` after `scored_at`); scoring it again
+    replaces the stale score in place.
     """
-    sql = """
+    sql = f"""
         SELECT p.*
         FROM postings p
         LEFT JOIN scores s ON s.posting_id = p.id
-        WHERE p.stage_a_passed = 1 AND s.posting_id IS NULL
+        WHERE p.stage_a_passed = 1 AND {NEEDS_SCORE}
     """
     params: list = []
     if max_stale_days is not None:
@@ -757,25 +833,40 @@ def current_statuses(conn: sqlite3.Connection) -> dict[int, str]:
     return {row["posting_id"]: row["status"] for row in rows}
 
 
-def sheet_readings(conn: sqlite3.Connection) -> dict[int, str]:
-    """What the sheet's status cell said at the last sync, per posting."""
-    return {row["posting_id"]: row["status"] for row in conn.execute(
-        "SELECT posting_id, status FROM sheet_status").fetchall()}
+MAIN_TAB = "main"
+
+
+def sheet_readings(conn: sqlite3.Connection,
+                   tab: str = MAIN_TAB) -> dict[int, str]:
+    """What a tab's status cell said at the last sync, per posting."""
+    if tab == MAIN_TAB:
+        rows = conn.execute("SELECT posting_id, status FROM sheet_status")
+    else:
+        rows = conn.execute("SELECT posting_id, status FROM sheet_tab_status "
+                            "WHERE tab = ?", (tab,))
+    return {row["posting_id"]: row["status"] for row in rows.fetchall()}
 
 
 def record_sheet_reading(conn: sqlite3.Connection, posting_id: int,
-                         status: str) -> None:
+                         status: str, tab: str = MAIN_TAB) -> None:
     """Remember this sync's reading of one status cell.
 
     Updated in place: it is a cache of the sheet's last value, not a record of
     anything that happened. Transitions live in status_events and are never
     overwritten.
     """
+    if tab == MAIN_TAB:
+        conn.execute(
+            "INSERT INTO sheet_status (posting_id, status, read_at) "
+            "VALUES (?, ?, ?) ON CONFLICT (posting_id) DO UPDATE SET "
+            "status = excluded.status, read_at = excluded.read_at",
+            (posting_id, status, utcnow()))
+        return
     conn.execute(
-        "INSERT INTO sheet_status (posting_id, status, read_at) "
-        "VALUES (?, ?, ?) ON CONFLICT (posting_id) DO UPDATE SET "
+        "INSERT INTO sheet_tab_status (tab, posting_id, status, read_at) "
+        "VALUES (?, ?, ?, ?) ON CONFLICT (tab, posting_id) DO UPDATE SET "
         "status = excluded.status, read_at = excluded.read_at",
-        (posting_id, status, utcnow()))
+        (tab, posting_id, status, utcnow()))
 
 
 def record_status(conn: sqlite3.Connection, posting_id: int, status: str,

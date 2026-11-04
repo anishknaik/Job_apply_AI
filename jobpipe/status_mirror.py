@@ -19,6 +19,12 @@ past. Anish decided (2026-09-10, §6.2) that sync closes that gap itself:
 through `sheets.set_cells`, so a cell he edits in the seconds between the read
 and the write keeps his edit. A cell he HAS edited is never written; his edit
 flows the other way, into the database.
+
+The india tab is mirrored too (Anish, 2026-11-04), with two differences. Its
+readings are kept per tab, so neither tab's last value is read as the
+other's. And a role on both tabs - one that passed Stage A on a US location
+as well - is left to the main tab: `skip` names it, and the india tab's cell
+for it neither writes the database nor gets written. One status, one cell.
 """
 from __future__ import annotations
 
@@ -49,17 +55,22 @@ class MirrorResult:
     behind: list[Behind] = field(default_factory=list)
 
 
-def mirror(conn, rows_by_url: dict[str, str]) -> MirrorResult:
-    """Copy human edits on the sheet's status column into status_events."""
+def mirror(conn, rows_by_url: dict[str, str], tab: str = db.MAIN_TAB,
+           skip=None, source: str = "sheet") -> MirrorResult:
+    """Copy human edits on a tab's status column into status_events.
+
+    `skip(posting_row)` returning True leaves that row to another tab.
+    """
     result = MirrorResult()
     known = db.current_statuses(conn)
-    last_read = db.sheet_readings(conn)
+    last_read = db.sheet_readings(conn, tab)
     postings = {row["url"]: row for row in conn.execute(
-        "SELECT id, url, company, title FROM postings").fetchall()}
+        "SELECT id, url, company, title, location, stage_a_passed "
+        "FROM postings").fetchall()}
 
     for url, raw in rows_by_url.items():
         row = postings.get(url)
-        if row is None:
+        if row is None or (skip is not None and skip(row)):
             continue
         try:
             status = states.normalise(raw)
@@ -70,7 +81,7 @@ def mirror(conn, rows_by_url: dict[str, str]) -> MirrorResult:
         posting_id = row["id"]
         previous = known.get(posting_id)
         before = last_read.get(posting_id)
-        db.record_sheet_reading(conn, posting_id, status)
+        db.record_sheet_reading(conn, posting_id, status, tab)
 
         if before is not None:
             untouched = status == before
@@ -89,7 +100,8 @@ def mirror(conn, rows_by_url: dict[str, str]) -> MirrorResult:
 
         if previous and states.is_regression(previous, status):
             result.backwards.append(f"{raw} (was {previous})")
-        if db.record_status(conn, posting_id, status, previous):
+        if db.record_status(conn, posting_id, status, previous,
+                            source=source):
             result.changed += 1
 
     conn.commit()
@@ -97,7 +109,8 @@ def mirror(conn, rows_by_url: dict[str, str]) -> MirrorResult:
 
 
 def write_back(conn, worksheet, behind: list[Behind],
-               set_cells=None) -> tuple[int, list[Behind]]:
+               set_cells=None,
+               tab: str = db.MAIN_TAB) -> tuple[int, list[Behind]]:
     """Bring untouched cells up to the database's status. Compare-and-set.
 
     Each write expects the cell still to hold what the mirror read. If Anish
@@ -114,7 +127,7 @@ def write_back(conn, worksheet, behind: list[Behind],
                        {"status": states.label(row.database)},
                        expect={"status": row.cell})
         if ok:
-            db.record_sheet_reading(conn, row.posting_id, row.database)
+            db.record_sheet_reading(conn, row.posting_id, row.database, tab)
             written += 1
         else:
             skipped.append(row)

@@ -116,14 +116,20 @@ balance was $1.82 and is not any more — but the ban was doing two jobs and
 only one of them was about money.
 
 Scoring moved off the schedule on 2026-08-30 and onto Vertex, billed to
-GCP credit rather than the prepaid AI Studio balance. The **11:30 cron now
-fetches, filters, syncs and refreshes the india tab only** — it scores
-nothing — so the unscored backlog grows until someone runs `cli score`
-deliberately. It began as a temporary
-posture while Track A recalibrated; Track A finished on 2026-08-31 and the
-posture has not been lifted. `register-task.ps1 -Spend` puts scoring back. The
-backlog was 89 on 2026-09-10 and was cleared on 2026-10-03. The same cron's `sync` also writes a newer
-status into any sheet status cell nobody edited (`status_mirror.py`).
+GCP credit rather than the prepaid AI Studio balance, and **went back on it
+on 2026-11-04 at Anish's request** — the credit ends mid-November and is
+better used than left. The 11:30 cron, registered with
+`register-task.ps1 -Spend`, fetches, filters, scores the US queue, scores
+the India queue, syncs and refreshes the india tab. Each scoring stage
+refuses rather than bills past `JOBPIPE_MAX_SCORES_PER_RUN` (200 in `.env`),
+each on its own queue. Registering without `-Spend` takes scoring off again.
+The same cron's `sync` and `india` stages also write a newer status into
+any status cell nobody edited, on both tabs (`status_mirror.py`).
+
+The scoring queue is the unscored postings **plus** any whose employer has
+since changed the years or skills asked for: a fetch now replaces edited
+posting text and flags those for a rescore (`posting_changes.py`). That is
+what the scheduled spend now buys, not only new postings.
 
 A scoring run costs dollars, not cents: about 20,000 input tokens per
 posting once escalations are counted, measured on 2026-10-03 (`CONTEXT.md`

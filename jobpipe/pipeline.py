@@ -22,6 +22,10 @@ class FetchResult:
     fetched: int = 0
     new_postings: int = 0
     reposts: int = 0
+    # Postings seen again whose text the employer had edited, and of those,
+    # the ones whose years or skills moved and so go back to be scored.
+    updated: int = 0
+    rescore_flagged: int = 0
     per_company: dict[str, int] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
@@ -87,11 +91,12 @@ def fetch_all(conn, targets: list[Target]) -> FetchResult:
     for target in targets:
         fetcher = FETCHERS[target.ats_type]
         count = 0
+        changes: list = []
         try:
             for posting in fetcher(target.company, target.board_token):
                 count += 1
                 posting_id, is_new = db.upsert_posting(
-                    conn, posting, posting.content_hash)
+                    conn, posting, posting.content_hash, changes=changes)
                 if is_new:
                     result.new_postings += 1
                     if dedupe.resolve_repost(conn, posting_id,
@@ -116,6 +121,12 @@ def fetch_all(conn, targets: list[Target]) -> FetchResult:
 
         result.fetched += count
         result.per_company[target.company] = count
+        result.updated += len(changes)
+        flagged = [pid for pid, change in changes if change.needs_rescore]
+        result.rescore_flagged += len(flagged)
+        if changes:
+            log.info("  %-22s %d edited since last seen, %d to rescore",
+                     target.company, len(changes), len(flagged))
 
         if count == 0:
             # Not an error — a real board can legitimately have zero open
@@ -135,7 +146,11 @@ def filter_all(conn, rules: filters.FilterRules) -> FilterResult:
     result = FilterResult()
 
     for row in db.get_unfiltered(conn):
-        passed, reason = filters.evaluate(row, rules)
+        # Judged as of first sight. For a new posting that is now; for one
+        # an employer edit sent back through Stage A, it keeps the age rule
+        # from failing a role only because it has been open a while.
+        passed, reason = filters.evaluate(
+            row, rules, now=filters._parse_dt(row["first_seen_at"]))
         db.set_stage_a(conn, row["id"], passed, reason)
         result.evaluated += 1
         if passed:

@@ -24,6 +24,7 @@ config/*.generated.*
 config/targets.csv
 config/targets.csv.bak
 config/targets.csv.pretier
+config/targets.csv.pre-india-tiers
 
 # Personal documents (Phase 2 inputs). Real name, address, employment history
 # and things written to specific companies. The README stays; nothing else does.
