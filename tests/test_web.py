@@ -225,8 +225,9 @@ class TestPagesRender:
         seed(conn, source_id="b", status="applied")
         got = client.get("/queue")
         assert got.status_code == 200
-        assert "not_applied (1)" in got.text
-        assert "applied (1)" in got.text
+        assert "status=not_applied" in got.text
+        assert "status=applied" in got.text
+        assert got.text.count('<span class="count">(1)</span>') == 2
         assert "status=untracked" in got.text
 
     def test_queue_untracked(self, client, conn):
@@ -307,17 +308,20 @@ class TestPagesRender:
 
 
 class TestUntrustedText:
+    """Asserted on the injected string, not on `<script>` alone: base.html
+    carries its own inline script for the theme switch."""
+
     def test_a_script_in_the_description_is_escaped(self, client, conn):
         pid = seed(conn, description="Apply now <script>alert(1)</script>")
         got = client.get(f"/posting/{pid}")
-        assert "<script>" not in got.text
-        assert "&lt;script&gt;" in got.text
+        assert "<script>alert(1)</script>" not in got.text
+        assert "&lt;script&gt;alert(1)&lt;/script&gt;" in got.text
 
     def test_a_script_in_the_title_is_escaped_on_every_page(
             self, client, conn):
         pid = seed(conn, title="<script>x</script> Engineer")
         for url in ("/", "/queue", f"/posting/{pid}"):
-            assert "<script>" not in client.get(url).text
+            assert "<script>x</script>" not in client.get(url).text
 
     def test_a_non_http_url_is_not_linked(self, client, conn):
         posting = Posting(ats_type="greenhouse", source_id="js",

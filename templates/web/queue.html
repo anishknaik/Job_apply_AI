@@ -2,52 +2,53 @@
 {% block title %}jobpipe — queue{% endblock %}
 {% block content %}
 <h1>Queue</h1>
-<div class="tabs">
+<p class="lede">Ordered by company tier, then apply score.{% if result.unscored_backlog is defined %} Unscored backlog: {{ result.unscored_backlog }}.{% endif %}</p>
+
+<div class="chips">
   {% for sid in status_ids if sid in counts %}
-  <a href="/queue?status={{ sid | urlencode }}" {% if current == sid %}class="current"{% endif %}>{{ sid }} ({{ counts[sid] }})</a>
+  <a class="chip {% if current == sid %}current{% endif %}" href="/queue?status={{ sid | urlencode }}">{{ sid }} <span class="count">({{ counts[sid] }})</span></a>
   {% endfor %}
   {% for sid in counts if sid not in status_ids %}
-  <a href="/queue?status={{ sid | urlencode }}" {% if current == sid %}class="current"{% endif %}>{{ sid }} ({{ counts[sid] }})</a>
+  <a class="chip {% if current == sid %}current{% endif %}" href="/queue?status={{ sid | urlencode }}">{{ sid }} <span class="count">({{ counts[sid] }})</span></a>
   {% endfor %}
-  <a href="/queue?status=untracked" {% if current == 'untracked' %}class="current"{% endif %}>untracked</a>
+  <a class="chip {% if current == 'untracked' %}current{% endif %}" href="/queue?status=untracked">untracked</a>
 </div>
 
 {% if current == 'untracked' %}
 <form class="row" method="get" action="/queue">
   <input type="hidden" name="status" value="untracked">
-  <label>min apply_score <input type="number" name="min_score" value="{{ min_score }}" min="0" max="10" size="3"></label>
+  <label>min apply score <input type="number" name="min_score" value="{{ min_score }}" min="0" max="10" style="width: 5em"></label>
   <button>Show</button>
-  <span class="muted small">Scored, passed Stage A, and no status event has touched them yet.</span>
+  <span class="hint">Scored, passed Stage A, and no status event has touched them yet.</span>
 </form>
 {% endif %}
 
-<p class="muted small">
-  {{ result.count }} at <strong>{{ result.status }}</strong>{% if result.returned < result.count %}, showing the first {{ result.returned }}{% endif %}.
-  Ordered by company tier, then apply_score.
-  {% if result.unscored_backlog is defined %}Unscored backlog: {{ result.unscored_backlog }}.{% endif %}
-</p>
-
 <section class="card">
+<p class="hint" style="margin: 0 0 10px">
+  {{ result.count }} at <strong>{{ result.status }}</strong>{% if result.returned < result.count %}, showing the first {{ result.returned }}{% endif %}.
+</p>
 <table>
-  <tr>
+  <thead><tr>
     <th class="num">Tier</th><th>Company</th><th>Title</th><th>Location</th>
     <th class="num">Apply</th><th class="num">Overall</th><th>Archetype</th><th>Domain</th>
-  </tr>
+  </tr></thead>
+  <tbody>
   {% for r in result.postings %}
   <tr>
-    <td class="num">{{ r.tier if r.tier is not none else '—' }}</td>
-    <td><a href="/posting/{{ r.id }}">{{ r.company }}</a></td>
+    <td class="num muted">{{ r.tier if r.tier is not none else '—' }}</td>
+    <td><a class="row-link" href="/posting/{{ r.id }}">{{ r.company }}</a></td>
     <td><a href="/posting/{{ r.id }}">{{ r.title }}</a></td>
-    <td>{{ r.location or '' }}{% if r.remote_flag %} <span class="muted small">(remote)</span>{% endif %}</td>
-    <td class="num">{{ r.apply_score if r.apply_score is not none else '—' }}</td>
+    <td>{{ r.location or '' }}{% if r.remote_flag %} <span class="badge">remote</span>{% endif %}</td>
+    <td class="num">{% if r.apply_score is not none %}<span class="badge {% if r.apply_score >= 8 %}green{% endif %}">{{ r.apply_score }}</span>{% else %}—{% endif %}</td>
     <td class="num">{{ r.overall if r.overall is not none else '—' }}</td>
-    <td>{{ r.archetype or '' }}</td>
-    <td>{{ r.domain or '' }}<span class="muted small">{% if r.archetype and not r.domain %} (predates the domain field){% endif %}</span></td>
+    <td class="small">{{ r.archetype or '' }}</td>
+    <td class="small">{{ r.domain or '' }}{% if r.archetype and not r.domain %}<span class="muted"> (predates the domain field)</span>{% endif %}</td>
   </tr>
   {% else %}
   <tr><td colspan="8" class="muted">Nothing here.</td></tr>
   {% endfor %}
+  </tbody>
 </table>
 </section>
-{% if result.note %}<p class="muted small">{{ result.note }}</p>{% endif %}
+{% if result.note %}<p class="hint">{{ result.note }}</p>{% endif %}
 {% endblock %}

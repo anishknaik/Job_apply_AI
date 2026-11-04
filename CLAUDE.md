@@ -177,7 +177,8 @@ python -m pytest tests/test_web.py -q
 
 The same queue in a browser, for Anish rather than for a session. FastAPI
 and Jinja, server-rendered, no Node, no build step, no CDN, so it works
-offline; the templates are in `templates/web/`. Every button calls a tool
+offline; the templates are in `templates/web/`. Light and dark themes,
+following the system by default, with a switch in the top bar. Every button calls a tool
 body in `jobpipe/mcp_server.py`, so the copy-for-editing gates, the
 grounding gate and supersede-never-overwrite are the same code from a page
 as from a session. `ROUTE_ALLOWLIST` in `jobpipe/web.py` is asserted against

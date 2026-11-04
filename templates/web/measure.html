@@ -2,7 +2,7 @@
 {% block title %}jobpipe — measure{% endblock %}
 {% block content %}
 <h1>Measure</h1>
-<p class="muted small">Normalised edit distance between each generated letter and the copy actually sent.
+<p class="lede">Normalised edit distance between each generated letter and the copy actually sent.
 Letter-required applications only, so the population is not random and the claim is narrowed to match.</p>
 
 {% if result.hint %}
@@ -12,42 +12,51 @@ Letter-required applications only, so the population is not random and the claim
 </section>
 {% else %}
 {% set s = result.summary %}
+<div class="grid four">
+  <div class="stat"><div class="n">{{ s.n }}</div><div class="l">Letters measured</div></div>
+  <div class="stat"><div class="n green">{{ '%.3f' % s.mean }}</div><div class="l">Mean distance</div></div>
+  <div class="stat"><div class="n">{{ '%.3f' % s.best }}</div><div class="l">Best</div></div>
+  <div class="stat"><div class="n">{{ '%.3f' % s.worst }}</div><div class="l">Worst</div></div>
+</div>
+<div class="grid two" style="margin-top: 16px">
 <section class="card">
-  <h2>Summary</h2>
-  <dl class="kv">
-    <dt>Letters</dt><dd>{{ s.n }}</dd>
-    <dt>Mean distance</dt><dd>{{ '%.3f' % s.mean }}</dd>
-    <dt>Best</dt><dd>{{ '%.3f' % s.best }}</dd>
-    <dt>Worst</dt><dd>{{ '%.3f' % s.worst }}</dd>
-  </dl>
-  <h3>By slot <span class="muted small">({{ s.slot_n }} aligned{% if s.slot_skipped %}, {{ s.slot_skipped }} skipped for not having the assembled seven-block shape{% endif %})</span></h3>
+  <h2>By slot <span class="hint">({{ s.slot_n }} aligned{% if s.slot_skipped %}, {{ s.slot_skipped }} skipped for not having the assembled seven-block shape{% endif %})</span></h2>
   <table>
-    <tr><th>Slot</th><th class="num">Mean</th></tr>
+    <thead><tr><th>Slot</th><th class="num">Mean</th></tr></thead>
+    <tbody>
     {% for index, value in s.by_slot.items() %}
     <tr><td>{{ index }} — {{ slot_names[index] if index < slot_names | length else '?' }}</td><td class="num">{{ '%.3f' % value }}</td></tr>
     {% endfor %}
-  </table>
-  <h3>By archetype</h3>
-  <table>
-    <tr><th>Archetype</th><th class="num">Mean</th></tr>
-    {% for key, value in s.by_archetype.items() %}
-    <tr><td>{{ key }}</td><td class="num">{{ '%.3f' % value }}</td></tr>
-    {% endfor %}
+    </tbody>
   </table>
 </section>
 <section class="card">
+  <h2>By archetype</h2>
+  <table>
+    <thead><tr><th>Archetype</th><th class="num">Mean</th></tr></thead>
+    <tbody>
+    {% for key, value in s.by_archetype.items() %}
+    <tr><td>{{ key }}</td><td class="num">{{ '%.3f' % value }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+</div>
+<section class="card">
   <h2>Per letter</h2>
   <table>
-    <tr><th>Posting</th><th>Archetype</th><th>Generated</th><th class="num">Distance</th><th class="num">Words gen → sent</th></tr>
+    <thead><tr><th>Posting</th><th>Archetype</th><th>Generated</th><th class="num">Distance</th><th class="num">Words gen → sent</th></tr></thead>
+    <tbody>
     {% for m in result.letters %}
     <tr>
-      <td><a href="/posting/{{ m.posting_id }}">{{ m.company }} — {{ m.title }}</a></td>
+      <td><a class="row-link" href="/posting/{{ m.posting_id }}">{{ m.company }}</a> <span class="muted">— {{ m.title }}</span></td>
       <td>{{ m.archetype or '?' }}</td>
-      <td class="num">{{ m.generated_at }}</td>
+      <td class="num muted small">{{ m.generated_at }}</td>
       <td class="num">{{ '%.3f' % m.distance }}</td>
       <td class="num">{{ m.words_generated }} → {{ m.words_sent }}</td>
     </tr>
     {% endfor %}
+    </tbody>
   </table>
 </section>
 {% endif %}

@@ -2,30 +2,32 @@
 {% block title %}jobpipe — dashboard{% endblock %}
 {% block content %}
 <h1>Dashboard</h1>
-<div class="columns">
+<p class="lede">{{ summary.total_tracked }} postings tracked in the status log.</p>
+
+<div class="grid four">
+  <div class="stat"><div class="n">{{ corpus.postings }}</div><div class="l">Postings</div></div>
+  <div class="stat"><div class="n">{{ corpus.stage_a_passed }}</div><div class="l">Stage A passed</div></div>
+  <div class="stat"><div class="n green">{{ corpus.scored }}</div><div class="l">Scored</div></div>
+  <div class="stat"><div class="n">{{ corpus.unscored_backlog }}</div><div class="l">Unscored backlog</div></div>
+</div>
+<p class="hint" style="margin: 10px 0 24px">Documents on file: {{ corpus.documents }}. Scoring is off the schedule and off this page; it is a deliberate CLI run.</p>
+
+<div class="grid two">
 <section class="card">
-  <h2>Applications</h2>
-  <p class="muted small">{{ summary.total_tracked }} tracked, from the status log.</p>
+  <h2>Applications by status</h2>
   <table>
-    <tr><th>Status</th><th class="num">Postings</th></tr>
+    <thead><tr><th>Status</th><th class="num">Postings</th></tr></thead>
+    <tbody>
     {% for status, count in summary.by_status.items() %}
-    <tr><td><a href="/queue?status={{ status | urlencode }}">{{ status }}</a></td><td class="num">{{ count }}</td></tr>
+    <tr><td><a class="row-link" href="/queue?status={{ status | urlencode }}">{{ status }}</a></td><td class="num">{{ count }}</td></tr>
     {% else %}
     <tr><td colspan="2" class="muted">No status events yet.</td></tr>
     {% endfor %}
+    </tbody>
   </table>
 </section>
 <section class="card">
-  <h2>Corpus</h2>
-  <dl class="kv">
-    <dt>Postings</dt><dd>{{ corpus.postings }}</dd>
-    <dt>Stage A passed</dt><dd>{{ corpus.stage_a_passed }}</dd>
-    <dt>Scored</dt><dd>{{ corpus.scored }}</dd>
-    <dt>Unscored backlog</dt><dd>{{ corpus.unscored_backlog }}
-      <span class="muted small">— scoring is off the schedule and off this page; it is a deliberate CLI run</span></dd>
-    <dt>Documents</dt><dd>{{ corpus.documents }}</dd>
-  </dl>
-  <h3>Last run</h3>
+  <h2>Last run</h2>
   {% if corpus.last_run %}
   <dl class="kv">
     <dt>Started</dt><dd>{{ corpus.last_run.started_at }}</dd>
@@ -41,19 +43,22 @@
   {% endif %}
 </section>
 </div>
+
 <section class="card">
   <h2>Recent status events</h2>
   <table>
-    <tr><th>When</th><th>Posting</th><th>Status</th></tr>
+    <thead><tr><th>When</th><th>Posting</th><th>Status</th></tr></thead>
+    <tbody>
     {% for e in recent %}
     <tr>
-      <td class="num">{{ e.noted_at }}</td>
-      <td><a href="/posting/{{ e.posting_id }}">{{ e.company }} — {{ e.title }}</a></td>
-      <td>{{ e.status }}</td>
+      <td class="num muted small">{{ e.noted_at }}</td>
+      <td><a class="row-link" href="/posting/{{ e.posting_id }}">{{ e.company }}</a> <span class="muted">— {{ e.title }}</span></td>
+      <td><span class="badge{% if e.status == 'applied' %} green{% endif %}">{{ e.status }}</span></td>
     </tr>
     {% else %}
     <tr><td colspan="3" class="muted">Nothing yet.</td></tr>
     {% endfor %}
+    </tbody>
   </table>
 </section>
 {% endblock %}

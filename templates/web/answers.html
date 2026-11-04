@@ -2,27 +2,28 @@
 {% block title %}jobpipe — form answers{% endblock %}
 {% block content %}
 <h1>Form answers</h1>
-<p class="warn">This page shows self-identification data — gender, race/ethnicity, veteran and
+<p class="lede">What a form is filled from, read-only.</p>
+<div class="notice warn">This page shows self-identification data — gender, race/ethnicity, veteran and
 disability status — from the gitignored answers file, beside contact details from the
-profile. It is what a form is filled from, read-only. Self-ID goes into a form only where an
-option's text matches an entry exactly; otherwise it is left blank.</p>
+profile. Self-ID goes into a form only where an option's text matches an entry exactly;
+otherwise it is left blank.</div>
 
 {% if error %}
 <section class="card">
   <h2>Not available</h2>
   <pre class="text">{{ error }}</pre>
-  <p class="muted small">form_answers reads config/master_profile.md §12 and config/answers.yaml. Both are gitignored and live only on Anish's machine.</p>
+  <p class="hint">form_answers reads config/master_profile.md §12 and config/answers.yaml. Both are gitignored and live only on Anish's machine.</p>
 </section>
 {% else %}
-<div class="columns">
+<div class="grid two">
 <section class="card">
   <h2>Never fill</h2>
-  <p class="muted small">Left for Anish on every form, whatever the page says — even when the field is required.</p>
+  <p class="hint">Left for Anish on every form, whatever the page says — even when the field is required.</p>
   <ul class="plain">{% for item in view.never_fill %}<li>{{ item }}</li>{% endfor %}</ul>
 </section>
 <section class="card">
   <h2>Leave for Anish</h2>
-  <p class="muted small">Entries with no stored value. A form field for one of these is a question, not a guess.</p>
+  <p class="hint">Entries with no stored value. A form field for one of these is a question, not a guess.</p>
   {% if view.leave_for_anish %}
   <ul class="plain">{% for item in view.leave_for_anish %}<li>{{ item }}</li>{% endfor %}</ul>
   {% else %}<p class="muted">Nothing is empty.</p>{% endif %}
@@ -38,14 +39,14 @@ option's text matches an entry exactly; otherwise it is left blank.</p>
   </dl>
 {%- endmacro %}
 
-<div class="columns">
+<div class="grid two">
 <section class="card"><h2>Identity</h2>{{ kv(view.identity) }}</section>
 <section class="card"><h2>Education</h2>{{ kv(view.education) }}</section>
 <section class="card"><h2>Work authorization</h2>
   {% if view.work_authorization %}{{ kv(view.work_authorization) }}{% else %}<p class="muted">Not in master_profile.md §12.</p>{% endif %}
 </section>
 <section class="card"><h2>Self-identification</h2>
-  <p class="muted small">Exact option text. Select only an exact match.</p>
+  <p class="hint">Exact option text. Select only an exact match.</p>
   {{ kv(view.self_identification) }}
 </section>
 <section class="card"><h2>Logistics</h2>{{ kv(view.logistics) }}</section>
@@ -59,10 +60,10 @@ option's text matches an entry exactly; otherwise it is left blank.</p>
 
 <section class="card">
   <h2>Reusable answers</h2>
-  <p class="muted small">Text Anish already approved, for questions that recur. Still saved per posting and checked by grounding on every form: it may have gone stale, and adapting it makes a new claim.</p>
+  <p class="hint">Text Anish already approved, for questions that recur. Still saved per posting and checked by grounding on every form: it may have gone stale, and adapting it makes a new claim.</p>
   {% for key, entry in view.reusable_answers.items() %}
   <h3>{{ key }}</h3>
-  {% if entry.asked_as %}<p class="muted small">Asked as: {{ entry.asked_as | join(' / ') }}</p>{% endif %}
+  {% if entry.asked_as %}<p class="hint">Asked as: {{ entry.asked_as | join(' / ') }}</p>{% endif %}
   <pre class="text">{{ entry.answer }}</pre>
   {% else %}<p class="muted">None on file.</p>{% endfor %}
 </section>
