@@ -353,7 +353,8 @@ def _drive(conn, row, posting_id, ats, url, mode, config, outcome, shots,
         if decision.auto_submit:
             result = _submit.submit_once(
                 page, ats, confirmation_timeout=config.browser.confirmation_timeout,
-                screenshot_dir=shots, signals_before=signals_before)
+                screenshot_dir=shots, signals_before=signals_before,
+                before_click=lambda: db.mark_submit_clicked(conn, outcome.run_id))
             outcome.screenshots.extend(result.screenshots)
             outcome.report["submit"] = {"outcome": result.outcome, "clicked": result.clicked,
                                         "detail": result.detail,

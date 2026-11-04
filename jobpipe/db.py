@@ -1025,11 +1025,14 @@ def finish_apply_run(conn: sqlite3.Connection, run_id: int, *,
                      submit_outcome: str | None = None,
                      error: str | None = None) -> None:
     """Close a run. Fields are set once; nothing here is updated later, and
-    nothing is ever deleted - a second attempt is a second row."""
+    nothing is ever deleted - a second attempt is a second row. A
+    `submit_outcome` of None keeps what `mark_submit_clicked` wrote: a run
+    that crashed after its click must still count as an attempt."""
     import json
     conn.execute(
         "UPDATE apply_runs SET finished_at = ?, decision = ?, reasons = ?, "
-        "report = ?, screenshots = ?, submit_outcome = ?, error = ? "
+        "report = ?, screenshots = ?, "
+        "submit_outcome = COALESCE(?, submit_outcome), error = ? "
         "WHERE id = ?",
         (utcnow(), decision, json.dumps(reasons or []),
          json.dumps(report or {}), json.dumps(screenshots or []),
@@ -1048,6 +1051,15 @@ def last_apply_run(conn: sqlite3.Connection, posting_id: int):
     return conn.execute(
         "SELECT * FROM apply_runs WHERE posting_id = ? ORDER BY id DESC "
         "LIMIT 1", (posting_id,)).fetchone()
+
+
+def mark_submit_clicked(conn: sqlite3.Connection, run_id: int) -> None:
+    """Record, and commit, that this run is about to click submit. Called
+    immediately before the click so that submit_attempts counts it even if
+    the confirmation wait raises or the process is killed."""
+    conn.execute("UPDATE apply_runs SET submit_outcome = 'clicked' "
+                 "WHERE id = ? AND submit_outcome IS NULL", (run_id,))
+    conn.commit()
 
 
 def submit_attempts(conn: sqlite3.Connection, posting_id: int) -> int:

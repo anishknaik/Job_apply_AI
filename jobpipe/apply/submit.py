@@ -34,6 +34,10 @@ from . import fill as _fill, signals as _signals, spec as _spec
 
 CONFIRMED, UNCONFIRMED, ERROR, CHALLENGE, NOT_CLICKED = (
     "confirmed", "unconfirmed", "error", "challenge", "not_clicked")
+# Written to apply_runs, committed, *before* the click. If anything after
+# the click raises or the process dies, the row still says a click happened
+# and decide.py's first_attempt condition refuses a second one.
+CLICKED = "clicked"
 
 SUBMIT_BUTTONS = {
     _spec.GREENHOUSE: '#application-form button[type="submit"]',
@@ -100,11 +104,15 @@ def _read(page) -> tuple[str, str, str, _signals.Verdict]:
 
 def submit_once(page, ats: str, confirmation_timeout: float = 45.0,
                 screenshot_dir: Path | None = None,
-                signals_before: tuple[str, ...] = ()) -> SubmitResult:
+                signals_before: tuple[str, ...] = (),
+                before_click=None) -> SubmitResult:
     """Click submit once and wait for the ATS to say what happened.
 
     `signals_before` is what fill saw at load; a challenge seen now, or
     then, means no click. There is deliberately no loop around the click.
+    `before_click` runs immediately before it - the runner records the
+    attempt there, durably, so a crash after the click cannot hide it. If
+    it raises, there is no click.
     """
     html, url, text, verdict = _read(page)
     at_submit = tuple(verdict.kinds)
@@ -124,6 +132,8 @@ def submit_once(page, ats: str, confirmation_timeout: float = 45.0,
     if not button.count():
         return SubmitResult(NOT_CLICKED, False, "no submit button on the form", at_submit)
 
+    if before_click is not None:
+        before_click()
     started = time.monotonic()
     button.first.click()                       # the one click
     outcome, detail = UNCONFIRMED, f"no confirmation within {confirmation_timeout:.0f}s"

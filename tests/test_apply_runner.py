@@ -243,6 +243,29 @@ class TestAuto:
         assert any(r.startswith("first_attempt") for r in out.reasons)
         assert db.submit_attempts(conn, pid) == 1
 
+    def test_a_crash_after_the_click_still_counts_as_an_attempt(self, conn, site, tmp_path, monkeypatch):
+        # The click is recorded before it happens. A run that dies in the
+        # confirmation wait must not leave a row that lets --auto click again.
+        from jobpipe.apply import submit as _submit
+        def click_then_die(*args, before_click=None, **kwargs):
+            before_click()
+            raise RuntimeError("browser died during the confirmation wait")
+        monkeypatch.setattr(_submit, "submit_once", click_then_die)
+        pid = seed(conn, tmp_path)
+        cfg = config_for(tmp_path, auto_submit=True, source="test")
+        out = go(conn, pid, decide.AUTO_MODE, site, tmp_path, config=cfg,
+                 page="fake_ats.html?ats=greenhouse&outcome=confirm",
+                 fetch_json=lambda url: self.minimal_form())
+        assert out.decision == "error"
+        assert db.last_apply_run(conn, pid)["submit_outcome"] == "clicked"
+        assert db.submit_attempts(conn, pid) == 1
+        monkeypatch.undo()
+        again = go(conn, pid, decide.AUTO_MODE, site, tmp_path, config=cfg,
+                   page="fake_ats.html?ats=greenhouse&outcome=confirm",
+                   fetch_json=lambda url: self.minimal_form())
+        assert again.decision == "review"
+        assert any(r.startswith("first_attempt") for r in again.reasons)
+
     def test_a_bot_check_on_the_page_means_review(self, conn, site, tmp_path):
         pid = seed(conn, tmp_path)
         cfg = config_for(tmp_path, auto_submit=True, source="test")

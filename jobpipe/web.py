@@ -504,7 +504,7 @@ def _needs_attention(conn, limit: int) -> dict[str, Any]:
             why.append(f"run error: {entry.get('error')}")
         if any(r.startswith("no_blockers") for r in reasons):
             why.append("blockers")
-        if entry.get("submit_outcome") in ("error", "challenge", "unconfirmed"):
+        if entry.get("submit_outcome") in ("error", "challenge", "unconfirmed", "clicked"):
             why.append(f"submit {entry['submit_outcome']}")
         if not why:
             continue
