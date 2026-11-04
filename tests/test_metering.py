@@ -123,6 +123,36 @@ class TestCallSites:
         assert [c["usage_metadata"]["task_type"]
                 for c in p._client.models.calls] == ["score_flash"]
 
+    def test_a_capped_escalation_keeps_the_flash_score(self):
+        """A Revenium cap on score_pro raises before the request is sent.
+        Scoring must degrade to Flash, not lose the posting: that is what
+        makes a Pro cap a safe control rather than an outage."""
+
+        class BudgetExceededError(Exception):
+            """Stands in for the SDK's; the middleware is not imported here."""
+
+        class CappedModels(MeteredModels):
+            def generate_content(self, *, model, contents, config,
+                                 usage_metadata):
+                self.calls.append({"model": model,
+                                   "usage_metadata": usage_metadata})
+                if usage_metadata["task_type"] == "score_pro":
+                    raise BudgetExceededError("cap on score_pro breached")
+                return self.response
+
+        response = reply(text='{"overall": 6}')
+        p = provider_with(response)
+        p._client = pytypes.SimpleNamespace(models=CappedModels(response))
+        p._metered = True
+        run = scoring.ScoreRun()
+        score = scoring.score_posting(p, ROW, "s", run,
+                                      model="gemini-2.5-flash",
+                                      escalation_model="gemini-2.5-pro")
+        assert score["overall"] == 6
+        assert score["model"] == "gemini-2.5-flash"
+        assert run.scored == 1 and run.escalated == 0 and run.failed == 0
+        assert any("cap on score_pro" in e for e in run.errors)
+
     def test_grounding_takes_its_posting_from_the_caller(self):
         p = metered_provider(reply(text='{"claims": []}'))
         with metering.for_posting(ROW), pytest.raises(Exception):
