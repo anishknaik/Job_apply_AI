@@ -25,7 +25,7 @@
   <span class="badge">{{ score.archetype or 'no archetype' }} / {{ score.domain or 'no domain' }}</span>
   {% else %}<span class="badge">not scored</span>{% endif %}
   <span>{{ p.location or 'no location' }}{% if p.remote_flag %} · remote{% endif %} · {{ p.ats_type }}</span>
-  {% if url %}<a class="ext" href="{{ url }}" rel="noopener noreferrer" target="_blank">Open posting ↗</a>{% else %}<span class="muted">no linkable URL</span>{% endif %}
+  {% if url %}<a class="btn primary small" href="{{ url }}" rel="noopener noreferrer" target="_blank">Apply ↗</a>{% else %}<span class="muted">no linkable URL</span>{% endif %}
 </div>
 <p class="hint" style="margin: 0 0 22px">first seen {{ p.first_seen_at }} · last seen {{ p.last_seen_at }}{% if p.posted_at %} · posted {{ p.posted_at }}{% endif %}</p>
 

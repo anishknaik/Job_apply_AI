@@ -183,6 +183,10 @@ def create_app(db_path: str | None = None) -> FastAPI:
             counts = tools.status(connection)["by_status"]
         finally:
             connection.close()
+        # The Apply button on each row is a link to the board's own page,
+        # opened in a new tab. Only an http(s) URL becomes one.
+        for entry in result["postings"]:
+            entry["apply_url"] = _safe_url(entry.get("url"))
         return page(request, "queue.html", result=result, counts=counts,
                     current=status, min_score=min_score)
 

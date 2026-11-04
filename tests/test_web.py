@@ -230,6 +230,31 @@ class TestPagesRender:
         assert got.text.count('<span class="count">(1)</span>') == 2
         assert "status=untracked" in got.text
 
+    def test_every_queue_row_has_an_apply_link_to_its_own_page(
+            self, client, conn):
+        """Apply is a link to the board's page in a new tab — the one way
+        this workbench can help someone apply. It is not a route, so the
+        allowlist is unchanged, and it posts nothing."""
+        seed(conn, source_id="a")
+        seed(conn, source_id="b")
+        got = client.get("/queue")
+        for sid in ("a", "b"):
+            assert (f'href="https://x/{sid}" target="_blank" '
+                    f'rel="noopener noreferrer">Apply') in got.text
+
+    def test_a_non_http_url_gets_no_apply_link(self, client, conn):
+        posting = Posting(ats_type="greenhouse", source_id="js",
+                          company="X", title="Y", location="", remote_flag=False,
+                          description="", url="javascript:alert(1)",
+                          posted_at=None)
+        pid, _ = db.upsert_posting(conn, posting, posting.content_hash)
+        db.set_stage_a(conn, pid, True, "passed")
+        db.record_status(conn, pid, "not_applied")
+        conn.commit()
+        got = client.get("/queue")
+        assert "javascript:" not in got.text
+        assert "no link" in got.text
+
     def test_queue_untracked(self, client, conn):
         pid = seed(conn, status=None)
         got = client.get("/queue?status=untracked&min_score=7")

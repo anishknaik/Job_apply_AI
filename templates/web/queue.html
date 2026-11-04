@@ -30,7 +30,7 @@
 <table>
   <thead><tr>
     <th class="num">Tier</th><th>Company</th><th>Title</th><th>Location</th>
-    <th class="num">Apply</th><th class="num">Overall</th><th>Archetype</th><th>Domain</th>
+    <th class="num">Score</th><th class="num">Overall</th><th>Archetype</th><th>Domain</th><th></th>
   </tr></thead>
   <tbody>
   {% for r in result.postings %}
@@ -43,12 +43,14 @@
     <td class="num">{{ r.overall if r.overall is not none else '—' }}</td>
     <td class="small">{{ r.archetype or '' }}</td>
     <td class="small">{{ r.domain or '' }}{% if r.archetype and not r.domain %}<span class="muted"> (predates the domain field)</span>{% endif %}</td>
+    <td class="num">{% if r.apply_url %}<a class="btn primary small" href="{{ r.apply_url }}" target="_blank" rel="noopener noreferrer">Apply ↗</a>{% else %}<span class="hint">no link</span>{% endif %}</td>
   </tr>
   {% else %}
-  <tr><td colspan="8" class="muted">Nothing here.</td></tr>
+  <tr><td colspan="9" class="muted">Nothing here.</td></tr>
   {% endfor %}
   </tbody>
 </table>
+<p class="hint" style="margin: 12px 0 0">Apply opens the company's own application page in a new tab. Nothing here fills or sends a form; record <strong>applied</strong> on the posting page only after the ATS shows its confirmation.</p>
 </section>
 {% if result.note %}<p class="hint">{{ result.note }}</p>{% endif %}
 {% endblock %}

@@ -195,8 +195,10 @@ button, .btn {
   background: var(--panel); color: var(--ink); line-height: 1.3;
 }
 button:hover, .btn:hover { border-color: var(--ink); }
-button.primary { background: var(--green); color: var(--on-green); border-color: var(--green); }
-button.primary:hover { filter: brightness(0.95); }
+button.primary, .btn.primary { background: var(--green); color: var(--on-green); border-color: var(--green); }
+button.primary:hover, .btn.primary:hover { filter: brightness(0.95); color: var(--on-green); }
+.btn { display: inline-block; }
+.btn.small { padding: 5px 14px; font-size: 0.875em; }
 button.dark { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 input, select, textarea {
   font: inherit; color: var(--ink); background: var(--panel);
