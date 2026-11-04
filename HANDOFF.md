@@ -843,6 +843,28 @@ review window on Windows, and the web-started runner holding its stdin.
 5. The two or three fills that Track C's rules still want apply to the
    runner too; `CLAUDE.md`'s form rules say so.
 
+### First live dry runs, 2026-11-04 (local)
+
+`first_name: Anish Kumar` / `last_name: Naik` added to §12 at Anish's word;
+`config/apply.yaml` created with `auto_submit: false` and a cap of 1.
+Three dry runs, nothing typed or clicked:
+
+- **Harvey (21865)**: the posting was gone from Ashby hours after the
+  fetch saw it; the runner stopped with `no form` and a screenshot. Correct.
+- **Sierra (27481, Ashby)**: parsed from the live DOM. Two resolver misses,
+  fixed with tests: "Legal First/Last Name" did not match the name patterns,
+  and a UUID-keyed Location autocomplete (a select with no options until
+  opened) was a blocker instead of an exact match at fill time. After the
+  fix every required field is planned. Signals: `recaptcha`, `challenge_iframe`.
+- **Affirm (24670, Greenhouse)**: the questions JSON and the embed page both
+  worked. "How did you first learn about…" missed how-heard (fixed). Left
+  as blockers, correctly: required Pronouns (stored `he/him/his`, option
+  `He/him/his` - exact match only), state of residence, and "previously
+  employed at Affirm". Veteran left blank (stored `Not a veteran`, option
+  `I am not a protected veteran`). Signal: `recaptcha`.
+
+So far every live form carries reCAPTCHA: review is the path, as expected.
+
 ### Open
 
 - The new states are in `states.labels()`, which feeds the sheet's status

@@ -92,6 +92,17 @@ class TestIdentityFromTheProfile:
         out = one(fld("_systemfield_location", "Location", "location", required=False))
         assert (out.action, out.value) == ("autocomplete", "Springfield, IL")
 
+    def test_location_in_an_ashby_custom_autocomplete_is_matched_live(self):
+        # Seen on Sierra's form 2026-11-04: a UUID-keyed Location question
+        # parsed as a select with no options until opened.
+        out = one(fld("0e82aefd", "Location", "select", options=None))
+        assert (out.action, out.value) == ("select", "Springfield, IL")
+        assert "live widget" in out.note
+
+    def test_a_select_with_known_options_still_needs_an_exact_match(self):
+        out = one(fld("q", "Location", "select", options=(Option("Chicago, IL", "1"),)))
+        assert out.action == "blocker"
+
     def test_a_missing_identity_value_is_a_blocker_when_required(self):
         src = sources(answers=answers(identity={"name": "Jane Example"}))
         out = one(fld("email", "Email"), src)
@@ -109,6 +120,19 @@ class TestTheNameSplit:
                                                 "first_name": "Anish", "last_name": "Naik"}))
         assert one(fld("first_name", "First Name"), src).value == "Anish"
         assert one(fld("last_name", "Last Name"), src).value == "Naik"
+
+    def test_legal_first_and_last_name_labels(self):
+        # Sierra's Ashby form, 2026-11-04: UUID keys, "Legal First Name".
+        src = sources(answers=answers(identity={"name": "Anish Kumar Naik",
+                                                "first_name": "Anish Kumar", "last_name": "Naik"}))
+        assert one(fld("180a0dae", "Legal First Name"), src).value == "Anish Kumar"
+        assert one(fld("b369c90d", "Legal Last Name"), src).value == "Naik"
+
+    def test_how_did_you_first_learn_is_how_heard(self):
+        # Affirm's Greenhouse form, 2026-11-04.
+        f = fld("q", "How did you first learn about Affirm as an employer?", "select",
+                options=(Option("LinkedIn", "1"), Option("Other", "2")))
+        assert resolve.resolve_field(f, sources()).meaning == "how_heard"
 
     def test_a_two_word_name_splits_unambiguously(self):
         assert one(fld("first_name", "First Name")).value == "Jane"

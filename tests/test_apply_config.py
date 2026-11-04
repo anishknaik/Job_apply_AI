@@ -60,8 +60,13 @@ class TestAutoSubmitIsOffUnlessAFileSaysOtherwise:
         assert "config/apply.yaml" in ignore
         assert ".jobpipe-browser/" in ignore
         assert "output/apply/" in ignore
-        assert not (REPO / "config" / "apply.yaml").exists(), \
-            "a real apply.yaml must never be in the tree"
+        # The local copy exists on Anish's machine by design (HANDOFF §8
+        # step 1); what must never happen is git tracking it.
+        import shutil, subprocess
+        if shutil.which("git") and (REPO / ".git").exists():
+            tracked = subprocess.run(["git", "ls-files", "config/apply.yaml"], cwd=REPO,
+                                     capture_output=True, text=True).stdout.strip()
+            assert not tracked, "a real apply.yaml must never be committed"
 
     def test_a_string_true_does_not_turn_it_on(self, tmp_path):
         """YAML quoting: "true" is a string. A string must not read as on."""

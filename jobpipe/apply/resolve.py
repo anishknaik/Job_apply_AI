@@ -102,10 +102,10 @@ _MEANINGS: tuple[tuple[str, str], ...] = (
     ("sponsorship", r"sponsor"),
     ("work_authorization", r"authori[sz]ed to work|legally (authori[sz]ed|eligible|permitted)|work authori[sz]ation|eligible to work|right to work"),
     ("start_date", r"start date|available to start|when (can|could) you start|notice period|earliest (start|availability)|availability to start"),
-    ("how_heard", r"how did you (hear|find|learn)|how you heard|where did you (hear|find)|\breferr(al|ed)\b"),
+    ("how_heard", r"how did you (first )?(hear|find|learn)|how you heard|where did you (hear|find)|\breferr(al|ed)\b"),
     ("preferred_name", r"preferred (first )?name|what should we call you"),
-    ("first_name", r"^first\s*name|given name"),
-    ("last_name", r"^last\s*name|family name|surname"),
+    ("first_name", r"^(legal\s+)?first\s*name|given name"),
+    ("last_name", r"^(legal\s+)?last\s*name|family name|surname"),
     ("full_name", r"^(full |legal )?name$|^your name$"),
     ("email", r"\be-?mail\b"),
     ("phone", r"\bphone\b|\bmobile\b|\btelephone\b"),
@@ -199,6 +199,13 @@ def _put_text(f: _spec.Field, meaning: str, value: str | None, source: str,
               missing: str) -> Resolved:
     if value is None:
         return _no_source(f, meaning, missing)
+    if f.kind == _spec.SELECT and f.options is None:
+        # Ashby's dropdowns and autocompletes carry no options until opened.
+        # The filler matches exact text in the live listbox; no match leaves
+        # it unset, which fails decide.py's `verified` condition.
+        return Resolved(f, SELECT, value, source, meaning,
+                        note="options read from the live widget; exact text only, "
+                             "otherwise left unset and reported")
     if f.kind in (_spec.SELECT, _spec.YESNO, _spec.MULTISELECT):
         opt = _exact_option(f, value)
         if opt is None:
