@@ -357,8 +357,12 @@ def copy_for_editing(conn, posting_id: int) -> dict[str, Any]:
 
 
 def advance_status(conn, posting_id: int, status: str,
-                   letter_required: bool | None = None) -> dict[str, Any]:
+                   letter_required: bool | None = None,
+                   source: str = "mcp") -> dict[str, Any]:
     """Append a status transition to the event log.
+
+    `source` is provenance, not a tool parameter: the MCP registration never
+    passes it, and the web workbench passes "web".
 
     Deliberately NOT gated on grounding (5.2). This records a fact about the
     world, and a tool that cannot record what actually happened is a tool that
@@ -379,7 +383,7 @@ def advance_status(conn, posting_id: int, status: str,
 
     previous = db.current_statuses(conn).get(posting_id)
     changed = db.record_status(conn, posting_id, wanted, previous=previous,
-                               source="mcp", letter_required=letter_required)
+                               source=source, letter_required=letter_required)
     conn.commit()
 
     result = {
