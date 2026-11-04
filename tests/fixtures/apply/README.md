@@ -22,3 +22,15 @@ Greenhouse's documentation and is marked so in `spec.py`):
 (`POST /api/non-user-graphql?op=ApiJobPostingForApplicationRequest`). The
 fetching service does only GETs. The parser reads the rendered form instead,
 which is what the filler drives anyway.
+
+## `pages/` - test doubles, not captures
+
+`greenhouse_form.html`, `ashby_form.html`, `recaptcha_form.html`,
+`fake_ats.html`, `fake_ats_precaptcha.html` and `widgets.js` are pages
+written for the Playwright tests, modelled on the two real captures above:
+the same ids, classes and `data-field-path` keys, with react-select,
+autocomplete, yes/no and submit behaviour scripted in `widgets.js`. They
+prove what `fill.py` and `submit.py` do and never do; they do not prove
+what Greenhouse's or Ashby's real components do. The fake ATS's success and
+error markup follow what was verified for Ashby and the UNVERIFIED wording
+assumed for Greenhouse (`submit.py`).

@@ -39,6 +39,18 @@ with `filter --refilter`, which took 31 live postings out and added none to
 the scoring queue. The scheduled task still has to be re-registered with
 `-Spend` from an elevated shell for (4) to take effect.
 
+**Updated 2026-11-04, later the same day: Phase 6, the apply runner, is
+built and tested against fixtures, and has not touched a real form.** Anish
+changed one guardrail - auto-submit only where nothing checks for bots,
+review everywhere else - and `PHASE6_PLAN.md` is the spec. All nine
+slices are on `apply-runner`, one commit each; the suite is offline. Two of
+the plan's premises did not survive contact with the real pages, and both
+ATSes load reCAPTCHA Enterprise on the rendered form, so review is the
+main path and auto-submit the exception the plan said it would be. §8 has
+what was built, which fixtures are real, what is UNVERIFIED, what has not
+run live, and the supervised sequence to run first. Read §8 before
+`python -m jobpipe.apply` on anything real.
+
 Read this before `session_2026-08-31_phase5.txt`. The transcript is a record of
 what was *said*, and several things in it were corrected by later turns — a
 fresh reader going straight through will absorb the wrong versions. The
@@ -640,6 +652,11 @@ seven-block shape, which is what the open `why this role` question needs
 
 Then mark the rules settled in `CLAUDE.md`, which is Anish's call.
 
+**Phase 6 comes after that, not instead of it.** The apply runner has never
+opened a real form. §8 lists the supervised sequence - dry runs on two or
+three real postings first - and the four things it will tell us that the
+fixtures cannot.
+
 Two Perplexity roles were in progress in the same Cowork task when this was
 written: 19496 has a resume, and 19713 has a resume and two form answers
 that passed grounding. Neither has a status event, so check `status` before
@@ -698,3 +715,140 @@ and Cloud IAM are separate systems.
 
 **Before any push, check `git status` and `git ls-files config/`.** The latter
 should show only `*.example.*` plus `filters.yaml` and `states.yml`.
+
+---
+
+## 8. Phase 6 — the apply runner (built 2026-11-04, not run live)
+
+`PHASE6_PLAN.md` is the spec; this is where it stands. Everything below was
+built in a cloud session against fixtures and the full offline suite, and
+**nothing has been run against a real form, a real browser profile, or the
+real database.** The first local run is the first time any of it meets
+`jobpipe.db`, `master_profile.md` and `answers.yaml`.
+
+### What was built
+
+| Slice | Where | State |
+|---|---|---|
+| 0 | `PROJECT.md`, `CLAUDE.md` guardrail text; `config/apply.example.yaml`; `apply_runs` table; `ready_for_review`, `submit_unconfirmed` states; `advance_status(source="agent")` | done |
+| 1 | `jobpipe/apply/spec.py` - Greenhouse JSON and **rendered Ashby form** parsers | done, real fixtures |
+| 2 | `resolve.py` - every field a source or a blocker | done, one test per table row |
+| 3 | `signals.py` - bot-check detection, stop only | done |
+| 4 | `fill.py`, `browser.py` - type, upload, read back (SHA-256), screenshot | done, Playwright tests offline |
+| 5 | `decide.py` - the eight conditions | done, one test per condition |
+| 6 | `submit.py` - one click, confirmation, never a retry | done, fake ATS |
+| 7 | `runner.py`, `python -m jobpipe.apply <id> [--dry-run\|--review\|--auto]` | done, dry run default |
+| 8 | workbench: `/fill`, `/fill/close`, run screenshots, the run report, a needs-attention tab | done |
+| 9 | this section; `CLAUDE.md` "Filling an application form" | done |
+
+Suite on the cloud checkout: 1,050 passed, 2 skipped; the 36 failures and
+126 errors are the ones a clean checkout always has (gitignored
+`bullets.yaml`, the profile, `cli ground`, and a Playwright browser
+mismatch in that container). Phase 6 adds about 260 tests, all offline.
+Browser tests use `JOBPIPE_CHROMIUM` to point at a Chromium that is not
+Playwright's download; on Anish's machine, where the download exists, leave
+it unset.
+
+### Where the plan was wrong, and what was done instead
+
+1. **Ashby's form is not in `window.__appData`.** `__appData` carries the
+   posting, the organisation and the reCAPTCHA site key; the form arrives
+   by a GraphQL POST (`/api/non-user-graphql?op=ApiJobPostingForApplicationRequest`,
+   `applicationForm { sections { fieldEntries { field, isRequired, ... } } }`)
+   that the fetching service used here could not make. The parser reads the
+   **rendered form** instead: every question is a
+   `ashby-application-form-field-entry` div with a `data-field-path` key
+   (`_systemfield_name`, `_systemfield_email`, `_systemfield_resume`,
+   `_systemfield_location`, or a UUID), a label with a `_required_` class,
+   and one widget. Consequence: an Ashby dropdown's options are not in the
+   DOM until it is opened, so the filler reads them from the open listbox
+   and matches exact text there. The GraphQL route is the better source once
+   someone can capture one response locally; `spec.py`'s docstring has the
+   operation name.
+2. **Alloy's board does load reCAPTCHA.** §1 sampled static HTML; the
+   rendered embed page loads `recaptcha/enterprise.js` and defines
+   `grecaptcha`, as Ashby's application page does. Expect `signals.py` to
+   fire on nearly every real form. `decide.py` will say `no_bot_check` and
+   the run goes to review. That is the design working, not a bug - but it
+   means the auto-submit path may never open on these two ATSes, and the
+   first live runs should confirm or refute that before anyone tunes it.
+3. **The Greenhouse form page.** `job-boards.greenhouse.io/{token}/jobs/{id}`
+   redirected to Alloy's own site with the form embedded. The runner opens
+   `job-boards.greenhouse.io/embed/job_app?for={token}&token={id}`, which
+   rendered `#application-form` inline with no iframe. `fill.py` searches
+   frames anyway.
+4. **§12 holds one `name`.** A form asking for first and last names gets a
+   split only from `first_name`/`last_name` keys in §12 if present, or from
+   a two-word name; "Anish Kumar Naik" is three words and is a **blocker
+   that names the fix**: add `first_name` and `last_name` to §12 before the
+   first review run, or every Greenhouse form stops on it.
+
+Two readings of the resolver table are deliberate and documented in
+`resolve.py`: "blocker" means a *required* field with no source, and an
+*optional* field with no source is left blank and listed; and the daily cap
+in `decide.py` is a rolling 24 hours.
+
+### Fixtures: real and UNVERIFIED
+
+Real, captured 2026-11-04 (`tests/fixtures/apply/README.md`): Alloy's and
+Datadog's Greenhouse `?questions=true` JSON, Alloy's rendered Greenhouse
+form, LangChain's rendered Ashby application page and its `__appData`.
+
+UNVERIFIED, marked so in code and in the README:
+
+- `demographic_questions` on Greenhouse: parsed per the documented shape;
+  no sampled posting carried one.
+- **Greenhouse's confirmation page.** `submit.py` recognises Ashby's
+  success box from Ashby's own bundle (`ashby-application-form-success-container`,
+  role=status, "Your application was successfully submitted"; error box
+  "We couldn't submit your form."). Greenhouse's job-boards bundle was not
+  reachable, so its thank-you wording and a `confirmation` URL segment are
+  assumed. A miss records `submit_unconfirmed`, the safe outcome. The first
+  real submission - Anish's own click, in review mode - should capture the
+  confirmation page's text and URL and replace the patterns.
+- The pages under `tests/fixtures/apply/pages/` are **test doubles**
+  modelled on the real markup, with the widget behaviour scripted. They
+  prove the filler's logic, not Greenhouse's react-select or Ashby's
+  autocomplete.
+
+### What has not run live
+
+All of it. In particular: react-select on a real Greenhouse form (the
+double mimics its single-value/`data-value` structure), Ashby's location
+autocomplete against its live suggestions, the phone widget's country
+selector (the runner types the digits and leaves the country at its
+default), the frame search on a company-hosted embed, the lock file and the
+review window on Windows, and the web-started runner holding its stdin.
+
+### The supervised sequence (PHASE6_PLAN §6), in order
+
+1. Add `first_name` and `last_name` to `master_profile.md` §12. Copy
+   `config/apply.example.yaml` to `config/apply.yaml`; leave `auto_submit:
+   false`.
+2. `python -m jobpipe.apply <id> --dry-run` on two or three real postings,
+   one Ashby and one Greenhouse, with a resume already rendered for each.
+   Read the report: every identity field `planned` from a `profile:` source,
+   the resume `planned` from `render_resume`, self-ID `select` or `blank`
+   with the reason, the salary/attestation rows `blocker`. Expect
+   `signals_before: [recaptcha]`.
+3. `--review` on one of them, watched. The window stays open; check every
+   value against the report (the report carries hashes; the page carries
+   the text), check the upload went through the field's own input, then
+   submit it yourself. **Capture the confirmation page** (text and URL)
+   and update `submit.py`'s Greenhouse patterns. `advance_status` to
+   `applied` as today, then `cli sync`.
+4. Only if a form ever shows no bot check at step 2: set `auto_submit:
+   true`, `--auto` on that one posting, watched live, with the daily cap
+   at 1 for the first week.
+5. The two or three fills that Track C's rules still want apply to the
+   runner too; `CLAUDE.md`'s form rules say so.
+
+### Open
+
+- The new states are in `states.labels()`, which feeds the sheet's status
+  dropdown on the next `sync`; nothing writes them to the sheet, but they
+  will appear as choices.
+- `needs attention` on the queue reads the last `apply_runs` row per
+  posting; a posting with blockers stays there until a later run clears
+  them or Anish records a status by hand.
+- §8 of the plan, the AI browser agent for other boards, is not started.

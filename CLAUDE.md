@@ -307,6 +307,20 @@ Anish after the first section of each form. Two have been — LangChain on
 and what the first taught is folded into the rules below. Neither form asked
 for a letter.
 
+**Two ways a form gets filled, same rules.** A session with the Chrome
+extension, as below; or the Phase 6 runner, `python -m jobpipe.apply <id>`,
+which fills Greenhouse and Ashby forms in a Chromium profile of its own
+(`PHASE6_PLAN.md`, `HANDOFF.md` §8). The runner takes every value from the
+same tools and the same table below - `form_answers`, `render_resume`,
+`prepare_letter`, a grounding-passed short answer - and writes no prose; a
+field with no source is a blocker, and the posting goes to review with it
+listed. Dry run is its default. It may click submit once, and only when
+`jobpipe/apply/decide.py`'s eight conditions all hold, which includes no
+bot check on the page; both ATSes load reCAPTCHA Enterprise on the rendered
+form, so expect review. From the workbench it runs in review or dry-run
+mode only. It has not yet been run on a real form; `HANDOFF.md` §8 has the
+supervised sequence.
+
 **Scope the browser.** The extension sees every tab in the logged-in
 browser. Open the application in a new tab of its own and work only there.
 Do not read, click or type anywhere else — mail, the sheet, other
