@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import sys
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -424,6 +425,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="jobpipe-web")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--db", default=None)
+    parser.add_argument("--no-reload", action="store_true",
+                        help="do not restart the server when jobpipe/*.py "
+                             "changes")
     args = parser.parse_args()
 
     # Every path the pipeline uses — output/applications, config/, the
@@ -435,9 +439,58 @@ def main() -> None:
     from .cli import _load_env
     _load_env()
 
-    # 127.0.0.1, never 0.0.0.0: this page holds self-ID answers and a button
-    # that spends money.
-    uvicorn.run(create_app(args.db), host="127.0.0.1", port=args.port)
+    if args.no_reload:
+        # 127.0.0.1, never 0.0.0.0: this page holds self-ID answers and a
+        # button that spends money.
+        uvicorn.run(create_app(args.db), host="127.0.0.1", port=args.port)
+        return
+    worker = [sys.executable, "-m", "jobpipe.web", "--no-reload",
+              "--port", str(args.port)]
+    if args.db:
+        worker += ["--db", args.db]
+    _supervise(worker)
+
+
+def _python_mtimes() -> dict[Path, float]:
+    return {p: p.stat().st_mtime
+            for p in (REPO_ROOT / "jobpipe").rglob("*.py")}
+
+
+def _supervise(worker: list[str], interval: float = 1.0) -> None:
+    """Run the server in a child and restart it when jobpipe/*.py changes.
+
+    On by default: the branch gets pulled while the page is open, and a
+    server still running the old code reads like the pull failed. Templates
+    need no watching; Jinja re-reads a changed one on the next request.
+
+    Not uvicorn's --reload. On Windows it stops the old worker with a
+    CTRL_C_EVENT, which never arrives when there is no console to deliver
+    it, and the reload hangs with the old code still serving. terminate()
+    is TerminateProcess, which always lands.
+    """
+    import subprocess
+    import time
+
+    seen = _python_mtimes()
+    child = subprocess.Popen(worker)
+    try:
+        while True:
+            time.sleep(interval)
+            now = _python_mtimes()
+            if now == seen:
+                continue
+            seen = now
+            print("jobpipe.web: code changed, restarting", flush=True)
+            child.terminate()
+            child.wait()
+            # A pull that breaks the import exits the child at once; the next
+            # change starts it again rather than respawning in a tight loop.
+            child = subprocess.Popen(worker)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        child.terminate()
+        child.wait()
 
 
 if __name__ == "__main__":
