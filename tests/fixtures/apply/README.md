@@ -1,0 +1,24 @@
+# Phase 6 fixtures
+
+Real public data, captured 2026-11-04 through a fetching service (this
+environment cannot reach either ATS directly). Nothing here is invented.
+
+| File | What | Source |
+|---|---|---|
+| `greenhouse_alloy_8495229002_questions.json` | Greenhouse `?questions=true` JSON. Has a **required salary question**, hidden location fields, EEOC blocks | `boards-api.greenhouse.io/v1/boards/alloy/jobs/8495229002?questions=true` |
+| `greenhouse_datadog_8053714_questions.json` | Same shape. Has **"I certify…" and privacy attestations**, two multi-selects, `preferred_name` | `boards-api.greenhouse.io/v1/boards/datadog/jobs/8053714?questions=true` |
+| `greenhouse_alloy_8495229002_form.html` | The **rendered** application form (react-select comboboxes, file inputs, submit button). Country list collapsed, SVGs emptied | `job-boards.greenhouse.io/alloy/jobs/8495229002`, rendered |
+| `ashby_langchain_74e5f9f4_application.html` | The **rendered** Ashby application page: field-entry divs with `data-field-path`, yes/no buttons, autocomplete, `g-recaptcha-response`, `window.__appData`. Styles dropped | `jobs.ashbyhq.com/langchain/74e5f9f4-…/application`, rendered |
+| `ashby_langchain_74e5f9f4_appData.json` | `window.__appData` from that page: posting, organisation, `recaptchaUniversalPublicSiteKey`. Description trimmed | same page |
+
+The `content` / `descriptionHtml` posting text is truncated in the JSON
+files; the form is what these are for.
+
+**UNVERIFIED shapes** (no sampled posting carried one; the parser follows
+Greenhouse's documentation and is marked so in `spec.py`):
+`demographic_questions`. Replace with a real sample before relying on it.
+
+**Not captured, and why:** Ashby's form definition JSON
+(`POST /api/non-user-graphql?op=ApiJobPostingForApplicationRequest`). The
+fetching service does only GETs. The parser reads the rendered form instead,
+which is what the filler drives anyway.

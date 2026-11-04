@@ -1,0 +1,893 @@
+{
+ "absolute_url": "https://careers.datadoghq.com/detail/8053714/?gh_jid=8053714",
+ "data_compliance": [
+  {
+   "type": "gdpr",
+   "requires_consent": false,
+   "requires_processing_consent": false,
+   "requires_retention_consent": false,
+   "retention_period": null,
+   "demographic_data_consent_applies": false
+  }
+ ],
+ "internal_job_id": 3490541,
+ "location": {
+  "name": "Denver, Colorado, USA"
+ },
+ "metadata": [
+  {
+   "id": 33310,
+   "name": "Time Type",
+   "value": "Full time",
+   "value_type": "single_select"
+  },
+  {
+   "id": 166208,
+   "name": "Area - Engineering",
+   "value": null,
+   "value_type": "single_select"
+  },
+  {
+   "id": 498252,
+   "name": "Cost Center",
+   "value": "Technical Solutions - Commercial & Mid-Market Sales Engineering",
+   "value_type": "single_select"
+  },
+  {
+   "id": 516515,
+   "name": "Geography",
+   "value": "North America",
+   "value_type": "single_select"
+  },
+  {
+   "id": 9593635,
+   "name": "Early Career Time Type",
+   "value": null,
+   "value_type": "single_select"
+  },
+  {
+   "id": 29446322,
+   "name": "Pay Transparency Range",
+   "value": {
+    "unit": "USD",
+    "max_value": "122000.0",
+    "min_value": "92000.0"
+   },
+   "value_type": "currency_range"
+  },
+  {
+   "id": 31273219,
+   "name": "Does this role require access to ITAR-controlled data?",
+   "value": "I’m not sure",
+   "value_type": "single_select"
+  },
+  {
+   "id": 58619948,
+   "name": "IC or MG",
+   "value": "IC",
+   "value_type": "single_select"
+  }
+ ],
+ "id": 8053714,
+ "updated_at": "2026-09-29T13:18:57-04:00",
+ "requisition_id": "R19916",
+ "title": "Commercial Sales Engineer 2 (AMER - West)",
+ "company_name": "Datadog",
+ "first_published": "2026-07-16T11:57:21-04:00",
+ "language": "en",
+ "application_deadline": null,
+ "content": "&lt;p&gt;Datadog Sales Engineers help qualify and close opportunities with customers and partners by providing technical expertise through sales presentations, product demonstrations, and supporting technical evaluations (POCs). As a Commercial Sales Engineer 2, you will independently own technical engagements throughout the sales cycle, partnering closely with Account Executives to align customer…[truncated for the fixture; the posting text is not what this fixture is for]",
+ "departments": [
+  {
+   "id": 202108,
+   "name": "Commercial & Mid-Market Sales Engineering",
+   "child_ids": [],
+   "parent_id": 9023
+  }
+ ],
+ "offices": [
+  {
+   "id": 61865,
+   "name": "Denver",
+   "location": "Denver, Colorado, United States",
+   "child_ids": [],
+   "parent_id": 78231
+  }
+ ],
+ "ai_disclaimer": null,
+ "include_ai_disclaimer": null,
+ "ai_opt_out_request_url": null,
+ "compliance": [
+  {
+   "type": "eeoc",
+   "questions": [
+    {
+     "required": false,
+     "label": "VeteranStatus",
+     "fields": [
+      {
+       "name": "veteran_status",
+       "type": "multi_value_single_select",
+       "values": [
+        {
+         "label": "I don't wish to answer",
+         "value": "3"
+        },
+        {
+         "label": "I identify as one or more of the classifications of a protected veteran",
+         "value": "2"
+        },
+        {
+         "label": "I am not a protected veteran",
+         "value": "1"
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "description": "&lt;p&gt;\n  If you believe you belong to any of the categories of protected veterans listed below, please indicate by making the appropriate selection.\n  As a government contractor subject to the Vietnam Era Veterans&#39; Readjustment Assistance Act (VEVRAA), we request this information in order to measure\n  the effectiveness of the outreach and positive recruitment efforts we undertake pursuant to VEVRAA. Classification of protected categories\n  is as follows:\n&lt;/p&gt;\n&lt;p&gt;A &quot;disabled veteran&quot; is one of the following: a veteran of the U.S. military, ground, naval or air service who is entitled to compensation (or who but for the receipt of military retired pay would be entitled to compensation) under laws administered by the Secretary of Veterans Affairs; or a person who was discharged or released from active duty because of a service-connected disability.&lt;/p&gt;\n&lt;p&gt;A &quot;recently separated veteran&quot; means any veteran during the three-year period beginning on the date of such veteran&#39;s discharge or release from active duty in the U.S. military, ground, naval, or air service.&lt;/p&gt;\n&lt;p&gt;An &quot;active duty wartime or campaign badge veteran&quot; means a veteran who served on active duty in the U.S. military, ground, naval or air service during a war, or in a campaign or expedition for which a campaign badge has been authorized under the laws administered by the Department of Defense.&lt;/p&gt;\n&lt;p&gt;An &quot;Armed forces service medal veteran&quot; means a veteran who, while serving on active duty in the U.S. military, ground, naval or air service, participated in a United States military operation for which an Armed Forces service medal was awarded pursuant to Executive Order 12985.&lt;/p&gt;\n"
+  },
+  {
+   "type": "eeoc",
+   "questions": [
+    {
+     "required": false,
+     "label": "Race",
+     "fields": [
+      {
+       "name": "race",
+       "type": "multi_value_single_select",
+       "values": [
+        {
+         "label": "Decline To Self Identify",
+         "value": "8"
+        },
+        {
+         "label": "Two or More Races",
+         "value": "7"
+        },
+        {
+         "label": "Native Hawaiian or Other Pacific Islander",
+         "value": "6"
+        },
+        {
+         "label": "White",
+         "value": "5"
+        },
+        {
+         "label": "Hispanic or Latino",
+         "value": "4"
+        },
+        {
+         "label": "Black or African American",
+         "value": "3"
+        },
+        {
+         "label": "Asian",
+         "value": "2"
+        },
+        {
+         "label": "American Indian or Alaskan Native",
+         "value": "1"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "required": false,
+     "label": "Gender",
+     "fields": [
+      {
+       "name": "gender",
+       "type": "multi_value_single_select",
+       "values": [
+        {
+         "label": "Decline To Self Identify",
+         "value": "3"
+        },
+        {
+         "label": "Female",
+         "value": "2"
+        },
+        {
+         "label": "Male",
+         "value": "1"
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "description": "&lt;h3&gt;&lt;strong&gt;Voluntary Self-Identification&lt;/strong&gt;&lt;/h3&gt;&lt;br/&gt;&lt;p&gt;For government reporting purposes, we ask candidates to respond to the below self-identification survey.\nCompletion of the form is entirely voluntary. Whatever your decision, it will not be considered in the hiring\nprocess or thereafter. Any information that you do provide will be recorded and maintained in a\nconfidential file.&lt;/p&gt;\n\n&lt;p&gt;As set forth in Datadog’s Equal Employment Opportunity policy,\nwe do not discriminate on the basis of any protected group status under any applicable law.&lt;/p&gt;\n"
+  }
+ ],
+ "demographic_questions": null,
+ "questions": [
+  {
+   "description": null,
+   "label": "First Name",
+   "required": true,
+   "fields": [
+    {
+     "name": "first_name",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Last Name",
+   "required": true,
+   "fields": [
+    {
+     "name": "last_name",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Preferred First Name",
+   "required": true,
+   "fields": [
+    {
+     "name": "preferred_name",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Email",
+   "required": true,
+   "fields": [
+    {
+     "name": "email",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Phone",
+   "required": true,
+   "fields": [
+    {
+     "name": "phone",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Resume/CV",
+   "required": true,
+   "fields": [
+    {
+     "name": "resume",
+     "type": "input_file",
+     "values": []
+    },
+    {
+     "name": "resume_text",
+     "type": "textarea",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "LinkedIn Profile",
+   "required": false,
+   "fields": [
+    {
+     "name": "question_68014207",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Website",
+   "required": false,
+   "fields": [
+    {
+     "name": "question_68014208",
+     "type": "input_text",
+     "values": []
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "I certify that the information provided in this application is true and correct to the best of my knowledge. I understand that any false statements or omissions may result in disqualification from employment consideration or, if employed, in termination.",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_68014209",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes",
+       "value": 1
+      },
+      {
+       "label": "No",
+       "value": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "<p><span class=\"&ldquo;s1&quot;\">Read our&nbsp;<a href=\"https://www.datadoghq.com/legal/applicant-candidate-privacy/\" target=\"_blank\" rel=\"noopener\">Applicant and Candidate Privacy Policy</a></span>.</p>",
+   "label": "I understand my application will be processed in accordance with Datadog’s Candidate Privacy Policy.",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_68014210",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes",
+       "value": 1
+      },
+      {
+       "label": "No",
+       "value": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "Are you legally authorised to work full-time in the country where this job is based?",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_68014211",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Yes, no restriction.",
+       "value": 731505625
+      },
+      {
+       "label": "Yes, but I will need sponsorship in the future.",
+       "value": 731505626
+      },
+      {
+       "label": "No, I need sponsorship now.",
+       "value": 731505627
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "<p><em>This job requires you to be in the office 3 days a week. All open locations for this role are listed at the top of this page. For accommodations, you can submit a request <a href=\"https://docs.google.com/forms/d/e/1FAIpQLSeoJeduEZ2NdZF_65uZmWUrCM-zee7yADXX1s6Xr9zAGq8iKA/viewform\" target=\"_blank\" rel=\"noopener\">here</a>.</em></p>",
+   "label": "In what cities are you available to work?",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_68014212[]",
+     "type": "multi_value_multi_select",
+     "values": [
+      {
+       "label": "Amsterdam",
+       "value": 731505628
+      },
+      {
+       "label": "Atlanta",
+       "value": 731505629
+      },
+      {
+       "label": "Bangalore",
+       "value": 731505630
+      },
+      {
+       "label": "Barcelona",
+       "value": 731505631
+      },
+      {
+       "label": "Barueri São Paulo",
+       "value": 731505632
+      },
+      {
+       "label": "Bordeaux",
+       "value": 731505633
+      },
+      {
+       "label": "Boston",
+       "value": 731505634
+      },
+      {
+       "label": "Chicago",
+       "value": 731505635
+      },
+      {
+       "label": "Copenhagen",
+       "value": 731505636
+      },
+      {
+       "label": "Denver",
+       "value": 731505637
+      },
+      {
+       "label": "Dubai",
+       "value": 731505638
+      },
+      {
+       "label": "Dublin",
+       "value": 731505639
+      },
+      {
+       "label": "Grenoble",
+       "value": 731505640
+      },
+      {
+       "label": "Hamburg",
+       "value": 731505641
+      },
+      {
+       "label": "Jakarta",
+       "value": 731505642
+      },
+      {
+       "label": "Lisbon",
+       "value": 731505643
+      },
+      {
+       "label": "London",
+       "value": 731505644
+      },
+      {
+       "label": "Lyon",
+       "value": 731505645
+      },
+      {
+       "label": "Madrid",
+       "value": 731505646
+      },
+      {
+       "label": "Melbourne",
+       "value": 731505647
+      },
+      {
+       "label": "Mexico City",
+       "value": 731505648
+      },
+      {
+       "label": "Montpellier",
+       "value": 731505649
+      },
+      {
+       "label": "Mumbai",
+       "value": 731505650
+      },
+      {
+       "label": "Nantes",
+       "value": 731505651
+      },
+      {
+       "label": "New York City",
+       "value": 731505652
+      },
+      {
+       "label": "Nice",
+       "value": 731505653
+      },
+      {
+       "label": "Osaka",
+       "value": 731505654
+      },
+      {
+       "label": "Paris",
+       "value": 731505655
+      },
+      {
+       "label": "Pittsburgh",
+       "value": 748101634
+      },
+      {
+       "label": "Remote",
+       "value": 731505656
+      },
+      {
+       "label": "Riyadh",
+       "value": 731505657
+      },
+      {
+       "label": "Salt Lake City",
+       "value": 731505658
+      },
+      {
+       "label": "San Francisco",
+       "value": 731505659
+      },
+      {
+       "label": "San Jose (Campbell)",
+       "value": 731505660
+      },
+      {
+       "label": "San Sebastian",
+       "value": 731505661
+      },
+      {
+       "label": "São Paulo",
+       "value": 731505662
+      },
+      {
+       "label": "Seattle",
+       "value": 731505663
+      },
+      {
+       "label": "Seoul",
+       "value": 731505664
+      },
+      {
+       "label": "Singapore",
+       "value": 731505665
+      },
+      {
+       "label": "Sophia Antipolis",
+       "value": 731505666
+      },
+      {
+       "label": "Stockholm",
+       "value": 731505667
+      },
+      {
+       "label": "Sydney",
+       "value": 731505668
+      },
+      {
+       "label": "Tel Aviv",
+       "value": 731505669
+      },
+      {
+       "label": "Tokyo",
+       "value": 731505670
+      },
+      {
+       "label": "Toronto",
+       "value": 731505671
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": "<p><em>Select all the languages in which you have business-level fluency, both in verbal and written communication.</em></p>",
+   "label": "Please select all the languages you speak fluently.",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_68014213[]",
+     "type": "multi_value_multi_select",
+     "values": [
+      {
+       "label": "Arabic",
+       "value": 731505672
+      },
+      {
+       "label": "Bahasa Indonesia",
+       "value": 731505673
+      },
+      {
+       "label": "Bulgarian",
+       "value": 731505674
+      },
+      {
+       "label": "Cantonese",
+       "value": 731505675
+      },
+      {
+       "label": "Croatian",
+       "value": 731505676
+      },
+      {
+       "label": "Czech",
+       "value": 731505677
+      },
+      {
+       "label": "Danish",
+       "value": 731505678
+      },
+      {
+       "label": "Dutch",
+       "value": 731505679
+      },
+      {
+       "label": "English",
+       "value": 731505680
+      },
+      {
+       "label": "Estonian",
+       "value": 731505681
+      },
+      {
+       "label": "Finnish",
+       "value": 731505682
+      },
+      {
+       "label": "French",
+       "value": 731505683
+      },
+      {
+       "label": "German",
+       "value": 731505684
+      },
+      {
+       "label": "Greek",
+       "value": 731505685
+      },
+      {
+       "label": "Hebrew",
+       "value": 731505686
+      },
+      {
+       "label": "Hindi",
+       "value": 731505687
+      },
+      {
+       "label": "Hungarian",
+       "value": 731505688
+      },
+      {
+       "label": "Italian",
+       "value": 731505689
+      },
+      {
+       "label": "Japanese",
+       "value": 731505690
+      },
+      {
+       "label": "Korean",
+       "value": 731505691
+      },
+      {
+       "label": "Latvian",
+       "value": 731505692
+      },
+      {
+       "label": "Lithuanian",
+       "value": 731505693
+      },
+      {
+       "label": "Malay",
+       "value": 731505694
+      },
+      {
+       "label": "Mandarin",
+       "value": 731505695
+      },
+      {
+       "label": "Norwegian",
+       "value": 731505696
+      },
+      {
+       "label": "Polish",
+       "value": 731505697
+      },
+      {
+       "label": "Portuguese",
+       "value": 731505698
+      },
+      {
+       "label": "Portuguese (Brazilian)",
+       "value": 731505699
+      },
+      {
+       "label": "Romanian",
+       "value": 731505700
+      },
+      {
+       "label": "Russian",
+       "value": 731505701
+      },
+      {
+       "label": "Slovak",
+       "value": 731505702
+      },
+      {
+       "label": "Slovenian",
+       "value": 731505703
+      },
+      {
+       "label": "Spanish",
+       "value": 731505704
+      },
+      {
+       "label": "Swedish",
+       "value": 731505705
+      },
+      {
+       "label": "Tagalog",
+       "value": 731505706
+      },
+      {
+       "label": "Thai",
+       "value": 731505707
+      },
+      {
+       "label": "Turkish",
+       "value": 731505708
+      },
+      {
+       "label": "Ukrainian",
+       "value": 731505709
+      },
+      {
+       "label": "Vietnamese",
+       "value": 731505710
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "description": null,
+   "label": "How did you hear about this opportunity?",
+   "required": true,
+   "fields": [
+    {
+     "name": "question_68014214",
+     "type": "multi_value_single_select",
+     "values": [
+      {
+       "label": "Advisor or Faculty referral",
+       "value": 751672068
+      },
+      {
+       "label": "AfroTech",
+       "value": 731505711
+      },
+      {
+       "label": "Angelist",
+       "value": 731505712
+      },
+      {
+       "label": "Attended a talk or conference",
+       "value": 751672069
+      },
+      {
+       "label": "Blind App",
+       "value": 731505713
+      },
+      {
+       "label": "Break Through Tech",
+       "value": 731505714
+      },
+      {
+       "label": "BuiltIn Boston",
+       "value": 731505715
+      },
+      {
+       "label": "BuiltIn NYC",
+       "value": 731505716
+      },
+      {
+       "label": "ColorStack",
+       "value": 731505717
+      },
+      {
+       "label": "Campus Event",
+       "value": 731505718
+      },
+      {
+       "label": "Carnegie Mellon University department or mailing list",
+       "value": 751672070
+      },
+      {
+       "label": "Datadog Employee",
+       "value": 731505719
+      },
+      {
+       "label": "Datadog's Careers Page",
+       "value": 731505720
+      },
+      {
+       "label": "Event",
+       "value": 731505721
+      },
+      {
+       "label": "Flexjobs",
+       "value": 731505722
+      },
+      {
+       "label": "Girls Who Code",
+       "value": 731505723
+      },
+      {
+       "label": "Github",
+       "value": 731505724
+      },
+      {
+       "label": "Glassdoor",
+       "value": 731505725
+      },
+      {
+       "label": "Hacker News",
+       "value": 731505726
+      },
+      {
+       "label": "Hired",
+       "value": 731505727
+      },
+      {
+       "label": "Hiretual",
+       "value": 731505728
+      },
+      {
+       "label": "I love Datadog's product!",
+       "value": 731505729
+      },
+      {
+       "label": "Instagram",
+       "value": 731505730
+      },
+      {
+       "label": "JobTeaser",
+       "value": 731505731
+      },
+      {
+       "label": "LinkedIn (Datadog Page)",
+       "value": 731505732
+      },
+      {
+       "label": "LinkedIn (Job Posting)",
+       "value": 731505733
+      },
+      {
+       "label": "MLT (Management Leadership for Tomorrow)",
+       "value": 750674590
+      },
+      {
+       "label": "Rewriting the Code",
+       "value": 731505734
+      },
+      {
+       "label": "School job board",
+       "value": 731505735
+      },
+      {
+       "label": "SHPE (Society of Hispanic Professional Engineers)",
+       "value": 750674591
+      },
+      {
+       "label": "The Muse",
+       "value": 731505736
+      },
+      {
+       "label": "Thrive",
+       "value": 731505737
+      },
+      {
+       "label": "Underdog",
+       "value": 731505738
+      },
+      {
+       "label": "Welcome to the Jungle",
+       "value": 731505739
+      },
+      {
+       "label": "Other",
+       "value": 731505740
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "location_questions": []
+}
