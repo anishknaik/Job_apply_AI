@@ -42,7 +42,7 @@ ORDERINGS: dict[str, tuple[str, ...]] = {
     # the work, and keeps all three of its bullets together: every extra role
     # costs a heading and a stack line before a single bullet lands.
     "ai_ml_infra": (
-        "dist-distill", "dist-ablation", "dist-harness", "rag-agentic",
+        "dist-distill", "dist-ablation", "dist-harness", "jp-pipeline", "jp-mcp", "jp-engineering", "rag-agentic",
         "rag-fullstack", "spot-gpt", "gt-lesson-plan", "newsletter-pipeline",
         "gt-nbs7", "gt-remittance", "gt-ownership", "bumi-etl", "bumi-models",
         "stock-ensemble", "capstone-quality", "capstone-hypothesis",
@@ -53,7 +53,7 @@ ORDERINGS: dict[str, tuple[str, ...]] = {
     # ordering where `capstone-quality` renders high, because data validation
     # is the job rather than a footnote.
     "ai_ml_data": (
-        "gt-nbs7", "bumi-etl", "gt-remittance", "capstone-quality",
+        "gt-nbs7", "bumi-etl", "jp-pipeline", "jp-engineering", "jp-mcp", "gt-remittance", "capstone-quality",
         "rag-fullstack", "dist-harness", "newsletter-pipeline",
         "gt-lesson-plan", "dist-distill", "rag-agentic", "gt-ownership",
         "dist-ablation", "bumi-models", "stock-ensemble",
@@ -65,7 +65,7 @@ ORDERINGS: dict[str, tuple[str, ...]] = {
     # rather than the reverse. `gt-ownership` is high here and nowhere else —
     # scoping with a client is the differentiator for a product team.
     "ai_ml_product": (
-        "gt-lesson-plan", "rag-agentic", "newsletter-pipeline", "gt-ownership",
+        "gt-lesson-plan", "jp-mcp", "jp-pipeline", "jp-engineering", "rag-agentic", "newsletter-pipeline", "gt-ownership",
         "rag-fullstack", "spot-gpt", "dist-distill", "dist-ablation",
         "gt-remittance", "gt-nbs7", "dist-harness", "bumi-models", "bumi-etl",
         "stock-ensemble", "capstone-quality", "capstone-hypothesis",
@@ -77,7 +77,7 @@ ORDERINGS: dict[str, tuple[str, ...]] = {
     # is experience almost nobody at this level has — and `capstone-quality`
     # rises because the capstone dataset was global COVID-19 data.
     "ai_ml_health": (
-        "gt-nbs7", "dist-distill", "dist-ablation", "dist-harness",
+        "gt-nbs7", "dist-distill", "dist-ablation", "dist-harness", "jp-pipeline", "jp-mcp", "jp-engineering",
         "rag-agentic", "rag-fullstack", "gt-lesson-plan", "bumi-models",
         "capstone-quality", "capstone-hypothesis", "gt-ownership", "bumi-etl",
         "spot-gpt", "newsletter-pipeline", "gt-remittance", "stock-ensemble",
@@ -89,7 +89,7 @@ ORDERINGS: dict[str, tuple[str, ...]] = {
     # is the general AI/ML ordering. It exists so those three ever render.
     "ai_ml_cv": (
         "nec-yolo", "nec-tracking", "spot-cv", "dist-distill", "dist-harness",
-        "dist-ablation", "rag-agentic", "bumi-models", "gt-nbs7",
+        "dist-ablation", "jp-pipeline", "jp-mcp", "jp-engineering", "rag-agentic", "bumi-models", "gt-nbs7",
         "rag-fullstack", "gt-lesson-plan", "spot-gpt", "stock-ensemble",
         "gt-ownership", "newsletter-pipeline", "bumi-etl", "gt-remittance",
         "capstone-quality", "capstone-hypothesis", "brain-survey",
@@ -103,7 +103,7 @@ ORDERINGS: dict[str, tuple[str, ...]] = {
     "ds_analytics": (
         "dist-ablation", "bumi-models", "capstone-hypothesis",
         "stock-ensemble", "capstone-quality", "brain-survey",
-        "brain-dashboards", "bumi-etl", "dist-harness", "dist-distill",
+        "brain-dashboards", "bumi-etl", "jp-pipeline", "jp-engineering", "jp-mcp", "dist-harness", "dist-distill",
         "rag-agentic", "gt-lesson-plan", "gt-nbs7", "nec-yolo",
         "rag-fullstack", "gt-ownership", "spot-gpt", "gt-remittance",
         "newsletter-pipeline", "nec-tracking", "spot-cv",
@@ -114,7 +114,7 @@ ORDERINGS: dict[str, tuple[str, ...]] = {
     # own. A variant earns its place when the whole ordering differs, not when
     # one bullet should move.
     "swe_backend": (
-        "gt-remittance", "gt-nbs7", "rag-fullstack", "newsletter-pipeline",
+        "gt-remittance", "jp-engineering", "jp-pipeline", "jp-mcp", "gt-nbs7", "rag-fullstack", "newsletter-pipeline",
         "gt-lesson-plan", "gt-ownership", "rag-agentic", "dist-distill",
         "bumi-etl", "dist-harness", "spot-gpt", "dist-ablation",
         "bumi-models", "stock-ensemble", "capstone-quality",

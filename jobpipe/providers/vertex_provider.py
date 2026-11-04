@@ -40,6 +40,7 @@ from __future__ import annotations
 import logging
 import os
 
+from .. import metering
 from .base import ProviderError, ProviderResponse, ScoringProvider
 from .gemini_provider import _CACHE_MINIMUMS, _DEFAULT_CACHE_MINIMUM
 
@@ -78,9 +79,12 @@ NO_THINKING_DISABLE = ("gemini-2.5-pro", "gemini-3-pro", "gemini-3.5-pro")
 class VertexGeminiProvider(ScoringProvider):
     name = "gemini"          # the rubric and escalation ladder key off this
     known_models = KNOWN_MODELS
+    _metered = False         # set by __init__; off for anything that skips it
 
     def __init__(self, project: str | None = None, location: str | None = None,
                  credentials_path: str | None = None):
+        # Before the genai import: the Revenium middleware patches it on load.
+        self._metered = metering.enabled()
         try:
             from google import genai
         except ImportError as exc:  # pragma: no cover - import guard
@@ -161,9 +165,12 @@ class VertexGeminiProvider(ScoringProvider):
         if not any(model.startswith(p) for p in NO_THINKING_DISABLE):
             config.thinking_config = types.ThinkingConfig(thinking_budget=0)
 
+        # Only when metering is on: the unpatched SDK rejects the keyword.
+        extra = ({"usage_metadata": metering.usage_metadata()}
+                 if self._metered else {})
         try:
             response = self._client.models.generate_content(
-                model=model, contents=user_text, config=config)
+                model=model, contents=user_text, config=config, **extra)
         except Exception as exc:  # noqa: BLE001
             raise ProviderError(
                 f"vertex call failed for {model} at {self._location} "

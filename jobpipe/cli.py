@@ -804,7 +804,7 @@ def cmd_ground(args) -> int:
     claim is fixed by hand, or by correcting the profile when the claim is
     true and merely unrecorded.
     """
-    from . import grounding
+    from . import grounding, metering
     from . import pipeline_tailor as pt
     from .providers import default_model
 
@@ -849,8 +849,9 @@ def cmd_ground(args) -> int:
         return 1
 
     prompts = pt.build_prompts(bank)
-    check = grounding.check(provider, bank, text, row["description"] or "",
-                            prompts["grounding"])
+    with metering.for_posting(row):
+        check = grounding.check(provider, bank, text, row["description"] or "",
+                                prompts["grounding"])
     db.record_grounding(conn, doc["id"], check)
 
     print(f"{row['company']} - {row['title']}")

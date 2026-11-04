@@ -29,7 +29,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import db
+from . import db, metering
 from .providers import ScoringProvider, default_escalation_model, default_model
 
 log = logging.getLogger(__name__)
@@ -761,12 +761,14 @@ def score_posting(provider: ScoringProvider, row, system_prompt: str,
     escalation_model = escalation_model or default_escalation_model(provider.name)
     user_text = _posting_message(row)
 
-    def attempt(active_model: str) -> dict | None:
+    def attempt(active_model: str, task_type: str, agent: str) -> dict | None:
         for tries in range(2):          # one retry, then give up and move on
             try:
-                response = provider.score(
-                    model=active_model, system_prompt=system_prompt,
-                    user_text=user_text, schema=SCORE_SCHEMA)
+                with metering.for_posting(row), metering.tagged(
+                        task_type=task_type, agent=agent):
+                    response = provider.score(
+                        model=active_model, system_prompt=system_prompt,
+                        user_text=user_text, schema=SCORE_SCHEMA)
                 run.input_tokens += response.input_tokens
                 run.output_tokens += response.output_tokens
                 run.cache_read_tokens += response.cached_tokens
@@ -794,7 +796,7 @@ def score_posting(provider: ScoringProvider, row, system_prompt: str,
                 return None
         return None
 
-    score = attempt(model)
+    score = attempt(model, "score_flash", "stage_b_scorer")
     if score is None:
         run.failed += 1
         return None
@@ -802,7 +804,7 @@ def score_posting(provider: ScoringProvider, row, system_prompt: str,
 
     low, high = ESCALATION_BAND
     if low <= score.get("overall", 0) <= high:
-        escalated = attempt(escalation_model)
+        escalated = attempt(escalation_model, "score_pro", "pro_escalator")
         if escalated is not None:
             escalated["model"] = escalation_model
             run.escalated += 1
