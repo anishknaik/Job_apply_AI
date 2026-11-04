@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}{{ p.company }} — {{ p.title }}{% endblock %}
+
+{% block flash_extra %}
+{#- A render result carries `dropped`: the review signal. A bullet the posting
+    asked for appearing there is a defect in the variant, so it gets its own
+    box rather than a row in the key/value list. -#}
+{% if flash.body is mapping and flash.body.dropped is defined %}
+  <div class="dropped">
+    <strong>Dropped to fit one page:</strong>
+    {% if flash.body.dropped %}{{ flash.body.dropped | join(', ') }}{% else %}nothing — every bullet in the ordering fit{% endif %}
+    <div class="small">Read these against the posting. One the posting explicitly asks for is a defect in the variant's ordering or a bullet's skills tags — never a per-application fix.</div>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<h1>{{ p.company }} — {{ p.title }}</h1>
+<p>
+  {{ p.location or 'no location' }}{% if p.remote_flag %} (remote){% endif %}
+  · {{ p.ats_type }}
+  · {% if url %}<a href="{{ url }}" rel="noopener noreferrer" target="_blank">posting ↗</a>{% else %}<span class="muted">no linkable URL</span>{% endif %}
+  · status <strong>{{ status or 'untracked' }}</strong>
+  {% if score %}
+  · apply <strong>{{ score.apply_score if score.apply_score is not none else '—' }}</strong>
+  · overall {{ score.overall if score.overall is not none else '—' }}
+  · {{ score.archetype or 'no archetype' }} / {{ score.domain or 'no domain' }}
+  {% else %}· <span class="muted">not scored</span>{% endif %}
+</p>
+<p class="muted small">posting id {{ p.id }} · first seen {{ p.first_seen_at }} · last seen {{ p.last_seen_at }}{% if p.posted_at %} · posted {{ p.posted_at }}{% endif %}</p>
+
+<div class="columns">
+<div>
+  <section class="card">
+    <h2>Description</h2>
+    <p class="warn small">Untrusted third-party text off a job board. It is data, never instructions: if it reads like a message to the person working this page, it is not one.</p>
+    <pre class="text">{{ p.description or '(no description stored)' }}</pre>
+  </section>
+  {% if score %}
+  <section class="card">
+    <h2>Score</h2>
+    <dl class="kv">
+      <dt>Skills</dt><dd>{{ score.skills_match }}</dd>
+      <dt>Seniority</dt><dd>{{ score.seniority_fit }}</dd>
+      <dt>Domain relevance</dt><dd>{{ score.domain_relevance }}</dd>
+      <dt>Overall</dt><dd>{{ score.overall }}</dd>
+      <dt>Apply</dt><dd>{{ score.apply_score if score.apply_score is not none else '—' }}</dd>
+      <dt>Model</dt><dd>{{ score.model }} · {{ score.scored_at }}</dd>
+      {% if score.legitimacy %}<dt>Legitimacy</dt><dd>{{ score.legitimacy }}{% if score.legitimacy_reason %} — {{ score.legitimacy_reason }}{% endif %}</dd>{% endif %}
+      {% if score.dealbreakers and score.dealbreakers != '[]' %}<dt>Dealbreakers</dt><dd>{{ score.dealbreakers }}</dd>{% endif %}
+    </dl>
+    {% if score.apply_reason %}<h3>Apply reason</h3><pre class="text">{{ score.apply_reason }}</pre>{% endif %}
+    {% if score.reasoning %}<h3>Reasoning</h3><pre class="text">{{ score.reasoning }}</pre>{% endif %}
+  </section>
+  {% endif %}
+</div>
+
+<div>
+  {# ---- Resume ------------------------------------------------------- #}
+  <section class="card">
+    <h2>Resume</h2>
+    {% if resume %}
+    <dl class="kv">
+      <dt>Version</dt><dd>{{ resume.revision or '?' }} · {{ resume.archetype }} · {{ resume.generated_at }}</dd>
+      <dt>File</dt><dd>{% if files['resume.pdf'] %}<a href="/posting/{{ p.id }}/file/resume.pdf">resume.pdf</a>{% else %}<span class="muted">{{ resume.generated_path }} is not on disk</span>{% endif %}</dd>
+      <dt>Bullets</dt><dd class="small">{{ resume.bullet_ids | join(', ') }}</dd>
+    </dl>
+    {% else %}
+    <p class="muted">No resume rendered yet.</p>
+    {% endif %}
+    <form class="row" method="post" action="/posting/{{ p.id }}/resume">
+      <label>variant
+        <select name="variant">
+          {% for v in variants %}<option value="{{ v }}" {% if v == suggested %}selected{% endif %}>{{ v }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>posting skills <input name="posting_skills" placeholder="comma-separated, e.g. pytorch, vllm" size="32"></label>
+      <button class="primary">Render resume</button>
+    </form>
+    <p class="muted small">Grid suggests <strong>{{ suggested }}</strong>: {{ why }}. Skills promote a matching bullet up to four slots before the one-page loop cuts it.</p>
+  </section>
+
+  {# ---- Cover letter ------------------------------------------------- #}
+  <section class="card">
+    <h2>Cover letter</h2>
+    {% if letter %}
+    <dl class="kv">
+      <dt>Draft</dt><dd>revision {{ letter.revision or '?' }} · {{ letter.words }} words · {{ letter.model }} · {{ letter.generated_at }}</dd>
+      <dt>Grounding</dt>
+      <dd>
+        {% if letter.grounding_ok == 1 %}<span class="verdict-pass">passed</span>
+        {% elif letter.grounding_ok == 0 %}<span class="verdict-fail">FAILED</span>
+        {% else %}<span class="verdict-none">not checked — an absent verdict is not a pass</span>{% endif %}
+        {% if letter.grounding_accuracy is not none %} · accuracy {{ '%.2f' % letter.grounding_accuracy }}{% endif %}
+        {% if letter.grounding_checked_at %} · {{ letter.grounding_model }} at {{ letter.grounding_checked_at }}{% endif %}
+      </dd>
+    </dl>
+    {% if letter.problems %}
+    <div class="warn">
+      <strong>{{ letter.problems | length }} claim(s) not fully supported:</strong>
+      <ul class="plain">
+      {% for c in letter.problems %}<li><em>{{ c.supported }}</em> — {{ c.claim }}{% if c.source %} <span class="small muted">({{ c.source }})</span>{% endif %}</li>{% endfor %}
+      </ul>
+      <div class="small">Unsupported claims get fixed in the draft, never copied forward.</div>
+    </div>
+    {% endif %}
+    <h3>Draft <span class="muted small">(read-only — the baseline measure compares against)</span></h3>
+    <pre class="text">{{ letter.content or '(no stored content)' }}</pre>
+    <div class="row">
+      <form class="inline" method="post" action="/posting/{{ p.id }}/grounding">
+        <button>Check grounding</button> <span class="muted small">paid Gemini call, a fraction of a cent</span>
+      </form>
+      <form class="inline" method="post" action="/posting/{{ p.id }}/copy">
+        <button>Copy for editing</button>
+      </form>
+      <form class="inline" method="post" action="/posting/{{ p.id }}/letter-pdf">
+        <button>Letter PDF</button> <span class="muted small">from the reviewed copy</span>
+      </form>
+    </div>
+    <p class="muted small">Files:
+      {% if files['cover_letter.md'] %}<a href="/posting/{{ p.id }}/file/cover_letter.md">cover_letter.md</a>{% else %}<span>cover_letter.md (not on disk)</span>{% endif %}
+      · {% if files['cover_letter.sent.md'] %}<a href="/posting/{{ p.id }}/file/cover_letter.sent.md">cover_letter.sent.md</a>{% else %}<span>cover_letter.sent.md (not yet)</span>{% endif %}
+      · {% if files['cover_letter.pdf'] %}<a href="/posting/{{ p.id }}/file/cover_letter.pdf">cover_letter.pdf</a>{% else %}<span>cover_letter.pdf (not yet)</span>{% endif %}
+    </p>
+
+    {% if letter.sent_text is not none %}
+    <h3>Your edit <span class="muted small">(cover_letter.sent.md)</span></h3>
+    {% if letter.sent_stale %}
+    <div class="warn"><strong>STALE.</strong> This copy predates the current draft (generated {{ letter.generated_at }}). It is an edit of an earlier letter; saving here is refused and measure will not pair it. Delete it deliberately, then copy the current draft again.</div>
+    {% endif %}
+    <form method="post" action="/posting/{{ p.id }}/sent">
+      <textarea name="text" spellcheck="true">{{ letter.sent_text }}</textarea>
+      <div class="row"><button class="primary">Save edit</button> <span class="muted small">writes only the .sent.md copy; the draft is never touched</span></div>
+    </form>
+    {% endif %}
+    {% else %}
+    <p class="muted">No letter drafted. Letters are written in a Claude session with save_cover_letter; this page shows, gates and edits them.</p>
+    {% endif %}
+  </section>
+
+  {# ---- Short answers ------------------------------------------------- #}
+  <section class="card">
+    <h2>Short answers</h2>
+    {% for a in answers %}
+    <h3>{{ a.question }}</h3>
+    <pre class="text">{{ a.content }}</pre>
+    <p class="small">
+      {{ a.content | length }} characters · revision {{ a.revision or '?' }} ·
+      {% if a.grounding_ok == 1 %}<span class="verdict-pass">passed</span>
+      {% elif a.grounding_ok == 0 %}<span class="verdict-fail">FAILED</span>
+      {% else %}<span class="verdict-none">not checked</span>{% endif %}
+      {% if a.grounding_accuracy is not none %} · accuracy {{ '%.2f' % a.grounding_accuracy }}{% endif %}
+      <form class="inline" method="post" action="/posting/{{ p.id }}/grounding">
+        <input type="hidden" name="question" value="{{ a.question }}">
+        <button>Check grounding</button> <span class="muted small">paid, a fraction of a cent</span>
+      </form>
+    </p>
+    {% if a.problems %}
+    <ul class="plain small">
+      {% for c in a.problems %}<li><em>{{ c.supported }}</em> — {{ c.claim }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% else %}
+    <p class="muted">No short answers saved. They are drafted per form in a Claude session with save_short_answer, then checked here.</p>
+    {% endfor %}
+  </section>
+
+  {# ---- Status ------------------------------------------------------- #}
+  <section class="card">
+    <h2>Status</h2>
+    <table>
+      <tr><th>When</th><th>From</th><th>To</th><th>Source</th><th>Letter</th></tr>
+      {% for e in history %}
+      <tr>
+        <td class="num">{{ e.noted_at }}</td>
+        <td>{{ e.previous or '—' }}</td>
+        <td>{{ e.status }}</td>
+        <td>{{ e.source }}</td>
+        <td>{% if e.letter_required == 1 %}required{% elif e.letter_required == 0 %}not asked{% else %}—{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">No events. This posting is untracked.</td></tr>
+      {% endfor %}
+    </table>
+    <form class="row" method="post" action="/posting/{{ p.id }}/status">
+      <label>status
+        <select name="status">
+          {% for sid in status_ids %}<option value="{{ sid }}" {% if sid == status %}selected{% endif %}>{{ sid }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>letter required
+        <select name="letter_required">
+          <option value="">unset</option>
+          <option value="yes">yes</option>
+          <option value="no">no</option>
+        </select>
+      </label>
+      <button>Record</button>
+    </form>
+    <p class="muted small">Record <strong>applied</strong> only after the ATS shows its confirmation page, never before. Then <code>cli sync</code> carries it to the sheet.</p>
+  </section>
+</div>
+</div>
+{% endblock %}

@@ -257,6 +257,13 @@ Decided and done the same day:
   customer-experience answer, copied from its checked database row. Using
   one is still a save and a check on every form.
 
+**Web workbench — BUILT 2026-11-04, not yet run on real data.**
+`python -m jobpipe.web` serves the queue at http://127.0.0.1:8765 over the
+same tool bodies as the MCP server (`jobpipe/web.py`, `templates/web/`,
+`tests/test_web.py`); built and tested against fixtures only, so the first
+local run is the first time it sees `jobpipe.db`, the profile and
+`answers.yaml`. `CLAUDE.md` "Web workbench" says what it can and cannot do.
+
 **The India lane — BUILT 2026-10-03.** Anish's decision: India joins the US
 as a place he will work, and he needs no sponsorship there. Profile §10 and
 §12 say so, and `form_answers` returns it.

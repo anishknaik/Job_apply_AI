@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}jobpipe — dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="columns">
+<section class="card">
+  <h2>Applications</h2>
+  <p class="muted small">{{ summary.total_tracked }} tracked, from the status log.</p>
+  <table>
+    <tr><th>Status</th><th class="num">Postings</th></tr>
+    {% for status, count in summary.by_status.items() %}
+    <tr><td><a href="/queue?status={{ status | urlencode }}">{{ status }}</a></td><td class="num">{{ count }}</td></tr>
+    {% else %}
+    <tr><td colspan="2" class="muted">No status events yet.</td></tr>
+    {% endfor %}
+  </table>
+</section>
+<section class="card">
+  <h2>Corpus</h2>
+  <dl class="kv">
+    <dt>Postings</dt><dd>{{ corpus.postings }}</dd>
+    <dt>Stage A passed</dt><dd>{{ corpus.stage_a_passed }}</dd>
+    <dt>Scored</dt><dd>{{ corpus.scored }}</dd>
+    <dt>Unscored backlog</dt><dd>{{ corpus.unscored_backlog }}
+      <span class="muted small">— scoring is off the schedule and off this page; it is a deliberate CLI run</span></dd>
+    <dt>Documents</dt><dd>{{ corpus.documents }}</dd>
+  </dl>
+  <h3>Last run</h3>
+  {% if corpus.last_run %}
+  <dl class="kv">
+    <dt>Started</dt><dd>{{ corpus.last_run.started_at }}</dd>
+    <dt>Finished</dt><dd>{{ corpus.last_run.finished_at or 'still running, or never finished' }}</dd>
+    <dt>Fetched</dt><dd>{{ corpus.last_run.fetched }}</dd>
+    <dt>New postings</dt><dd>{{ corpus.last_run.new_postings }}</dd>
+    <dt>Stage A pass</dt><dd>{{ corpus.last_run.stage_a_pass }}</dd>
+    <dt>Scored</dt><dd>{{ corpus.last_run.scored }}</dd>
+    {% if corpus.last_run.errors %}<dt>Errors</dt><dd><pre>{{ corpus.last_run.errors }}</pre></dd>{% endif %}
+  </dl>
+  {% else %}
+  <p class="muted">No run recorded. If the scheduled fetch should have run, that is the thing to check.</p>
+  {% endif %}
+</section>
+</div>
+<section class="card">
+  <h2>Recent status events</h2>
+  <table>
+    <tr><th>When</th><th>Posting</th><th>Status</th></tr>
+    {% for e in recent %}
+    <tr>
+      <td class="num">{{ e.noted_at }}</td>
+      <td><a href="/posting/{{ e.posting_id }}">{{ e.company }} — {{ e.title }}</a></td>
+      <td>{{ e.status }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="3" class="muted">Nothing yet.</td></tr>
+    {% endfor %}
+  </table>
+</section>
+{% endblock %}

@@ -27,3 +27,13 @@ pypdf>=4.0
 # Chromium, or a gitignored master_profile.md).
 # 2.x renamed FastMCP to MCPServer, so this is not compatible with 1.x code.
 mcp>=2.1
+
+# Web workbench (jobpipe.web) - a local page over the same tool bodies, bound
+# to 127.0.0.1 and served from the repo. Server-rendered Jinja, no Node, no
+# build step, no CDN, so it works offline. python-multipart parses the form
+# POSTs; httpx is only what fastapi.testclient drives the suite with.
+fastapi>=0.115
+uvicorn>=0.30
+jinja2>=3.1
+python-multipart>=0.0.9
+httpx>=0.27

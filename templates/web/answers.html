@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}jobpipe — form answers{% endblock %}
+{% block content %}
+<h1>Form answers</h1>
+<p class="warn">This page shows self-identification data — gender, race/ethnicity, veteran and
+disability status — from the gitignored answers file, beside contact details from the
+profile. It is what a form is filled from, read-only. Self-ID goes into a form only where an
+option's text matches an entry exactly; otherwise it is left blank.</p>
+
+{% if error %}
+<section class="card">
+  <h2>Not available</h2>
+  <pre class="text">{{ error }}</pre>
+  <p class="muted small">form_answers reads config/master_profile.md §12 and config/answers.yaml. Both are gitignored and live only on Anish's machine.</p>
+</section>
+{% else %}
+<div class="columns">
+<section class="card">
+  <h2>Never fill</h2>
+  <p class="muted small">Left for Anish on every form, whatever the page says — even when the field is required.</p>
+  <ul class="plain">{% for item in view.never_fill %}<li>{{ item }}</li>{% endfor %}</ul>
+</section>
+<section class="card">
+  <h2>Leave for Anish</h2>
+  <p class="muted small">Entries with no stored value. A form field for one of these is a question, not a guess.</p>
+  {% if view.leave_for_anish %}
+  <ul class="plain">{% for item in view.leave_for_anish %}<li>{{ item }}</li>{% endfor %}</ul>
+  {% else %}<p class="muted">Nothing is empty.</p>{% endif %}
+</section>
+</div>
+
+{% macro kv(mapping) -%}
+  <dl class="kv">
+  {% for key, value in mapping.items() %}
+    <dt>{{ key }}</dt>
+    <dd>{% if value is mapping %}{{ kv(value) }}{% elif value is iterable and value is not string %}{{ value | join(', ') }}{% elif value in (none, '') %}<span class="muted">— empty</span>{% else %}{{ value }}{% endif %}</dd>
+  {% endfor %}
+  </dl>
+{%- endmacro %}
+
+<div class="columns">
+<section class="card"><h2>Identity</h2>{{ kv(view.identity) }}</section>
+<section class="card"><h2>Education</h2>{{ kv(view.education) }}</section>
+<section class="card"><h2>Work authorization</h2>
+  {% if view.work_authorization %}{{ kv(view.work_authorization) }}{% else %}<p class="muted">Not in master_profile.md §12.</p>{% endif %}
+</section>
+<section class="card"><h2>Self-identification</h2>
+  <p class="muted small">Exact option text. Select only an exact match.</p>
+  {{ kv(view.self_identification) }}
+</section>
+<section class="card"><h2>Logistics</h2>{{ kv(view.logistics) }}</section>
+<section class="card"><h2>Experience</h2>
+  {% for role in view.experience %}
+    {% if role is mapping %}{{ kv(role) }}{% else %}<p>{{ role }}</p>{% endif %}
+    {% if not loop.last %}<hr>{% endif %}
+  {% else %}<p class="muted">None listed.</p>{% endfor %}
+</section>
+</div>
+
+<section class="card">
+  <h2>Reusable answers</h2>
+  <p class="muted small">Text Anish already approved, for questions that recur. Still saved per posting and checked by grounding on every form: it may have gone stale, and adapting it makes a new claim.</p>
+  {% for key, entry in view.reusable_answers.items() %}
+  <h3>{{ key }}</h3>
+  {% if entry.asked_as %}<p class="muted small">Asked as: {{ entry.asked_as | join(' / ') }}</p>{% endif %}
+  <pre class="text">{{ entry.answer }}</pre>
+  {% else %}<p class="muted">None on file.</p>{% endfor %}
+</section>
+{% endif %}
+{% endblock %}

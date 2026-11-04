@@ -128,6 +128,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
         token = request.query_params.get("flash")
         context["flash"] = _FLASH.pop(token, None) if token else None
         context["status_ids"] = [s.id for s in states.load_states()]
+        context["nav"] = name.rsplit(".", 1)[0]
         return TEMPLATES.TemplateResponse(request, name, context)
 
     def back(posting_id: int, kind: str, title: str, body: Any = None):
@@ -193,7 +194,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
             except ToolError as exc:
                 raise HTTPException(404, str(exc)) from exc
             row = db.get_posting(connection, posting_id)
-            folder = pipeline_tailor.application_dir(row)
+            folder = _folder(row)
             history = connection.execute(
                 "SELECT status, previous, noted_at, source, letter_required "
                 "FROM status_events WHERE posting_id = ? ORDER BY id",
@@ -234,11 +235,12 @@ def create_app(db_path: str | None = None) -> FastAPI:
             connection.close()
         if row is None:
             raise HTTPException(404, f"no posting with id {posting_id}")
-        path = pipeline_tailor.application_dir(row) / name
+        path = _folder(row) / name
         if not path.is_file():
             raise HTTPException(404, f"{name} has not been produced")
-        # inline, so a PDF opens in the tab rather than downloading.
-        return FileResponse(path, media_type=SERVABLE[name],
+        # inline, so a PDF opens in the tab rather than downloading. The
+        # filename is what makes FileResponse send the header at all.
+        return FileResponse(path, media_type=SERVABLE[name], filename=name,
                             content_disposition_type="inline")
 
     @app.get("/answers", response_class=HTMLResponse)
@@ -256,7 +258,8 @@ def create_app(db_path: str | None = None) -> FastAPI:
             result = tools.measure(connection)
         finally:
             connection.close()
-        return page(request, "measure.html", result=result)
+        return page(request, "measure.html", result=result,
+                    slot_names=letters.BLOCK_NAMES)
 
     # -- writes: each one is a tool body ------------------------------------
 
@@ -339,6 +342,16 @@ def _letter_pdf(conn, posting_id: int) -> dict[str, Any]:
     out = tools.prepare_letter(conn, posting_id, pdf=True)
     out.pop("text", None)        # it is on the page already, as the edit
     return out
+
+
+def _folder(row) -> Path:
+    """output/applications/<slug>, with OUTPUT_ROOT read at call time.
+
+    `application_dir` binds the root as a default argument, so a test that
+    points `pipeline_tailor.OUTPUT_ROOT` at a temp folder would otherwise
+    still be served files from the real one.
+    """
+    return pipeline_tailor.application_dir(row, pipeline_tailor.OUTPUT_ROOT)
 
 
 def _untracked(conn, min_score: int, limit: int) -> dict[str, Any]:

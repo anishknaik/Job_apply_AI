@@ -168,6 +168,38 @@ The server loads `.env` itself; nothing else that is not the CLI does
 Code; the desktop app has to be quit from the tray and reopened, because
 closing its window leaves the old server running.
 
+## Web workbench
+
+```
+python -m jobpipe.web                 # http://127.0.0.1:8765
+python -m pytest tests/test_web.py -q
+```
+
+The same queue in a browser, for Anish rather than for a session. FastAPI
+and Jinja, server-rendered, no Node, no build step, no CDN, so it works
+offline; the templates are in `templates/web/`. Every button calls a tool
+body in `jobpipe/mcp_server.py`, so the copy-for-editing gates, the
+grounding gate and supersede-never-overwrite are the same code from a page
+as from a session. `ROUTE_ALLOWLIST` in `jobpipe/web.py` is asserted against
+the live routes by `tests/test_web.py`, the way `TOOL_ALLOWLIST` is.
+
+What it does: dashboard, queue by status (plus the scored-but-untracked
+shortlist), and a workbench per posting — render a resume from a variant and
+read its `dropped` list, see the letter draft with its grounding verdict,
+check grounding (the one paid button, a fraction of a cent), copy for
+editing, edit the `.sent.md` copy in a textarea, render the letter PDF,
+check a short answer, record a status. It also shows `form_answers`
+read-only, and `measure`.
+
+What it deliberately cannot do: submit, send, score, calibrate, daily, fetch,
+or write a letter or a short answer — those are a session's work, through
+the tools. No route writes `cover_letter.md`; the editor writes only the
+`.sent.md` copy, and refuses a missing or stale one. It answers on a
+loopback Host only and refuses cross-origin POSTs, because a page on any
+other site can POST a form at 127.0.0.1 and one of these buttons spends
+money. It binds to 127.0.0.1 and must stay there: the answers page shows
+self-identification data.
+
 ## Where things are
 
 | | |
