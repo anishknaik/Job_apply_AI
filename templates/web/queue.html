@@ -12,7 +12,12 @@
   <a class="chip {% if current == sid %}current{% endif %}" href="/queue?status={{ sid | urlencode }}">{{ sid }} <span class="count">({{ counts[sid] }})</span></a>
   {% endfor %}
   <a class="chip {% if current == 'untracked' %}current{% endif %}" href="/queue?status=untracked">untracked</a>
+  <a class="chip {% if current == 'needs_attention' %}current{% endif %}" href="/queue?status=needs_attention">needs attention</a>
 </div>
+
+{% if current == 'needs_attention' %}
+<p class="hint">Postings the apply runner could not finish on its own: a click it could not confirm (check the ATS by hand, never click again), a run that errored, or a run that stopped on blockers.</p>
+{% endif %}
 
 {% if current == 'untracked' %}
 <form class="row" method="get" action="/queue">
@@ -45,6 +50,7 @@
     <td class="small">{{ r.domain or '' }}{% if r.archetype and not r.domain %}<span class="muted"> (predates the domain field)</span>{% endif %}</td>
     <td class="num">{% if r.apply_url %}<a class="btn primary small" href="{{ r.apply_url }}" target="_blank" rel="noopener noreferrer">Apply ↗</a>{% else %}<span class="hint">no link</span>{% endif %}</td>
   </tr>
+  {% if r.attention %}<tr><td></td><td colspan="8" class="small"><span class="badge amber">needs attention</span> {{ r.attention }}</td></tr>{% endif %}
   {% else %}
   <tr><td colspan="9" class="muted">Nothing here.</td></tr>
   {% endfor %}

@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -66,7 +67,34 @@ ROUTE_ALLOWLIST = (
     ("POST", "/posting/{posting_id}/sent"),
     ("POST", "/posting/{posting_id}/letter-pdf"),
     ("POST", "/posting/{posting_id}/status"),
+    # Phase 6. The runner is a separate process; these start it in review
+    # or dry-run mode and show what it recorded. There is no route that
+    # submits, none that passes --auto, and none that touches apply.yaml.
+    ("POST", "/posting/{posting_id}/fill"),
+    ("POST", "/posting/{posting_id}/fill/close"),
+    ("GET", "/posting/{posting_id}/run/{run_id}/screenshot/{name}"),
 )
+
+# Runner processes this server started, by posting id. A review run keeps
+# its browser window open until its stdin sees a newline, which is what
+# /fill/close sends; the Popen is held here so that pipe stays open.
+_RUNS: dict[int, subprocess.Popen] = {}
+RUN_MODES = ("review", "dry_run")
+
+
+def _launch_runner(posting_id: int, mode: str) -> subprocess.Popen:
+    """`python -m jobpipe.apply <id> --review|--dry-run`, as a child.
+
+    Never --auto: auto-submit is a CLI flag plus a gitignored file, and a
+    page that could pass the flag could be POSTed by any site.
+    """
+    flag = "--review" if mode == "review" else "--dry-run"
+    args = [sys.executable, "-m", "jobpipe.apply", str(posting_id), flag]
+    log_dir = REPO_ROOT / "output" / "apply"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log = open(log_dir / f"web-run-{posting_id}.log", "ab")  # noqa: SIM115
+    return subprocess.Popen(args, cwd=str(REPO_ROOT), stdin=subprocess.PIPE,
+                            stdout=log, stderr=subprocess.STDOUT)
 
 # The only files a posting's folder serves. A name, never a path, so nothing
 # outside output/applications/<slug>/ is reachable however the URL is shaped.
@@ -175,6 +203,8 @@ def create_app(db_path: str | None = None) -> FastAPI:
         try:
             if status == "untracked":
                 result = _untracked(connection, min_score, limit)
+            elif status == "needs_attention":
+                result = _needs_attention(connection, limit)
             else:
                 try:
                     result = tools.list_queue(connection, status, limit)
@@ -209,6 +239,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
                                          "cover_letter")
             short = db.current_documents(connection, posting_id,
                                          _answers.DOC_TYPE)
+            last_run = db.last_apply_run(connection, posting_id)
         finally:
             connection.close()
 
@@ -227,7 +258,29 @@ def create_app(db_path: str | None = None) -> FastAPI:
             folder=folder,
             variants=sorted(variants.ORDERINGS),
             suggested=suggested, why=why,
+            run=_run_view(last_run),
+            run_alive=_alive(posting_id),
+            run_modes=RUN_MODES,
         )
+
+    @app.get("/posting/{posting_id}/run/{run_id}/screenshot/{name}")
+    def run_screenshot(posting_id: int, run_id: int, name: str):
+        """A screenshot the run recorded, by name, and only one it
+        recorded: the stored list is the allowlist."""
+        connection = conn()
+        try:
+            row = connection.execute(
+                "SELECT screenshots FROM apply_runs WHERE id = ? AND posting_id = ?",
+                (run_id, posting_id)).fetchone()
+        finally:
+            connection.close()
+        if row is None:
+            raise HTTPException(404, "no such run")
+        for recorded in json.loads(row["screenshots"] or "[]"):
+            if Path(recorded).name == name and Path(recorded).is_file():
+                return FileResponse(recorded, media_type="image/png",
+                                    filename=name, content_disposition_type="inline")
+        raise HTTPException(404, "not a screenshot of this run")
 
     @app.get("/posting/{posting_id}/file/{name}")
     def posting_file(posting_id: int, name: str):
@@ -302,7 +355,50 @@ def create_app(db_path: str | None = None) -> FastAPI:
         return run(posting_id, "Status recorded", tools.advance_status,
                    posting_id, status, letter_required=flag, source="web")
 
+    @app.post("/posting/{posting_id}/fill")
+    def fill(posting_id: int, mode: str = Form("review")):
+        """Start the runner on this posting, review or dry run. It records
+        its own apply_runs row; reload the page to see it."""
+        if mode not in RUN_MODES:
+            return back(posting_id, "error", "Run not started",
+                        f"mode must be one of {RUN_MODES}; --auto is never a page")
+        connection = conn()
+        try:
+            if db.get_posting(connection, posting_id) is None:
+                raise HTTPException(404, f"no posting with id {posting_id}")
+        finally:
+            connection.close()
+        if _alive(posting_id):
+            return back(posting_id, "error", "Run not started",
+                        "a run on this posting is still open; close its window first")
+        try:
+            _RUNS[posting_id] = app.state.launch(posting_id, mode)
+        except OSError as exc:
+            return back(posting_id, "error", "Run not started", str(exc))
+        return back(posting_id, "ok", "Run started",
+                    {"mode": mode, "next": "the runner opens its own browser; "
+                     "reload this page when it finishes to see the report"})
+
+    @app.post("/posting/{posting_id}/fill/close")
+    def fill_close(posting_id: int):
+        proc = _RUNS.pop(posting_id, None)
+        if proc is None or proc.poll() is not None:
+            return back(posting_id, "ok", "No open run", "nothing to close")
+        try:
+            if proc.stdin:
+                proc.stdin.write(b"\n")
+                proc.stdin.close()
+        except OSError:
+            pass
+        return back(posting_id, "ok", "Review window closed")
+
+    app.state.launch = _launch_runner
     return app
+
+
+def _alive(posting_id: int) -> bool:
+    proc = _RUNS.get(posting_id)
+    return proc is not None and proc.poll() is None
 
 
 # ---------------------------------------------------------------------------
@@ -382,6 +478,61 @@ def _untracked(conn, min_score: int, limit: int) -> dict[str, Any]:
     return {"status": "untracked", "count": len(postings),
             "returned": min(len(postings), limit),
             "postings": postings[:limit]}
+
+
+def _needs_attention(conn, limit: int) -> dict[str, Any]:
+    """Postings the runner could not finish on its own: a submit it could
+    not confirm, a run that errored, or a run that stopped on blockers."""
+    rows = conn.execute("""
+        SELECT r.*, p.company, p.title, p.location, p.url, p.remote_flag,
+               s.overall, s.apply_score, s.archetype, s.domain
+        FROM apply_runs r
+        JOIN postings p ON p.id = r.posting_id
+        LEFT JOIN scores s ON s.posting_id = p.id
+        WHERE r.id IN (SELECT MAX(id) FROM apply_runs GROUP BY posting_id)
+        ORDER BY r.id DESC""").fetchall()
+    current = db.current_statuses(conn)
+    tiers = tools._tier_map()
+    postings = []
+    for row in rows:
+        entry = dict(row)
+        reasons = json.loads(entry.get("reasons") or "[]")
+        why = []
+        if current.get(entry["posting_id"]) == "submit_unconfirmed":
+            why.append("submit unconfirmed: check the ATS by hand, never click again")
+        if entry.get("decision") == "error":
+            why.append(f"run error: {entry.get('error')}")
+        if any(r.startswith("no_blockers") for r in reasons):
+            why.append("blockers")
+        if entry.get("submit_outcome") in ("error", "challenge", "unconfirmed"):
+            why.append(f"submit {entry['submit_outcome']}")
+        if not why:
+            continue
+        entry["id"] = entry["posting_id"]
+        entry["attention"] = "; ".join(why)
+        entry["tier"] = tiers.get((entry["company"] or "").strip().lower())
+        entry["apply_url"] = _safe_url(entry.get("url"))
+        postings.append(entry)
+    return {"status": "needs_attention", "count": len(postings),
+            "returned": min(len(postings), limit), "postings": postings[:limit]}
+
+
+def _run_view(row) -> dict[str, Any] | None:
+    """An apply_runs row with its JSON columns decoded for the template."""
+    if row is None:
+        return None
+    view = dict(row)
+    for key in ("reasons", "screenshots"):
+        try:
+            view[key] = json.loads(view.get(key) or "[]")
+        except ValueError:
+            view[key] = []
+    try:
+        view["report"] = json.loads(view.get("report") or "{}")
+    except ValueError:
+        view["report"] = {}
+    view["screenshot_names"] = [Path(s).name for s in view["screenshots"]]
+    return view
 
 
 def _safe_url(url: str | None) -> str | None:

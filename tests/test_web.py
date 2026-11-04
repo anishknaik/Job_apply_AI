@@ -637,3 +637,131 @@ class TestNoForbiddenAction:
     def test_no_page_body_says_score_now(self, client, conn, tmp_path):
         for url, body in self._seeded(client, conn, tmp_path):
             assert "score now" not in body.lower(), url
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: the runner from the workbench
+# ---------------------------------------------------------------------------
+
+class TestApplyRunnerRoutes:
+    """The web layer starts the runner as a child and shows its record. It
+    never drives a browser, never passes --auto, never touches apply.yaml."""
+
+    class FakeStdin:
+        def __init__(self):
+            self.written = b""
+            self.closed = False
+
+        def write(self, data):
+            self.written += data
+
+        def close(self):
+            self.closed = True
+
+    class FakeProc:
+        def __init__(self):
+            self.stdin = TestApplyRunnerRoutes.FakeStdin()
+            self.returncode = None
+
+        def poll(self):
+            return self.returncode
+
+    @pytest.fixture
+    def launched(self, client, monkeypatch):
+        calls = []
+
+        def fake_launch(posting_id, mode):
+            calls.append((posting_id, mode))
+            return self.FakeProc()
+        monkeypatch.setattr(client.app.state, "launch", fake_launch)
+        monkeypatch.setattr(web, "_RUNS", {})
+        return calls
+
+    def test_the_allowlist_has_no_auto_and_no_submit(self):
+        paths = [p for _, p in web.ROUTE_ALLOWLIST]
+        assert "/posting/{posting_id}/fill" in paths
+        assert not [p for p in paths if "auto" in p or "submit" in p or "apply.yaml" in p]
+
+    def test_fill_starts_a_review_run_by_default(self, client, conn, launched):
+        pid = seed(conn)
+        got = client.post(f"/posting/{pid}/fill", headers=SAME_ORIGIN, follow_redirects=True)
+        assert launched == [(pid, "review")]
+        assert "Run started" in got.text
+
+    def test_fill_accepts_dry_run_and_nothing_else(self, client, conn, launched):
+        pid = seed(conn)
+        client.post(f"/posting/{pid}/fill", data={"mode": "dry_run"}, headers=SAME_ORIGIN)
+        got = client.post(f"/posting/{pid}/fill", data={"mode": "auto"}, headers=SAME_ORIGIN,
+                          follow_redirects=True)
+        assert launched == [(pid, "dry_run")]
+        assert "never a page" in got.text
+
+    def test_a_second_fill_while_one_is_open_is_refused(self, client, conn, launched):
+        pid = seed(conn)
+        client.post(f"/posting/{pid}/fill", headers=SAME_ORIGIN)
+        got = client.post(f"/posting/{pid}/fill", headers=SAME_ORIGIN, follow_redirects=True)
+        assert len(launched) == 1 and "still open" in got.text
+
+    def test_close_sends_enter_to_the_runner(self, client, conn, launched):
+        pid = seed(conn)
+        client.post(f"/posting/{pid}/fill", headers=SAME_ORIGIN)
+        proc = web._RUNS[pid]
+        got = client.post(f"/posting/{pid}/fill/close", headers=SAME_ORIGIN, follow_redirects=True)
+        assert "Review window closed" in got.text
+        assert proc.stdin.written == b"\n" and proc.stdin.closed
+        assert pid not in web._RUNS
+
+    def test_fill_on_an_unknown_posting_is_a_404(self, client, launched):
+        assert client.post("/posting/99999/fill", headers=SAME_ORIGIN).status_code == 404
+
+    def test_fill_is_refused_cross_origin(self, client, conn, launched):
+        pid = seed(conn)
+        got = client.post(f"/posting/{pid}/fill", headers={"Origin": "https://evil.example"})
+        assert got.status_code == 403 and launched == []
+
+    def test_the_posting_page_shows_the_last_run(self, client, conn, tmp_path):
+        pid = seed(conn)
+        shot = tmp_path / "filled.png"
+        shot.write_bytes(b"\x89PNG\r\n\x1a\n")
+        run = db.start_apply_run(conn, pid, "review", ats="greenhouse")
+        db.finish_apply_run(conn, run, decision="review",
+                            reasons=["enabled: this run is review, not --auto",
+                                     "no_blockers: 'What are your salary requirements?': salary: never filled"],
+                            report={"fields": [{"key": "first_name", "label": "First Name", "action": "fill",
+                                                "source": "profile:identity.first_name", "status": "ok", "note": ""},
+                                               {"key": "question_1", "label": "What are your salary requirements?",
+                                                "action": "blocker", "source": None, "status": "blocked",
+                                                "note": "salary: never filled; left for Anish"}],
+                                    "notes": ["no reviewed letter"], "signals_before": ["recaptcha"]},
+                            screenshots=[str(shot)])
+        got = client.get(f"/posting/{pid}")
+        assert got.status_code == 200
+        assert "Why not auto-submit" in got.text
+        assert "salary: never filled" in got.text
+        assert "bot check: recaptcha" in got.text
+        assert f"/posting/{pid}/run/{run}/screenshot/filled.png" in got.text
+
+    def test_a_screenshot_is_served_only_if_the_run_recorded_it(self, client, conn, tmp_path):
+        pid = seed(conn)
+        shot = tmp_path / "filled.png"
+        shot.write_bytes(b"\x89PNG\r\n\x1a\n")
+        (tmp_path / "secret.png").write_bytes(b"\x89PNG")
+        run = db.start_apply_run(conn, pid, "review")
+        db.finish_apply_run(conn, run, decision="review", screenshots=[str(shot)])
+        assert client.get(f"/posting/{pid}/run/{run}/screenshot/filled.png").status_code == 200
+        assert client.get(f"/posting/{pid}/run/{run}/screenshot/secret.png").status_code == 404
+        assert client.get(f"/posting/{pid}/run/{run + 1}/screenshot/filled.png").status_code == 404
+
+    def test_needs_attention_lists_what_the_runner_could_not_finish(self, client, conn):
+        unconfirmed = seed(conn, source_id="a")
+        fine = seed(conn, source_id="b")
+        run = db.start_apply_run(conn, unconfirmed, "auto")
+        db.finish_apply_run(conn, run, decision="auto_submit", submit_outcome="unconfirmed")
+        tools.advance_status(conn, unconfirmed, "submit_unconfirmed", source="agent")
+        run = db.start_apply_run(conn, fine, "review")
+        db.finish_apply_run(conn, run, decision="review", reasons=["enabled: this run is review"])
+        got = client.get("/queue?status=needs_attention")
+        assert got.status_code == 200
+        assert f'href="/posting/{unconfirmed}"' in got.text
+        assert f'href="/posting/{fine}"' not in got.text
+        assert "never click again" in got.text

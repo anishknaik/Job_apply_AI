@@ -159,6 +159,67 @@
     {% endfor %}
   </section>
 
+  {# ---- Apply runner (Phase 6) ---------------------------------------- #}
+  <section class="card">
+    <h2>Apply runner</h2>
+    <p class="hint">Fills this form in a browser of its own and stops for review. From this page a run is review or dry run only: auto-submit is a CLI flag plus the gitignored apply.yaml, never a page.</p>
+    <form class="row" method="post" action="/posting/{{ p.id }}/fill">
+      <label>mode
+        <select name="mode">
+          {% for m in run_modes %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+        </select>
+      </label>
+      <button class="primary">Fill application</button>
+      {% if run_alive %}<span class="badge amber">a run is open</span>{% endif %}
+    </form>
+    {% if run_alive %}
+    <form class="row" method="post" action="/posting/{{ p.id }}/fill/close">
+      <button>Close review window</button> <span class="hint">closes the runner's browser; the form is gone with it</span>
+    </form>
+    {% endif %}
+
+    {% if run %}
+    <h3>Last run <span class="hint">#{{ run.id }} · {{ run.mode }} · started {{ run.started_at }}{% if not run.finished_at %} · still running{% endif %}</span></h3>
+    <div class="meta" style="margin-bottom: 8px">
+      <span class="badge {% if run.decision == 'auto_submit' %}green{% elif run.decision == 'error' %}red{% endif %}">{{ run.decision or 'in progress' }}</span>
+      {% if run.submit_outcome %}<span class="badge {% if run.submit_outcome == 'confirmed' %}green{% else %}red{% endif %}">click: {{ run.submit_outcome }}</span>{% endif %}
+      {% if run.report.would_decide %}<span class="badge">would decide: {{ run.report.would_decide }}</span>{% endif %}
+      {% if run.report.signals_before %}<span class="badge amber">bot check: {{ run.report.signals_before | join(', ') }}</span>{% endif %}
+    </div>
+    {% if run.error %}<div class="notice danger">{{ run.error }}</div>{% endif %}
+    {% if run.reasons %}
+    <div class="notice warn"><strong>Why not auto-submit:</strong>
+      <ul class="plain">{% for r in run.reasons %}<li>{{ r }}</li>{% endfor %}</ul></div>
+    {% endif %}
+    {% if run.report.fields %}
+    <table>
+      <thead><tr><th>Field</th><th>Action</th><th>Source</th><th>Status</th><th>Note</th></tr></thead>
+      <tbody>
+      {% for f in run.report.fields %}
+      <tr>
+        <td>{{ f.label }}<div class="hint mono">{{ f.key }}</div></td>
+        <td>{{ f.action }}</td>
+        <td class="small">{{ f.source or '—' }}</td>
+        <td><span class="badge {% if f.status in ('ok', 'planned') %}green{% elif f.status in ('blocker', 'blocked', 'mismatch', 'unmatched_option', 'not_found', 'error') %}red{% endif %}">{{ f.status }}</span></td>
+        <td class="small">{{ f.note }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% if run.report.notes %}
+    <ul class="plain small" style="margin-top: 8px">{% for n in run.report.notes %}<li>{{ n }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if run.screenshot_names %}
+    <p class="hint">Screenshots:
+      {% for name in run.screenshot_names %}<a class="ext" href="/posting/{{ p.id }}/run/{{ run.id }}/screenshot/{{ name }}" target="_blank" rel="noopener noreferrer">{{ name }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+    </p>
+    {% endif %}
+    {% else %}
+    <p class="muted">No run yet.</p>
+    {% endif %}
+  </section>
+
   {# ---- Status ------------------------------------------------------- #}
   <section class="card">
     <h2>Status</h2>
