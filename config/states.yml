@@ -59,6 +59,22 @@ states:
     description: You have committed — triggers cover letter generation
     terminal: false
 
+  # Phase 6 (PHASE6_PLAN §4). Two states the apply runner can leave a posting
+  # in, placed before `applied` because both come before it in time and
+  # `is_regression` reads position. `applied` is still recorded only after
+  # the ATS shows its confirmation page.
+  - id: ready_for_review
+    label: Ready for review
+    aliases: [filled, review, ready]
+    description: The runner filled the form and stopped; Anish reviews and submits
+    terminal: false
+
+  - id: submit_unconfirmed
+    label: Submit unconfirmed
+    aliases: [unconfirmed]
+    description: The runner clicked submit once and saw no confirmation; check by hand, never click again
+    terminal: false
+
   - id: applied
     label: Applied
     aliases: [sent, submitted]

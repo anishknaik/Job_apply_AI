@@ -605,17 +605,35 @@ class TestWritesAreToolBodies:
 
 class TestNoForbiddenAction:
     """A cheap guard against a button creeping in. The MCP surface encodes
-    stop-before-submit as absence; a page can only encode it as a word that
-    never appears."""
+    stop-before-submit as absence; a page can only encode it as an action
+    that never appears: no button, link, input or form action carries the
+    word. The word itself may: `submit_unconfirmed` is a status (Phase 6),
+    and the note that says never to click it is the point."""
 
-    @pytest.mark.parametrize("word", ["submit", "score now"])
-    def test_no_page_body_carries_the_word(self, client, conn, tmp_path, word):
+    PAGES = ("/", "/queue", "/queue?status=untracked", "/posting/{pid}",
+             "/answers", "/measure")
+
+    def _seeded(self, client, conn, tmp_path):
         pid = seed(conn)
         letter(conn, pid, tmp_path)
         tools.copy_for_editing(conn, pid)
         db.insert_document(conn, pid, "short_answer", question="Why us?",
                            content="Because.", model="claude-mcp")
         conn.commit()
-        for url in ("/", "/queue", "/queue?status=untracked",
-                    f"/posting/{pid}", "/answers", "/measure"):
-            assert word not in client.get(url).text.lower(), url
+        return [(url.format(pid=pid), client.get(url.format(pid=pid)).text)
+                for url in self.PAGES]
+
+    def test_no_action_on_any_page_says_submit(self, client, conn, tmp_path):
+        import re
+        for url, body in self._seeded(client, conn, tmp_path):
+            actions = re.findall(r"<(?:button|a)\b[^>]*>(.*?)</(?:button|a)>",
+                                 body, flags=re.I | re.S)
+            actions += re.findall(r'<input\b[^>]*\bvalue="([^"]*)"', body)
+            actions += re.findall(r'\baction="([^"]*)"', body)
+            actions += re.findall(r'\btype="(submit)"', body, flags=re.I)
+            hits = [a for a in actions if "submit" in a.lower()]
+            assert not hits, (url, hits)
+
+    def test_no_page_body_says_score_now(self, client, conn, tmp_path):
+        for url, body in self._seeded(client, conn, tmp_path):
+            assert "score now" not in body.lower(), url

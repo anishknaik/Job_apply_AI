@@ -135,6 +135,27 @@ CREATE TABLE IF NOT EXISTS sheet_tab_status (
     read_at     TEXT NOT NULL,
     PRIMARY KEY (tab, posting_id)
 );
+
+-- Phase 6 (PHASE6_PLAN §4). One row per attempt of the apply runner on a
+-- posting, append-only like status_events: a run that went wrong is the
+-- record that matters most, and the thing decide.py reads to refuse a second
+-- submit click. `report` is the field-by-field account (value hash, source,
+-- status) and `reasons` the decision's. `submit_outcome` is NULL until the
+-- one click happens: confirmed | unconfirmed | error | challenge.
+CREATE TABLE IF NOT EXISTS apply_runs (
+    id              INTEGER PRIMARY KEY,
+    posting_id      INTEGER NOT NULL REFERENCES postings (id),
+    started_at      TEXT NOT NULL,
+    finished_at     TEXT,
+    mode            TEXT NOT NULL,      -- dry_run | review | auto
+    ats             TEXT,               -- greenhouse | ashby
+    decision        TEXT,               -- auto_submit | review | blocked | error
+    reasons         TEXT,               -- JSON list
+    report          TEXT,               -- JSON
+    screenshots     TEXT,               -- JSON list of paths
+    submit_outcome  TEXT,
+    error           TEXT
+);
 """
 
 
@@ -266,6 +287,8 @@ CREATE INDEX IF NOT EXISTS idx_status_posting
     ON status_events (posting_id, noted_at);
 CREATE INDEX IF NOT EXISTS idx_documents_posting
     ON documents (posting_id, doc_type, generated_at);
+CREATE INDEX IF NOT EXISTS idx_apply_runs_posting
+    ON apply_runs (posting_id, started_at);
 """
 
 
@@ -978,3 +1001,67 @@ def finish_run(conn: sqlite3.Connection, run_id: int, *, fetched: int = 0,
          input_tokens, output_tokens, errors, run_id),
     )
     conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# apply_runs (Phase 6)
+# ---------------------------------------------------------------------------
+
+def start_apply_run(conn: sqlite3.Connection, posting_id: int, mode: str,
+                    ats: str | None = None) -> int:
+    """Open a run row before anything touches a browser, so a crash mid-fill
+    still leaves a record with a start and no finish."""
+    cur = conn.execute(
+        "INSERT INTO apply_runs (posting_id, started_at, mode, ats) "
+        "VALUES (?, ?, ?, ?)", (posting_id, utcnow(), mode, ats))
+    conn.commit()
+    return cur.lastrowid
+
+
+def finish_apply_run(conn: sqlite3.Connection, run_id: int, *,
+                     decision: str, reasons: list | None = None,
+                     report: dict | None = None,
+                     screenshots: list | None = None,
+                     submit_outcome: str | None = None,
+                     error: str | None = None) -> None:
+    """Close a run. Fields are set once; nothing here is updated later, and
+    nothing is ever deleted - a second attempt is a second row."""
+    import json
+    conn.execute(
+        "UPDATE apply_runs SET finished_at = ?, decision = ?, reasons = ?, "
+        "report = ?, screenshots = ?, submit_outcome = ?, error = ? "
+        "WHERE id = ?",
+        (utcnow(), decision, json.dumps(reasons or []),
+         json.dumps(report or {}), json.dumps(screenshots or []),
+         submit_outcome, error, run_id))
+    conn.commit()
+
+
+def apply_runs_for(conn: sqlite3.Connection, posting_id: int) -> list:
+    """Every run on a posting, oldest first."""
+    return conn.execute(
+        "SELECT * FROM apply_runs WHERE posting_id = ? ORDER BY id",
+        (posting_id,)).fetchall()
+
+
+def last_apply_run(conn: sqlite3.Connection, posting_id: int):
+    return conn.execute(
+        "SELECT * FROM apply_runs WHERE posting_id = ? ORDER BY id DESC "
+        "LIMIT 1", (posting_id,)).fetchone()
+
+
+def submit_attempts(conn: sqlite3.Connection, posting_id: int) -> int:
+    """How many times the runner has clicked submit on this posting, in any
+    outcome. decide.py refuses a second click on the strength of this."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM apply_runs WHERE posting_id = ? "
+        "AND submit_outcome IS NOT NULL", (posting_id,)).fetchone()[0]
+
+
+def auto_submits_since(conn: sqlite3.Connection, since_iso: str) -> list:
+    """Runs that clicked submit in auto mode since `since_iso`, newest
+    first - the daily cap and the spacing rule read this."""
+    return conn.execute(
+        "SELECT * FROM apply_runs WHERE mode = 'auto' "
+        "AND submit_outcome IS NOT NULL AND started_at >= ? "
+        "ORDER BY started_at DESC", (since_iso,)).fetchall()

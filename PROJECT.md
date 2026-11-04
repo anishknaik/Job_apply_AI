@@ -116,6 +116,13 @@ walk back.
 Related: the pipeline does not bypass CAPTCHAs or bot-detection. Fully automated
 apply flows hit these constantly, which is itself a signal the approach is wrong.
 
+**Revised 2026-11-04 (Phase 6).** A runner now fills Greenhouse and Ashby forms in a
+browser of its own and may submit — but only where nothing checks for bots, decided by a
+rule in code rather than by a model, one click and never a retry. Where a reCAPTCHA or
+any other challenge is present the runner fills and stops, and the review above still
+happens. Measured the same day: both ATSes load reCAPTCHA Enterprise on the rendered
+form page, so the review path is the main product and auto-submit the exception.
+
 ### Outreach drafts, never automated sends (Phase 4)
 
 Cold-emailing scraped addresses in bulk was the original plan and was redesigned, for
@@ -189,7 +196,10 @@ These hold across all phases:
 
 - No LinkedIn or Indeed scraping
 - No automated email sending — drafts only, always
-- No fully automated application submission — human clicks submit
+- Auto-submit only where nothing checks for bots. Everywhere else the runner fills
+  and stops, and Anish reviews and submits. (Changed 2026-11-04 from "human clicks
+  submit" for every application — `PHASE6_PLAN.md` §1. Bot detection is used for one
+  thing only: deciding to stop.)
 - No CAPTCHA or bot-detection bypass
 - No fabricated experience in any generated document; tailoring means selecting and
   reframing real material from the master profile, never inventing it

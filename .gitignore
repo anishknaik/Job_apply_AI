@@ -101,3 +101,13 @@ claude-legacy-project-memory-*.md
 # Revenium demo: screenshots carry the account email and billing details,
 # and the context and talk-track notes are personal.
 demo/
+
+# Phase 6, the apply runner. Its own Chromium profile - cookies and local
+# storage from real application pages - and the config that turns auto-submit
+# on. The example ships; the real file never does, for the same reason
+# answers.yaml never does: a committed apply.yaml is auto-submit on by default
+# for whoever clones next.
+.jobpipe-browser/
+config/apply.yaml
+# Filled-form screenshots and run reports: real applications, real name.
+output/apply/

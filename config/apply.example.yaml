@@ -1,0 +1,30 @@
+# Phase 6 - the apply runner (PHASE6_PLAN.md). Copy to config/apply.yaml,
+# which is gitignored. Every value here is the default the runner uses when
+# the file is absent, so a missing apply.yaml means auto-submit OFF.
+
+# Whether the runner may click submit at all. Off by default, and nothing but
+# this file can turn it on: no web route, no CLI flag on its own, no tool.
+# `python -m jobpipe.apply <id> --auto` still refuses unless this is true.
+auto_submit: false
+
+# Even with auto_submit on, decide.py submits only when every condition in
+# PHASE6_PLAN.md §3 holds: no bot check on the page, no blockers, every value
+# read back equal to its source, no required attestation/salary/government-id
+# field, every open-ended answer grounding-passed, no prior submit attempt,
+# and these two limits.
+max_auto_submits_per_day: 5
+min_minutes_between: 10
+
+browser:
+  # The runner's own Chromium profile, never Anish's Chrome. Gitignored.
+  profile_dir: .jobpipe-browser
+  # A visible window, so a review-mode run leaves the filled form on screen
+  # for Anish to check and submit.
+  headed: true
+  # Seconds to wait for a page or a confirmation before giving up. A timeout
+  # after the submit click is `submit_unconfirmed`, never a second click.
+  page_timeout: 30
+  confirmation_timeout: 45
+
+# Where screenshots and run reports go. Gitignored (real applications).
+output_dir: output/apply

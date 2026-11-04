@@ -26,17 +26,27 @@ python -m jobpipe.cli measure [--detail]           # edit distance, free
 python -m jobpipe.cli status                       # where applications stand
 python -m jobpipe.cli sync                         # mirror the sheet, free
 python -m jobpipe.cli india [--sync]               # India roles in their own tab; free, and on the cron
-python -m pytest tests/ -q                         # 909 tests, no network
+python -m jobpipe.apply <posting_id> [--dry-run] [--auto]   # Phase 6: fill a Greenhouse or Ashby form; dry run by default
+python -m pytest tests/ -q                         # no network
 ```
 
 Posting ids come from `postings.id` in `jobpipe.db`.
 
 ## Rules
 
-**Never submit an application.** Fill a form if asked, then stop before submit.
-Anish clicks it. This is a `PROJECT.md` guardrail, it is what most ATS terms
-require, and the twenty-second human review is what stops a mis-tailored
-application going out under his name.
+**Never submit an application from a session.** Fill a form if asked, then
+stop before submit. Anish clicks it. The twenty-second human review is what
+stops a mis-tailored application going out under his name.
+
+The one exception is the Phase 6 apply runner (`python -m jobpipe.apply`),
+and it is narrow. Anish's decision, 2026-11-04 (`PHASE6_PLAN.md` §1):
+**auto-submit only where nothing checks for bots; everywhere else the runner
+fills and stops, and Anish reviews and submits.** Whether to submit is a
+rule in `jobpipe/apply/decide.py`, never a model's call; it is one click and
+never a retry; it is off unless the gitignored `config/apply.yaml` turns it
+on; and it is not on the MCP surface or behind any web route. Bot detection
+is used for one thing only, deciding to stop — never build anything that
+bypasses, hides from, solves or retries past a CAPTCHA or challenge.
 
 **Never send email.** Drafts only, always.
 
