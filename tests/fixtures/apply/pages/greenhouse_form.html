@@ -1,0 +1,83 @@
+<!doctype html>
+<!-- Test double of a Greenhouse application form, modelled on the real
+     Alloy markup in ../greenhouse_alloy_8495229002_form.html (captured
+     2026-11-04): ids equal the question names, selects are react-select
+     comboboxes, file fields have their own inputs beside Dropbox and
+     "enter manually" buttons, and an "autofill" decoy sits above. -->
+<html lang="en"><head><meta charset="utf-8"><title>Apply</title></head>
+<body>
+<div class="autofill-decoy"><h3>Autofill from resume</h3>
+  <input id="autofill-upload" type="file"><button type="button">Upload file</button></div>
+<form method="get" action="/embed/job_app" id="application-form">
+  <label for="first_name">First Name<span aria-hidden="true">*</span></label>
+  <input id="first_name" aria-required="true" type="text" maxlength="255" value="">
+  <label for="last_name">Last Name</label>
+  <input id="last_name" type="text" maxlength="255" value="">
+  <label for="email">Email</label>
+  <input id="email" type="text" maxlength="255" value="">
+  <label for="phone">Phone</label>
+  <input id="phone" type="text" value="">
+
+  <label id="candidate-location-label" for="candidate-location">Location (City)</label>
+  <div data-combobox data-style="react-select">
+    <div class="value-container">
+      <div id="react-select-candidate-location-placeholder">Select...</div>
+      <div data-value=""><input id="candidate-location" role="combobox" aria-autocomplete="list" aria-expanded="false" type="text" value=""></div>
+    </div>
+    <input required="" tabindex="-1" aria-hidden="true" value="">
+    <ul role="listbox" hidden>
+      <li role="option" id="react-select-candidate-location-option-0" data-value="1">Springfield, IL</li>
+      <li role="option" id="react-select-candidate-location-option-1" data-value="2">Springfield, MA</li>
+    </ul>
+  </div>
+
+  <div role="group" aria-labelledby="upload-label-resume"><div id="upload-label-resume">Resume/CV</div>
+    <button type="button">Attach</button><label for="resume">Attach</label>
+    <input id="resume" type="file" accept=".pdf,.doc,.docx,.txt,.rtf">
+    <button type="button" data-testid="resume-dropbox">Dropbox</button>
+    <button type="button" data-testid="resume-text">Enter manually</button></div>
+  <div role="group"><div id="upload-label-cover_letter">Cover Letter</div>
+    <input id="cover_letter" type="file" accept=".pdf,.doc,.docx,.txt,.rtf"></div>
+
+  <label for="question_36029293002">LinkedIn Profile</label>
+  <input id="question_36029293002" type="text" maxlength="255" value="">
+
+  <label for="question_36029298002">Are you authorized to work in the US?</label>
+  <div data-combobox data-style="react-select">
+    <div class="value-container">
+      <div id="react-select-question_36029298002-placeholder">Select...</div>
+      <div data-value=""><input id="question_36029298002" role="combobox" aria-autocomplete="list" aria-expanded="false" type="text" value=""></div>
+    </div>
+    <input required="" tabindex="-1" aria-hidden="true" value="">
+    <ul role="listbox" hidden>
+      <li role="option" id="react-select-question_36029298002-option-0" data-value="1">Yes</li>
+      <li role="option" id="react-select-question_36029298002-option-1" data-value="0">No</li>
+    </ul>
+  </div>
+
+  <label for="question_why">Why do you want to work here?</label>
+  <textarea id="question_why"></textarea>
+
+  <label for="question_oneline">In one line, your proudest project</label>
+  <input id="question_oneline" type="text" data-strips-newlines value="">
+
+  <input type="hidden" id="longitude" name="longitude" value="-72.5">
+  <input type="hidden" id="latitude" name="latitude" value="42.1">
+
+  <label for="gender">Gender</label>
+  <div data-combobox data-style="react-select">
+    <div class="value-container">
+      <div id="react-select-gender-placeholder">Select...</div>
+      <div data-value=""><input id="gender" role="combobox" aria-autocomplete="list" aria-expanded="false" type="text" value=""></div>
+    </div>
+    <ul role="listbox" hidden>
+      <li role="option" id="react-select-gender-option-0" data-value="3">Decline To Self Identify</li>
+      <li role="option" id="react-select-gender-option-1" data-value="2">Female</li>
+      <li role="option" id="react-select-gender-option-2" data-value="1">Male</li>
+    </ul>
+  </div>
+
+  <button type="submit" class="btn btn--pill">Submit application</button>
+</form>
+<script src="widgets.js"></script>
+</body></html>

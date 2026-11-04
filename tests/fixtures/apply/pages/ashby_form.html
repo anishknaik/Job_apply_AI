@@ -1,0 +1,43 @@
+<!doctype html>
+<!-- Test double of an Ashby application page, modelled on the real
+     LangChain markup in ../ashby_langchain_74e5f9f4_application.html
+     (captured 2026-11-04): field-entry divs keyed by data-field-path, a
+     visually hidden file input, an autocomplete combobox, yes/no buttons
+     over a hidden checkbox, an autofill decoy above, and the submit button
+     class. -->
+<html lang="en"><head><meta charset="utf-8"><title>Python OSS Engineer</title></head>
+<body>
+<div class="ashby-application-form-autofill-input-base-layer">
+  <h3 class="ashby-application-form-autofill-input-title">Autofill from resume</h3>
+  <input id="autofill" type="file"><button>Upload file</button></div>
+<div class="ashby-application-form-container">
+ <div class="ashby-application-form-section-container">
+  <div class="ashby-application-form-field-entry" data-field-path="_systemfield_name">
+    <label class="_required_f7cvd_91 ashby-application-form-question-title" for="_systemfield_name">Name</label>
+    <div><input placeholder="Type here..." name="_systemfield_name" required="" id="_systemfield_name" type="text" class="ashby-application-form-input-text" value=""></div></div>
+  <div class="ashby-application-form-field-entry" data-field-path="_systemfield_email">
+    <label class="_required_f7cvd_91 ashby-application-form-question-title" for="_systemfield_email">Email</label>
+    <div><input name="_systemfield_email" required="" id="_systemfield_email" type="email" class="ashby-application-form-input-text" value=""></div></div>
+  <div class="ashby-application-form-field-entry" data-field-path="_systemfield_resume">
+    <label class="_required_f7cvd_91 ashby-application-form-question-title" for="_systemfield_resume">Resume</label>
+    <div role="presentation" class="ashby-application-form-input-file">
+      <input accept="application/pdf,.pdf" type="file" tabindex="-1" id="_systemfield_resume" required="" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">
+      <div class="ashby-application-form-input-file-dropzone"><button class="ashby-application-form-input-file-dropzone-upload"><span>Upload File</span></button></div></div></div>
+  <div class="ashby-application-form-field-entry" data-field-path="_systemfield_location">
+    <label class="ashby-application-form-question-title" for="_systemfield_location">Location</label>
+    <div data-combobox data-style="ashby"><input id="_systemfield_location" class="ashby-application-form-input-autocomplete" placeholder="Start typing..." aria-autocomplete="list" aria-expanded="false" role="combobox" value=""><button type="button">v</button>
+      <ul role="listbox" hidden><li role="option">Springfield, IL</li><li role="option">Springfield, MA</li></ul></div></div>
+  <div class="ashby-application-form-field-entry" data-field-path="5137f84a-82fa-442d-9fff-8503a0818baf">
+    <label class="_required_f7cvd_91 ashby-application-form-question-title" for="5137f84a-82fa-442d-9fff-8503a0818baf">Will you now, or in the future, require sponsorship (i.e. H-1B visa, etc.) to legally work in the U.S.?</label>
+    <div class="ashby-application-form-input-yesno"><button class="ashby-application-form-input-yesno-option" aria-pressed="false" data-option="yes">Yes</button><button class="ashby-application-form-input-yesno-option" aria-pressed="false" data-option="no">No</button><input type="checkbox" tabindex="-1" name="5137f84a-82fa-442d-9fff-8503a0818baf"></div></div>
+  <div class="ashby-application-form-field-entry" data-field-path="82baf130-729c-47f7-a795-be9cdee14150">
+    <label class="ashby-application-form-question-title" for="82baf130-729c-47f7-a795-be9cdee14150">GitHub Link (if applicable)</label>
+    <div><input placeholder="Type here..." name="82baf130-729c-47f7-a795-be9cdee14150" id="82baf130-729c-47f7-a795-be9cdee14150" type="text" class="ashby-application-form-input-text" value=""></div></div>
+  <div class="ashby-application-form-field-entry" data-field-path="29edfacc-23e6-403a-acbc-ad7e31c875c8">
+    <label class="ashby-application-form-question-title" for="29edfacc-23e6-403a-acbc-ad7e31c875c8">Linkedin Profile Link</label>
+    <div><input placeholder="Type here..." name="29edfacc-23e6-403a-acbc-ad7e31c875c8" id="29edfacc-23e6-403a-acbc-ad7e31c875c8" type="text" class="ashby-application-form-input-text" value=""></div></div>
+ </div>
+ <button class="ashby-application-form-submit-button"><span>Submit Application</span></button>
+</div>
+<script src="widgets.js"></script>
+</body></html>

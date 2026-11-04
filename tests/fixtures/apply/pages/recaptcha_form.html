@@ -1,0 +1,15 @@
+<!doctype html>
+<!-- The Greenhouse double with what both real pages load: the reCAPTCHA
+     Enterprise script and response textarea. The script URL points nowhere
+     on purpose; the global is defined by hand so the probe sees it. -->
+<html lang="en"><head><meta charset="utf-8"><title>Apply</title>
+<script src="recaptcha/enterprise.js?render=6Lfake"></script>
+<script>window.grecaptcha = {enterprise: {}};</script></head>
+<body>
+<form method="get" action="/embed/job_app" id="application-form">
+  <label for="first_name">First Name</label><input id="first_name" type="text" value="">
+  <textarea id="g-recaptcha-response-100000" name="g-recaptcha-response" class="g-recaptcha-response"></textarea>
+  <button type="submit">Submit application</button>
+</form>
+<script src="widgets.js"></script>
+</body></html>
