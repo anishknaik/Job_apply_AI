@@ -44,6 +44,8 @@ self_identification:
 # Logistics. Plain facts, reused across forms. Empty means "leave for me".
 logistics:
   preferred_name: ""           # only if different from your legal name
+  state_of_residence: ""      # e.g. "Illinois"
+  state_abbreviation: ""      # e.g. "IL" - dropdowns spell it either way
   earliest_start_date: ""      # e.g. "Immediately" or "Two weeks' notice"
   how_did_you_hear: ""         # jobpipe finds roles on company careers pages
   # Kept here rather than in the profile: scoring has no use for it, and the

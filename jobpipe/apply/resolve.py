@@ -123,6 +123,9 @@ _MEANINGS: tuple[tuple[str, str], ...] = (
     ("graduation", r"graduat"),
     ("degree", r"\bdegree\b|highest (level of )?education"),
     ("school", r"\bschool\b|universit|college|institution"),
+    # Before location: "City, State" stays location; this is the state alone.
+    ("state_of_residence", r"\bstate\b.*\b(reside|residence|live|province)\b|"
+                           r"\b(reside|residence|live)\b.*\bstate\b|^state( of residence)?$"),
     ("location", r"^location|current (location|city)|where (are you|do you) (located|based|live)|city\b.*state|^city$"),
 )
 _FUTURE = re.compile(r"future|at any (point|time)|\blater\b|going forward|\bever\b|"
@@ -379,6 +382,20 @@ def resolve_field(f: _spec.Field, sources: Sources) -> Resolved:
             return _yes_no(f, meaning, work.get(key), f"profile:work_authorization.{key}")
         return _yes_no(f, meaning, work.get("requires_sponsorship"),
                        "profile:work_authorization.requires_sponsorship")
+    if meaning == "state_of_residence":
+        # Dropdowns spell it either way ("Illinois", "IL"). A select takes
+        # whichever stored spelling is exactly an option, full name first;
+        # text and a live-matched widget take the full name.
+        spellings = [(k, _text(logistics.get(k)))
+                     for k in ("state_of_residence", "state_abbreviation")]
+        spellings = [(k, v) for k, v in spellings if v]
+        if f.kind in (_spec.SELECT, _spec.MULTISELECT) and f.options is not None:
+            for k, v in spellings:
+                if _exact_option(f, v) is not None:
+                    return _put_text(f, meaning, v, f"answers:logistics.{k}", "")
+        k, v = spellings[0] if spellings else ("state_of_residence", None)
+        return _put_text(f, meaning, v, f"answers:logistics.{k}",
+                         "logistics.state_of_residence is empty; left for Anish")
     if meaning in LOGISTICS:
         key = LOGISTICS[meaning]
         return _put_text(f, meaning, _text(logistics.get(key)),

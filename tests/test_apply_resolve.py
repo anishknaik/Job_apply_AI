@@ -155,6 +155,28 @@ class TestTheNameSplit:
                 options=(Option("LinkedIn", "1"), Option("Other", "2")))
         assert resolve.resolve_field(f, sources()).meaning == "how_heard"
 
+    @pytest.mark.parametrize("options,expected,key", [
+        ((Option("Illinois", "1"), Option("Indiana", "2")), "Illinois", "state_of_residence"),
+        ((Option("IL", "1"), Option("IN", "2")), "IL", "state_abbreviation"),
+    ])
+    def test_state_of_residence_takes_whichever_spelling_the_dropdown_has(self, options, expected, key):
+        # Affirm's Greenhouse form, 2026-11-04.
+        lg = {"state_of_residence": "Illinois", "state_abbreviation": "IL"}
+        src = sources(answers=answers(logistics=lg))
+        f = fld("q", "Which U.S. State or Canadian Province do you reside in?", "select", options=options)
+        out = one(f, src)
+        assert (out.meaning, out.action, out.value) == ("state_of_residence", "select", expected)
+        assert out.source == f"answers:logistics.{key}"
+
+    def test_state_of_residence_with_neither_spelling_is_a_blocker(self):
+        src = sources(answers=answers(logistics={"state_of_residence": "Illinois",
+                                                 "state_abbreviation": "IL"}))
+        f = fld("q", "State of residence", "select", options=(Option("Ill.", "1"),))
+        assert one(f, src).action == "blocker"
+
+    def test_city_state_is_still_location(self):
+        assert resolve.meaning_of(fld("q", "City, State")) == "location"
+
     def test_a_two_word_name_splits_unambiguously(self):
         assert one(fld("first_name", "First Name")).value == "Jane"
         assert one(fld("last_name", "Last Name")).value == "Example"
