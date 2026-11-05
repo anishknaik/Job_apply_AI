@@ -3,18 +3,31 @@
 A personal job-search pipeline for Anish Kumar Naik. Phase 1 (discovery →
 scoring → sheet) and Phase 2 (resume + cover letter tailoring) are built and
 running, and Phase 5 exposes them as an MCP server that a session works the
-queue through — including filling application forms in the browser, which is
-Phase 3 (Track C), built and under supervised trial. Read `PROJECT.md` first —
-it holds the guardrails that apply to everything here — then `HANDOFF.md` for
-where things stand.
+queue through. Phase 6, the apply runner, fills Greenhouse and Ashby forms
+in a browser of its own and is in real use (three applications, each
+submitted by Anish); Phase 7, an apply session in the workbench plus an AI
+agent for other ATSes, is planned for cloud sessions (`PHASE7_PLAN.md`).
+Read `PROJECT.md` first — it holds the guardrails that apply to everything
+here — then `HANDOFF.md` (its "Start here" block) for where things stand.
+
+`master` is the mainline and is what `D:\Job_apply_AI` has checked out, so
+the scheduled task runs it. Branch from `master` for new work.
 
 ## What you are here to do
 
-Help work through the application queue: render a resume, write the letter
-and the form answers, review them against the real posting, fill the form
-while Anish watches, and record what happened. That is judgment work on real
-artefacts, done through the jobpipe MCP tools below. The pipeline itself is
-automated and does not need you.
+Help work through the application queue: pick roles that fit, render a
+resume, write the letter and the form answers, review them against the
+real posting, fill the form (through the runner in review mode, or the
+Chrome extension) while Anish watches, and record what happened. That is
+judgment work on real artefacts, done through the jobpipe MCP tools below.
+The pipeline itself is automated and does not need you.
+
+**Before picking a role, check three things the scorer can miss:** that it
+is still live (a dry run opens the page; two picks on 2026-11-05 had been
+taken down hours after the fetch), that the posting does not rule him out
+in one line (a graduation window, a non-US office, a required take-home),
+and that he has not already applied (`cli sync` first — he sometimes
+applies by hand and records it later).
 
 ## Commands
 
@@ -24,11 +37,20 @@ python -m jobpipe.cli tailor --queued --yes        # a resume per queued role
 python -m jobpipe.cli tailor --cover-letter <id> --yes
 python -m jobpipe.cli measure [--detail]           # edit distance, free
 python -m jobpipe.cli status                       # where applications stand
-python -m jobpipe.cli sync                         # mirror the sheet, free
+python -m jobpipe.cli sync                         # mirror the sheet, free; top 25 plus every posting with a status
 python -m jobpipe.cli india [--sync]               # India roles in their own tab; free, and on the cron
-python -m jobpipe.apply <posting_id> [--dry-run] [--auto]   # Phase 6: fill a Greenhouse or Ashby form; dry run by default
-python -m pytest tests/ -q                         # no network
+python -m jobpipe.cli filter --refilter           # re-run Stage A over the corpus, free; after editing filters.yaml
+python -m jobpipe.apply <posting_id> [--dry-run]   # Phase 6: plan a Greenhouse/Ashby form, fill nothing (default)
+python -m jobpipe.apply <posting_id> --review      # fill it and leave the window open for Anish; records applied after his submit
+python -m jobpipe.web                              # the workbench, http://127.0.0.1:8765
+python -m pytest tests/ -q                         # ~1,370 tests, no network
 ```
+
+Start a `--review` run in a console of its own (`Start-Process
+python -ArgumentList '-m','jobpipe.apply','<id>','--review'`, or a
+terminal). From a non-interactive shell its wait sees no stdin and the
+window has nowhere to wait in. `--auto` exists and is refused unless the
+gitignored `config/apply.yaml` turns auto-submit on; it never has been.
 
 Posting ids come from `postings.id` in `jobpipe.db`.
 
@@ -224,7 +246,10 @@ self-identification data.
 | `config/master_profile.md` | source of truth for every claim. Gitignored |
 | `config/bullets.yaml` | the bullet bank — immutable text, hand-edited |
 | `config/targets.csv` | 169 companies, `tier` drives queue order |
-| `config/filters.yaml` | Stage A rules. Do not loosen without an audit |
+| `config/filters.yaml` | Stage A rules, including `graduated` for the graduation-window rule. Do not loosen — or tighten — without an audit, then `filter --refilter` |
+| `config/apply.yaml` | the runner's config; `auto_submit: false`, cap 1 a day. Gitignored |
+| `jobpipe/apply/` | the Phase 6 runner: `spec`, `resolve` (the safety core), `signals`, `fill`, `required`, `decide`, `submit`, `review`, `learned`, `runner` |
+| `output/apply/<role>/run-N/` | each run's screenshots, and after a submit `confirmation.json` with the page it landed on |
 | `config/answers.yaml` | self-ID, form logistics and reusable answers. Gitignored; never in a prompt |
 | `config/learned_answers.yaml` | choices Anish made on real forms, keyed by question with the company as `{company}`. Written by the apply runner; gitignored |
 | `output/applications/<role>/` | `resume.pdf`, and `cover_letter.md` → `.sent.md` → `.pdf` when a form wants one |
@@ -234,10 +259,16 @@ self-identification data.
 ## Context worth reading
 
 - `PROJECT.md` — the guardrails, and why the phases are shaped as they are
-- `HANDOFF.md` — where Phase 5 stands right now, what is verified, what is
-  open, and what a fresh reader would otherwise get wrong. Start here
+- `HANDOFF.md` — where things stand right now, what is verified, what is
+  open, and what a fresh reader would otherwise get wrong. Start with its
+  "Start here" block
 - `PHASE5_PLAN.md` — the decisions and the build order behind the MCP server
   and form filling
+- `PHASE6_PLAN.md` — the apply runner: the guardrail change, the resolver
+  table, the eight (now nine) auto-submit conditions. `HANDOFF.md` §8 has
+  where the plan was wrong and what was learned on live forms
+- `PHASE7_PLAN.md` — the apply session and the AI agent, Anish's decisions,
+  and the two cloud prompts. Planned, not built
 - `CONTEXT.md` — the standing design, live numbers and the defect record.
   Read it before trusting a figure quoted in an older document
 - `POST_PHASE2_FIXES.md` — the Phase 2 fix list, largely closed;

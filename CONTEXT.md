@@ -1,16 +1,16 @@
 # jobpipe — Context
 
 > Written 2026-08-29, **§2 and §7 remeasured 2026-08-31; §2 and §4 again on
-> 2026-09-10 and 2026-10-04.** On 2026-10-05 only §2's applications and
-> documents rows and §4's line counts were re-read. Every number in §2
-> was read from the live system on that date rather than copied forward,
+> 2026-09-10, 2026-10-04 and 2026-11-05.** Every number in §2 was read from
+> the live system on the date it carries rather than copied forward,
 > because several figures in `PHASE1_SUMMARY.md` and `POST_PHASE2_FIXES.md`
 > had drifted.
 >
 > **Read order for a new session:** `PROJECT.md` (why) → `HANDOFF.md` (where
-> things stand right now, and what the transcripts get wrong) →
-> `PHASE5_PLAN.md` (the decisions and the build order) → this file (the
-> standing design, §1–§6) → `CLAUDE.md` (what you may and may not run).
+> things stand right now — its "Start here" block first) →
+> `PHASE5_PLAN.md`, `PHASE6_PLAN.md`, `PHASE7_PLAN.md` (the decisions and
+> build orders) → this file (the standing design, §1–§6) → `CLAUDE.md`
+> (what you may and may not run).
 >
 > **This file is no longer the front door.** §1–§6 still hold — they are the
 > design and the guardrails, and nothing has overturned them. §7's Vertex
@@ -37,39 +37,45 @@ metric is interviews per hour spent, not applications per day.
 
 | Phase | Scope | State |
 |---|---|---|
-| 1 | Discovery → dedupe → filters → LLM scoring → Google Sheet | Fetch/filter/sync unattended daily 11:30; scoring on demand. Two lanes since 2026-10-03: US (main tab) and India (its own tab) |
+| 1 | Discovery → dedupe → filters → LLM scoring → Google Sheet | Unattended daily 11:30, **scoring included again since 2026-11-04** (US and India queues, 200 each per run). Two lanes since 2026-10-03: US (main tab) and India (its own tab) |
 | 2 | Queued role → tailored resume PDF → cover letter → grounding check | Running on demand |
 | 3 | Application form fill, human clicks submit | Built as Phase 5 Track C; two supervised fills (LangChain 2026-09-10; LangChain 2026-10-04, from Cowork) |
 | 4 | Recruiter research → outreach drafts | Not started |
-| 5 | **MCP server + Cowork — the final version** | Slice 0 + Tracks A, B and C built; Track C has 2 of 2–3 supervised fills, none with a letter. Runs under the desktop app and Cowork since 2026-10-04 |
+| 5 | **MCP server + Cowork** | Slice 0 + Tracks A, B and C built; runs under the desktop app and Cowork since 2026-10-04 |
+| 6 | **Apply runner** — fills Greenhouse and Ashby forms in its own browser; auto-submit only where nothing checks for bots, otherwise Anish reviews and submits (`PHASE6_PLAN.md`) | Built 2026-11-04, in real use: 3 applications in review mode (Sierra, Chime, Deepgram), each submitted by Anish; records `applied` after his submit. Auto-submit has never fired |
+| 7 | **Apply session + AI agent** — the workbench works through the queue; Gemini 2.5 Pro drafts essays and letters; an agent for Workday/Lever/SmartRecruiters (`PHASE7_PLAN.md`) | Planned 2026-11-05, to be built in cloud sessions |
 
 ---
 
-## 2. Where it stands today (2026-10-04, remeasured)
+## 2. Where it stands today (2026-11-05, remeasured)
 
 | | |
 |---|---|
-| Postings ingested | 24,100 |
-| Stage A survivors / scored | 973 / 1,179 — 953 of the survivors scored; the 20 not are closed postings |
-| India lane | 170 live roles, all scored — 226 scores sit outside Stage A's survivors, most of them these |
-| Scoring models in the corpus | `3.1-flash-lite` 454, `3.5-flash-lite` 149, `2.5-flash` 299, `2.5-pro` 277 |
-| Rubric versions in the corpus | none 603, `2026-10-03.5` 494, `2026-08-31.3` 78, `.2` 3, `.4` 1 |
-| Applications | 24 applied (146 status events), read 2026-10-05 |
-| Documents | 66 rows — 35 resumes, 25 letters, 6 form answers, read 2026-10-05 |
-| Letters with stored content | 13 (the `content` column postdates the first batch) |
-| **Edit distances computed** | **2** — PostHog 0.032, U. of Utah 0.033 |
-| Targets | 169 companies — tier 1: 8, tier 2: 104, tier 3: 57 (the 26 added 2026-10-03 classified by domain on 2026-11-04: 13 to tier 2, 13 stay tier 3) |
+| Postings ingested | 30,304 |
+| Stage A survivors / scored | 1,227 / 1,727 — 16 live survivors unscored, for the next scheduled run |
+| India lane | its own tab and scoring queue; many scores sit outside Stage A's survivors for that reason |
+| Scoring models in the corpus | `2.5-flash` 606, `2.5-pro` 494, `3.1-flash-lite` 469, `3.5-flash-lite` 158 |
+| Rubric versions in the corpus | `2026-10-03.5` 1,016, none 627, `2026-08-31.3` 80, `.2` 3, `.4` 1 |
+| Applications | 45 applied (210 status events); 3 through the Phase 6 runner |
+| Documents | 130 rows — 81 resumes, 33 letters, 16 form answers |
+| **Edit distances computed** | **2** — PostHog 0.032, U. of Utah 0.033 (the runner-era letters went into optional boxes, so `letter_required=false` and they are not counted) |
+| Targets | 169 companies — tier 1: 8, tier 2: 104, tier 3: 57 |
 | ATS split | greenhouse 82, ashby 79, smartrecruiters 6, workday 2 |
-| Bullet bank | 21 bullets across 10 roles |
-| Tests | **909** |
-| Last scheduled run | 2026-10-03 15:30 UTC — 13,354 fetched, 167 new, **0 scored** |
-| Billing | Vertex, GCP credit. The prepaid AI Studio balance is no longer drawn on |
+| Bullet bank | 24 bullets across 11 roles (the jobpipe project's three added in November) |
+| Tests | **1,371**, offline |
+| Last scheduled run | 2026-11-04 16:55 UTC — 15,280 fetched, 330 new, 0 scored (it ran before `-Spend` was re-registered that day) |
+| Billing | Vertex, GCP credit (ends mid-November). The prepaid AI Studio balance is no longer drawn on |
 
-**The scheduled run no longer scores.** It fetches, filters, syncs and
-refreshes the india tab, so an unscored backlog accumulates until someone
-runs `cli score` or `cli score --india` deliberately. `register-task.ps1
--Spend` puts scoring back. The backlog was 89 on 2026-09-10 and 352 by
-2026-10-03, when both queues were scored; it is 0 now.
+**The scheduled run scores again since 2026-11-04.** It fetches, filters,
+scores the US and India queues (each refusing past
+`JOBPIPE_MAX_SCORES_PER_RUN`, 200), syncs and refreshes the india tab.
+Between 2026-08-30 and 2026-11-04 it scored nothing and a backlog built up
+between deliberate runs.
+
+**Stage A, 2026-11-05:** two rules added after an audit —
+`graduation_window` (a new-grad window that leaves out a May 2025
+graduate) and `location_remote_abroad` (a bare "Remote" beside a non-US
+place). 16 postings removed by each.
 
 **The scoring queue is open postings only.** `get_unscored` applies the
 sheet's own 7-day `last_seen_at` window, so a posting that left its board
@@ -145,7 +151,9 @@ more (`india.MIN_SCORE`, since 2026-10-08) and any not yet scored, best first.
 
 ## 4. Module map
 
-11,192 lines of Python across 38 modules, 909 offline tests.
+15,651 lines of Python across 56 modules, 1,371 offline tests (2026-11-05;
+the table below was last itemised at 38 modules and does not yet list
+`jobpipe/apply/` — see `PHASE6_PLAN.md` §3 for that package).
 
 | Module | Lines | Does |
 |---|---|---|

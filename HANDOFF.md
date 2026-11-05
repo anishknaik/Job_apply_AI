@@ -1,7 +1,53 @@
-# Handoff — 2026-10-05
+# Handoff — 2026-11-05
 
-Where Phase 5 actually stands, what is verified against what is assumed, and
-what in the session transcript has since been overturned.
+Where things actually stand, what is verified against what is assumed, and
+what in older documents has since been overturned.
+
+## Start here (2026-11-05)
+
+A fresh local session needs these, in this order; the dated notes below
+are the history behind them.
+
+- **Branches.** `master` is the mainline and is what is checked out in
+  `D:\Job_apply_AI`, so the 11:30 scheduled task runs it. `apply-runner`
+  and `web-workbench` were fast-forwarded into it on 2026-11-05 and hold
+  nothing `master` lacks; new work branches from `master`.
+- **The Phase 6 apply runner is in real use** (§8). Three applications went
+  through it in review mode - Sierra (Ashby), Chime (Greenhouse), Deepgram
+  (Ashby) - each submitted by Anish. Since 2026-11-05 it **records
+  `applied` itself after his submit** (unless the ATS shows its error box)
+  and **refuses to fill a posting already `applied`** - so run `cli sync`
+  first if he applied by hand. Greenhouse's and Ashby's confirmation pages
+  are both verified on real submits. Start a review run in its own console
+  (`Start-Process` or a terminal), never from a non-interactive shell.
+- **Auto-submit has never fired** and stays off (`config/apply.yaml`). Every
+  live form so far loads reCAPTCHA, so `--auto` would decide review anyway.
+- **Scheduled scoring is on.** `register-task.ps1 -Spend` was re-registered
+  by Anish on 2026-11-04 (confirmed: the task runs `daily.ps1 -Spend`). The
+  11:30 run scores the US and India queues, each capped at 200 per run.
+- **Stage A gained two rules on 2026-11-05**: `graduation_window` and
+  `location_remote_abroad` (§8, "later"). Audited, refiltered; 16 postings
+  removed by each.
+- **The sheet now carries every posting with a status**, ranked or not
+  (`db.get_tracked_rows`), so an application outside the daily top 25
+  still gets a row.
+- **Phase 7 is planned, not started**: `PHASE7_PLAN.md` - an apply session
+  in the workbench (Gemini 2.5 Pro drafts essays and letters, Anish
+  reviews), then an AI agent for Workday/Lever/SmartRecruiters. Both are
+  built in cloud sessions; the prompts are in its §6. Anish will start 7A
+  from `master`. Do not build it locally unless he asks.
+- **Open, in order of value:** the Greenhouse fill gaps in §8 (Education
+  section, Location cleared, phone country, resume read-back timeout,
+  Hispanic/Race); the grounding check's output loop (slice 1 of 7A); live
+  checks 3 and 4 (a learned answer reused; the required check on a final
+  Greenhouse form); InfraCloud's `data_infra` tier is Anish's to confirm;
+  the review-wait tests are timing-sensitive and failed twice in one
+  under-load run on 2026-11-05.
+- **Applications recorded 2026-11-05** (dated that day, not the day he
+  applied): through the runner Sierra, Chime, Deepgram; by hand, from his
+  batch of 2026-11-04, Affirm, OpenAI (18833), Cohere (25952), Snowflake
+  (25733), Stripe (19565), PostHog (20767), `letter_required=false`
+  assumed. Perplexity 19713 and 19496 he did not apply to.
 
 **Updated 2026-09-10: Track C is built, and the first application has gone
 through it end to end** — resume, two grounded form answers, a supervised
@@ -56,19 +102,21 @@ what was *said*, and several things in it were corrected by later turns — a
 fresh reader going straight through will absorb the wrong versions. The
 corrections are in §5.
 
-Read after `PROJECT.md` and `PHASE5_PLAN.md`. `CONTEXT.md` §2 and §4 were
-remeasured on 2026-09-10; its §9 is superseded by `PHASE5_PLAN.md`.
+Read after `PROJECT.md` and `PHASE5_PLAN.md`; for the runner,
+`PHASE6_PLAN.md`; for what is next, `PHASE7_PLAN.md`. `CONTEXT.md` §2 and
+§4 were remeasured on 2026-11-05; its §9 is superseded by `PHASE5_PLAN.md`.
 
 ---
 
 ## 1. State
 
 ```
-909 tests, 13 tools on the MCP surface, on master
-24,100 postings | 973 past Stage A | 1,179 scored (953 of them survivors)
-0 open survivors unscored (20 closed ones left unscored on purpose)
-170 live India roles, all scored | 169 targets on 4 boards
-24 applied | 2 letters measured
+read 2026-11-05
+1,371 tests, 13 tools on the MCP surface, on master
+30,304 postings | 1,227 past Stage A | 1,727 scored
+16 live survivors unscored (the 11:30 run scores them)
+169 targets on 4 boards
+45 applied (3 through the Phase 6 runner) | 2 letters measured
   (only 1 of the 2 counts toward the per-slot means — see §3)
 ```
 
@@ -88,13 +136,15 @@ and the usual cause is a process that did not load `.env`: python-dotenv
 searches upward from the **calling file**, not the working directory, so a
 script outside the repo root silently gets nothing.
 
-Scheduled run is 11:30, S4U, **fetch/filter/sync only — it scores nothing.**
-Since 2026-10-03 it ends with an `india` stage that refreshes the india tab.
-`register-task.ps1 -Spend` puts scoring back. Consequence: an unscored backlog
-grows, and nothing new reaches either tab's score column until someone runs
-`cli score` (US) or `cli score --india`. The backlog reached 352 before both
-queues were scored on 2026-10-03; it is 0 now and will grow again, faster
-than before - 26 more boards feed it.
+Scheduled run is 11:30, S4U. **Since 2026-11-04 it scores again**
+(registered with `-Spend`): fetch, filter, score the US queue, score the
+India queue, sync, refresh the india tab. Each scoring stage refuses rather
+than bills past `JOBPIPE_MAX_SCORES_PER_RUN` (200). The queue is the
+unscored live survivors plus any posting whose employer changed the years
+or skills asked for (`posting_changes.py`). Registering without `-Spend`
+takes scoring off again; the GCP credit it bills to ends mid-November.
+(Between 2026-08-30 and 2026-11-04 it scored nothing and a backlog built up
+between deliberate runs.)
 
 ---
 
