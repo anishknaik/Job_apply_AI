@@ -125,6 +125,8 @@ _MEANINGS: tuple[tuple[str, str], ...] = (
     ("school", r"\bschool\b|universit|college|institution"),
     ("location", r"^location|current (location|city)|where (are you|do you) (located|based|live)|city\b.*state|^city$"),
 )
+_FUTURE = re.compile(r"future|at any (point|time)|\blater\b|going forward|\bever\b|"
+                     r"\bwill you\b.*\b(need|require)", re.I)
 _MEANING_RE = tuple((m, re.compile(p, re.I)) for m, p in _MEANINGS)
 
 # Keys the ATSes use for the same things. Checked before the label.
@@ -366,6 +368,15 @@ def resolve_field(f: _spec.Field, sources: Sources) -> Resolved:
         return _yes_no(f, meaning, work.get("authorized_to_work_in_us"),
                        "profile:work_authorization.authorized_to_work_in_us")
     if meaning == "sponsorship":
+        # "Do you require sponsorship?" and "will you, now or in the future?"
+        # are different questions with different answers on STEM OPT. Any
+        # mention of the future reads the future flag (a combined "now or in
+        # the future" is yes if either is). Each falls back to the single
+        # requires_sponsorship flag for a profile that has only that.
+        key = ("requires_sponsorship_future" if _FUTURE.search(f.label)
+               else "requires_sponsorship_now")
+        if key in work:
+            return _yes_no(f, meaning, work.get(key), f"profile:work_authorization.{key}")
         return _yes_no(f, meaning, work.get("requires_sponsorship"),
                        "profile:work_authorization.requires_sponsorship")
     if meaning in LOGISTICS:

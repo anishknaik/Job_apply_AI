@@ -78,6 +78,27 @@ class TestIdentityFromTheProfile:
         assert (spons.action, spons.value) == ("select", "No")
         assert spons.source == "profile:work_authorization.requires_sponsorship"
 
+    STEM_OPT = {"authorized_to_work_in_us": True, "requires_sponsorship": True,
+                "requires_sponsorship_now": False, "requires_sponsorship_future": True}
+
+    @pytest.mark.parametrize("label,expected,key", [
+        # Affirm's two questions, 2026-11-04.
+        ("Do you require immigration sponsorship to work for Affirm in the United States?",
+         "No", "requires_sponsorship_now"),
+        ("Will you require immigration sponsorship at any point in the future to maintain "
+         "authorization to work in the U.S.?", "Yes", "requires_sponsorship_future"),
+        ("Will you now, or in the future, require employer visa sponsorship?",
+         "Yes", "requires_sponsorship_future"),
+        ("Do you now or will you ever require sponsorship?", "Yes", "requires_sponsorship_future"),
+        ("Will you need sponsorship to work in the US?", "Yes", "requires_sponsorship_future"),
+        ("Do you currently require visa sponsorship?", "No", "requires_sponsorship_now"),
+    ])
+    def test_sponsorship_now_and_future_are_separate_answers(self, label, expected, key):
+        src = sources(answers=answers(work_authorization=self.STEM_OPT))
+        out = one(fld("q", label, "select", options=YES_NO), src)
+        assert (out.action, out.value) == ("select", expected)
+        assert out.source == f"profile:work_authorization.{key}"
+
     def test_a_combined_authorization_question_with_other_options_is_a_blocker(self):
         """Datadog's wording: three options, none exactly "Yes". Exact match
         only, so the posting goes to review with the options listed."""
