@@ -10,6 +10,7 @@ environment cannot reach either ATS directly). Nothing here is invented.
 | `greenhouse_alloy_8495229002_form.html` | The **rendered** application form (react-select comboboxes, file inputs, submit button). Country list collapsed, SVGs emptied | `job-boards.greenhouse.io/alloy/jobs/8495229002`, rendered |
 | `ashby_langchain_74e5f9f4_application.html` | The **rendered** Ashby application page: field-entry divs with `data-field-path`, yes/no buttons, autocomplete, `g-recaptcha-response`, `window.__appData`. Styles dropped | `jobs.ashbyhq.com/langchain/74e5f9f4-…/application`, rendered |
 | `ashby_langchain_74e5f9f4_appData.json` | `window.__appData` from that page: posting, organisation, `recaptchaUniversalPublicSiteKey`. Description trimmed | same page |
+| `ashby_sierra_0dfe7805_application.html` | The **rendered** Ashby application page with **radio and checkbox groups** (whose `data-field-path` div lacks the field-entry class), "Legal First/Last Name", and a UUID-keyed Location autocomplete. Captured locally with Playwright, 2026-11-04; styles and SVGs dropped | `jobs.ashbyhq.com/sierra/0dfe7805-…/application`, rendered |
 
 The `content` / `descriptionHtml` posting text is truncated in the JSON
 files; the form is what these are for.

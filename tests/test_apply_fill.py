@@ -199,6 +199,35 @@ class TestAshbyDouble:
             assert report.unverified == []
 
 
+    RADIO_KEY = "de771a19-ae1f-42ca-885d-dfc8861fa2ad"
+
+    def radio_item(self, value):
+        f = Field(self.RADIO_KEY, "Are you legally authorized to work in the United States?",
+                  spec.RADIO, True, options=YES_NO)
+        form = FormSpec(ats="ashby", job_id="1", company="x", title="x", fields=(f,))
+        return form, resolve.Resolution((resolve.Resolved(f, resolve.SELECT, value, source="test"),))
+
+    def test_a_radio_option_is_clicked_by_exact_text_and_read_back(self, site, tmp_path):
+        form, res = self.radio_item("Yes")
+        with open_browser(tmp_path) as b:
+            page = b.new_page()
+            page.goto(f"{site}/ashby_form.html")
+            report = fill.fill_form(page, form, res)
+            assert report.fields[0].verified
+            assert page.is_checked("#r-auth-0") and not page.is_checked("#r-auth-1")
+            assert page.evaluate("window.__submits") == 0
+
+    def test_no_exact_radio_option_leaves_the_group_unset(self, site, tmp_path):
+        form, res = self.radio_item("yes")
+        with open_browser(tmp_path) as b:
+            page = b.new_page()
+            page.goto(f"{site}/ashby_form.html")
+            report = fill.fill_form(page, form, res)
+            assert report.fields[0].status == "unmatched_option"
+            assert report.unverified
+            assert not page.is_checked("#r-auth-0") and not page.is_checked("#r-auth-1")
+
+
 class TestSignalsOnThePage:
     def test_recaptcha_is_seen_before_anything_is_typed(self, site, tmp_path):
         form = FormSpec(ats="greenhouse", job_id="1", company="x", title="x",

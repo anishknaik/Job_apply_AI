@@ -132,7 +132,7 @@ def _control(frame, f: _spec.Field):
     if f.kind == _spec.FILE:
         candidates = [f'input[type="file"]#{_css(key)}',
                       f'input[type="file"][name="{key}"]']
-    elif f.kind == _spec.YESNO:
+    elif f.kind in (_spec.YESNO, _spec.RADIO):
         candidates = [f'[data-field-path="{key}"]']
     else:
         candidates = [f'#{_css(key)}', f'[name="{key}"]',
@@ -238,6 +238,28 @@ def _yes_no(frame, entry, wanted: str) -> tuple[str, str]:
     return (OK if pressed == "true" else MISMATCH), (wanted if pressed == "true" else "")
 
 
+_RADIO_LABEL = "label.ashby-application-form-input-radio-group-option-label"
+
+
+def _radio(entry, wanted: str) -> tuple[str, str]:
+    """Click the option whose label is exactly `wanted`, then read back the
+    label of whichever radio is now checked."""
+    labels = entry.locator(_RADIO_LABEL)
+    texts = [" ".join((labels.nth(i).inner_text() or "").split())
+             for i in range(labels.count())]
+    exact = [i for i, t in enumerate(texts) if t == wanted.strip()]
+    if not exact:
+        return UNMATCHED, ""
+    labels.nth(exact[0]).click()
+    checked = entry.locator('input[type="radio"]:checked')
+    if not checked.count():
+        return MISMATCH, ""
+    rid = checked.first.get_attribute("id") or ""
+    back = entry.locator(f'label[for="{rid}"]')
+    text = " ".join((back.first.inner_text() or "").split()) if back.count() else ""
+    return (OK if text == wanted.strip() else MISMATCH), text
+
+
 def apply_one(frame, item: _resolve.Resolved) -> FieldResult:
     f = item.field
     result = FieldResult(key=f.key, label=f.label, action=item.action, status=OK,
@@ -269,6 +291,15 @@ def apply_one(frame, item: _resolve.Resolved) -> FieldResult:
             name, size = _upload(control, path)
             result.readback_sha256 = sha256(f"{name}:{size}")
             result.status = OK if result.value_sha256 == result.readback_sha256 else MISMATCH
+        elif item.action == _resolve.SELECT and f.kind == _spec.RADIO:
+            result.value_sha256 = sha256(item.value)
+            status, back = _radio(control, item.value)
+            if status == UNMATCHED:
+                result.status = UNMATCHED
+                result.note = "no option on the page exactly equals the value; left unset"
+                return result
+            result.readback_sha256 = sha256(back)
+            result.status = status
         elif item.action == _resolve.SELECT and f.kind == _spec.YESNO:
             result.value_sha256 = sha256(item.value)
             status, back = _yes_no(frame, control, item.value)

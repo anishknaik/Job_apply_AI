@@ -211,7 +211,7 @@ def _put_text(f: _spec.Field, meaning: str, value: str | None, source: str,
         return Resolved(f, SELECT, value, source, meaning,
                         note="options read from the live widget; exact text only, "
                              "otherwise left unset and reported")
-    if f.kind in (_spec.SELECT, _spec.YESNO, _spec.MULTISELECT):
+    if f.kind in (_spec.SELECT, _spec.YESNO, _spec.MULTISELECT, _spec.RADIO):
         opt = _exact_option(f, value)
         if opt is None:
             return _no_source(f, meaning,
@@ -231,7 +231,7 @@ def _yes_no(f: _spec.Field, meaning: str, flag: Any, source: str) -> Resolved:
     if not isinstance(flag, bool):
         return _no_source(f, meaning, f"{source} is not set to true/false")
     wanted = "Yes" if flag else "No"
-    if f.kind in (_spec.SELECT, _spec.YESNO):
+    if f.kind in (_spec.SELECT, _spec.YESNO, _spec.RADIO):
         opt = _exact_option(f, wanted)
         if opt is None:
             return _no_source(f, meaning,
@@ -263,7 +263,7 @@ def _self_id(f: _spec.Field, meaning: str, answers: dict | None) -> Resolved:
     if isinstance(entries, str):
         entries = [entries]
     source = f"answers:self_identification.{meaning}"
-    if f.kind not in (_spec.SELECT, _spec.YESNO, _spec.MULTISELECT):
+    if f.kind not in (_spec.SELECT, _spec.YESNO, _spec.MULTISELECT, _spec.RADIO):
         # A free-text self-ID box (pronouns, usually).
         value = _text(entries[0]) if entries else None
         if value is None:
@@ -389,7 +389,7 @@ def resolve_field(f: _spec.Field, sources: Sources) -> Resolved:
         spellings = [(k, _text(logistics.get(k)))
                      for k in ("state_of_residence", "state_abbreviation")]
         spellings = [(k, v) for k, v in spellings if v]
-        if f.kind in (_spec.SELECT, _spec.MULTISELECT) and f.options is not None:
+        if f.kind in (_spec.SELECT, _spec.MULTISELECT, _spec.RADIO) and f.options is not None:
             for k, v in spellings:
                 if _exact_option(f, v) is not None:
                     return _put_text(f, meaning, v, f"answers:logistics.{k}", "")

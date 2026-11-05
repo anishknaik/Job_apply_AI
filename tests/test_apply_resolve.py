@@ -454,3 +454,33 @@ class TestRealForms:
         assert by["5137f84a-82fa-442d-9fff-8503a0818baf"].value == "No"
         assert by["_systemfield_location"].action == "autocomplete"
         assert by["82baf130-729c-47f7-a795-be9cdee14150"].value == "github.com/jane"
+
+
+class TestSierraRealForm:
+    """The live form that exposed the radio-group gap, 2026-11-04."""
+
+    def form(self):
+        html = (FIXTURES / "ashby_sierra_0dfe7805_application.html").read_text(encoding="utf-8")
+        return spec.parse_ashby_form(html)
+
+    def test_radio_questions_resolve_or_block_never_vanish(self):
+        work = {"authorized_to_work_in_us": True, "requires_sponsorship": True,
+                "requires_sponsorship_now": False, "requires_sponsorship_future": True}
+        ans = answers(work_authorization=work,
+                      identity={"name": "Jane Q Example", "first_name": "Jane",
+                                "last_name": "Example", "email": "jane@example.com",
+                                "phone": "(555) 010-0000", "linkedin": "linkedin.com/in/jane",
+                                "location": "Springfield, IL"},
+                      logistics={"how_did_you_hear": "Company Careers Page"})
+        res = resolve.resolve(self.form(), sources(answers=ans))
+        def by(prefix):
+            return next(r for r in res.items if r.field.label.startswith(prefix))
+        auth = by("Are you legally authorized")
+        assert (auth.action, auth.value) == ("select", "Yes")
+        spons = by("Will you now or in the future")
+        assert (spons.action, spons.value) == ("select", "Yes")
+        assert spons.source == "profile:work_authorization.requires_sponsorship_future"
+        for label in ("Are you able to work from a Sierra office",
+                      "We use Metaview", "How did you hear about this opportunity?"):
+            assert by(label).action == "blocker", label
+        assert len(res.items) == 16

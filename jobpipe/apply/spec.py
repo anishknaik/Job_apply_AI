@@ -37,9 +37,9 @@ ASHBY = "ashby"
 # Field kinds. `unknown` is a kind on purpose: resolve.py treats it as a
 # blocker, so a widget nobody has seen cannot be filled by accident.
 TEXT, EMAIL, PHONE, TEXTAREA, FILE, SELECT, MULTISELECT, YESNO, CHECKBOX, \
-    HIDDEN, LOCATION, UNKNOWN = (
+    HIDDEN, LOCATION, UNKNOWN, RADIO = (
         "text", "email", "phone", "textarea", "file", "select", "multiselect",
-        "yesno", "checkbox", "hidden", "location", "unknown")
+        "yesno", "checkbox", "hidden", "location", "unknown", "radio")
 
 # Sections: where a question came from. Self-ID questions are resolved
 # differently (exact option text from answers.yaml, blank otherwise), so the
@@ -199,14 +199,20 @@ def greenhouse_form_url(board_token: str, job_id: str | int) -> str:
 # Ashby
 # ---------------------------------------------------------------------------
 
-_ASHBY_ENTRY = re.compile(
-    r'<div\b[^>]*\bashby-application-form-field-entry\b[^>]*>', re.I)
+# Every question is a div carrying `data-field-path`. Most also carry the
+# field-entry class, but radio and checkbox groups do not - the class sits on
+# their inner <fieldset> - and keying on the class silently dropped them
+# (Sierra, 2026-11-04: five required questions missing from the plan).
+_ASHBY_ENTRY = re.compile(r'<div\b[^>]*\bdata-field-path="[^"]*"[^>]*>', re.I)
+_ASHBY_RADIO_OPTION = re.compile(
+    r'<label\b[^>]*\bashby-application-form-input-radio-group-option-label\b[^>]*>(.*?)</label>',
+    re.I | re.S)
 _ASHBY_PATH = re.compile(r'data-field-path="([^"]*)"')
 _ASHBY_LABEL = re.compile(
     r'<label\b([^>]*)\bashby-application-form-question-title\b[^>]*>(.*?)</label>',
     re.I | re.S)
 _ASHBY_END = re.compile(
-    r'<div\b[^>]*\bashby-application-form-field-entry\b|'
+    r'<div\b[^>]*\bdata-field-path="|'
     r'<button\b[^>]*\bashby-application-form-submit-button\b|'
     r'<div\b[^>]*\bashby-application-form-section-container\b', re.I)
 _TAG = re.compile(r"<[^>]+>")
@@ -220,6 +226,10 @@ def _ashby_widget(segment: str, path: str) -> tuple[str, tuple[Option, ...] | No
     s = segment
     if re.search(r'<input\b[^>]*type="file"', s, re.I):
         return FILE, None
+    if "ashby-application-form-input-radio-group" in s:
+        opts = tuple(Option(_strip_tags(t), _strip_tags(t))
+                     for t in _ASHBY_RADIO_OPTION.findall(s))
+        return (RADIO if opts else UNKNOWN), (opts or None)
     if "ashby-application-form-input-yesno" in s:
         return YESNO, (Option("Yes", "yes"), Option("No", "no"))
     if re.search(r"<textarea\b", s, re.I):

@@ -179,6 +179,27 @@ class TestAshby:
         out = spec.parse_ashby_form(html)
         assert out.fields[0].kind == "unknown" and out.fields[0].required
 
+    def test_radio_and_checkbox_groups_are_read(self):
+        """Sierra, 2026-11-04. Radio and checkbox groups sit in a div with
+        data-field-path but without the field-entry class; keying on the
+        class dropped five required questions from the plan."""
+        import re
+        html = (FIXTURES / "ashby_sierra_0dfe7805_application.html").read_text(encoding="utf-8")
+        form = spec.parse_ashby_form(html)
+        paths = re.findall(r'<div\b[^>]*\bdata-field-path="([^"]+)"', html)
+        assert [f.key for f in form.fields] == paths, "every question on the page is a field"
+        assert len(form.fields) == 16
+        radios = [f for f in form.fields if f.kind == spec.RADIO]
+        assert len(radios) == 5 and all(f.required for f in radios)
+        auth = next(f for f in radios if f.label.startswith("Are you legally authorized"))
+        assert [o.label for o in auth.options] == ["Yes", "No"]
+        heard = next(f for f in radios if f.label.startswith("How did you hear"))
+        assert "Company website" in [o.label for o in heard.options]
+        langs = next(f for f in form.fields if f.label.startswith("Are you fluent"))
+        assert langs.kind == spec.MULTISELECT and not langs.required
+        location = next(f for f in form.fields if f.label == "Location")
+        assert location.kind == spec.SELECT and location.options is None
+
     def test_a_page_without_the_form_is_refused(self):
         with pytest.raises(spec.SpecError):
             spec.parse_ashby_form("<html><body>Loading…</body></html>")

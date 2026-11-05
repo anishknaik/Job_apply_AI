@@ -865,6 +865,46 @@ Three dry runs, nothing typed or clicked:
 
 So far every live form carries reCAPTCHA: review is the path, as expected.
 
+Later the same evening: the work-authorization answers split into
+`requires_sponsorship_now` / `requires_sponsorship_future` in §12 (forms ask
+both; the resolver reads the future flag when the label mentions the
+future), and `answers.yaml` gained `state_of_residence` /
+`state_abbreviation` plus the Greenhouse spellings of two self-ID answers.
+
+### The first application through the runner - Sierra, 2026-11-04
+
+`--review` on Sierra (27481), started in its own console so the window
+stayed open. Name, legal name split, email, phone, LinkedIn and the
+resume filled and read back equal. A cover letter went into the optional
+"Anything else?" box: drafted in-session, grounding passed 49/49,
+`copy_for_editing`, pasted by Anish. Anish answered the rest and submitted;
+`applied` recorded with `letter_required=false` (the box was optional, so
+`measure` does not count it).
+
+**What it found - a parser gap that hid required questions.** Ashby's
+radio and checkbox groups sit in a `data-field-path` div *without* the
+`ashby-application-form-field-entry` class (the class is on their inner
+`<fieldset>`). `spec.py` keyed on the class, so six questions - five of
+them required - were absent from the plan and the report, and the dry run
+read as "every required field planned" when it was not. With a form that
+had no bot check, the `no_blockers` condition would have passed on fields
+nobody knew existed. Fixed: every `data-field-path` div is a field; a new
+`radio` kind carries its options from the DOM, resolves by exact text, and
+fills by clicking the matching label and reading back the checked one.
+Sierra's page is now a fixture (`ashby_sierra_0dfe7805_application.html`),
+and a test asserts every `data-field-path` on it becomes a field. The live
+dry run now shows all 16 questions.
+
+**The lesson for auto-submit:** a parser that misses a widget fails
+*open*. Before the first `--auto`, a run should also count the form's
+required markers in the DOM and refuse when that number disagrees with the
+spec's - an independent check that does not share the parser's blind spots.
+Not built yet.
+
+Also learned: a review run started from a non-interactive shell closes its
+browser immediately (`input()` gets EOF). Start it with `Start-Process` or
+from a terminal; the workbench's runner holds stdin open for the same reason.
+
 ### Open
 
 - The new states are in `states.labels()`, which feeds the sheet's status
