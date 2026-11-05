@@ -504,10 +504,20 @@ def render_resume(conn, posting_id: int, variant: str | None = None,
     }
 
 
+SESSION_WRITER = "claude-mcp"
+
+
 def save_cover_letter(conn, posting_id: int, why_this_role: str,
                       primary_evidence: str, secondary_evidence: str,
-                      closing: str, root=None) -> dict[str, Any]:
+                      closing: str, root=None,
+                      model: str = SESSION_WRITER) -> dict[str, Any]:
     """Store a cover letter written by the client. Four body paragraphs only.
+
+    `model` is the writer on record. The MCP registration never passes it,
+    so a session is always `claude-mcp`; the apply session (Phase 7A) passes
+    the Gemini model that drafted, and decide.py reads that name to keep the
+    form off the auto-submit path. Provenance, not a tool parameter - like
+    advance_status's `source`.
 
     The scaffolding is assembled here, not written: the name and contact line,
     the date, `Dear <Company> Hiring Team,` and the sign-off. His seven real
@@ -558,7 +568,7 @@ def save_cover_letter(conn, posting_id: int, why_this_role: str,
     path = letters.save_letter(text, folder / "cover_letter.md")
     document_id = db.insert_document(conn, posting_id, "cover_letter",
                                      generated_path=str(path),
-                                     model="claude-mcp", content=text)
+                                     model=model, content=text)
     conn.commit()
 
     stored = conn.execute("SELECT revision FROM documents WHERE id = ?",
@@ -597,8 +607,11 @@ def save_cover_letter(conn, posting_id: int, why_this_role: str,
 
 
 def save_short_answer(conn, posting_id: int, question: str,
-                      answer: str) -> dict[str, Any]:
+                      answer: str, model: str = SESSION_WRITER) -> dict[str, Any]:
     """Store the client's answer to one open-ended question on a form.
+
+    `model` is the writer on record, as on save_cover_letter: never passed
+    by the MCP registration, passed by the apply session for a Gemini draft.
 
     §6.1's "draft, then ground" class: free prose making claims about him, so
     it takes the letter's discipline without the letter's scaffolding. No file
@@ -633,7 +646,7 @@ def save_short_answer(conn, posting_id: int, question: str,
             f"Rewrite it and call again - nothing was saved.")
 
     document_id = db.insert_document(conn, posting_id, _answers.DOC_TYPE,
-                                     question=key, model="claude-mcp",
+                                     question=key, model=model,
                                      content=text)
     conn.commit()
 

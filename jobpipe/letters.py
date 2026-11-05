@@ -156,6 +156,12 @@ reads as generated."""
 TARGET_WORDS = 390
 MIN_WORDS = 340
 
+# A ceiling on one draft's output. Four paragraphs are a few hundred tokens;
+# this stops a model that runs away (the grounding checker once did, HANDOFF
+# §8) from spending on the prose model. A provider or double that knows no
+# ceilings ignores it through the base score_capped.
+MAX_OUTPUT_TOKENS = 4096
+
 
 class LetterError(RuntimeError):
     """Generation failed or produced something unusable."""
@@ -467,11 +473,17 @@ def generate_letter(provider: ScoringProvider, bank: Bank, row,
 
         with metering.for_posting(row), metering.tagged(
                 task_type="cover_letter", agent="letter_writer"):
-            response = provider.score(model=model, system_prompt=system_prompt,
-                                      user_text=text_in, schema=LETTER_SCHEMA)
+            response = provider.score_capped(
+                max_output_tokens=MAX_OUTPUT_TOKENS, model=model,
+                system_prompt=system_prompt, user_text=text_in,
+                schema=LETTER_SCHEMA)
         if response.refused:
             raise LetterError(
                 f"letter refused by {model}: {response.refusal_reason}")
+        if response.truncated:
+            raise LetterError(
+                f"{model} ran past the {MAX_OUTPUT_TOKENS}-token ceiling "
+                f"drafting the letter; nothing usable came back")
 
         payload = json.loads(response.text or "")
         body = body_text(payload)
