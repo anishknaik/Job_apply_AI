@@ -28,6 +28,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 
 from . import metering
@@ -38,6 +39,28 @@ log = logging.getLogger(__name__)
 
 VERDICTS = ("supported", "unsupported", "partial")
 SUBJECTS = ("candidate", "employer")
+
+# A ceiling on the checker's output. On 2026-11-05 Flash Lite looped on one
+# Chime draft and produced ~285k characters of claims, identically twice,
+# with the JSON cut off at the end; a ~400-word letter yields a few dozen
+# claims and a few thousand tokens. The ceiling is generous for the honest
+# case and turns the loop into a plain, named failure instead of a parse
+# error on a truncated object. Overridable for a longer document; never 0.
+DEFAULT_MAX_OUTPUT_TOKENS = 8192
+
+
+def max_output_tokens() -> int:
+    raw = os.environ.get("JOBPIPE_GROUNDING_MAX_OUTPUT_TOKENS", "").strip()
+    try:
+        value = int(raw) if raw else DEFAULT_MAX_OUTPUT_TOKENS
+    except ValueError:
+        value = DEFAULT_MAX_OUTPUT_TOKENS
+    return value if value > 0 else DEFAULT_MAX_OUTPUT_TOKENS
+
+
+class GroundingLoopError(RuntimeError):
+    """The checker ran away: its output hit the ceiling or was not the one
+    JSON object asked for. Nothing was judged; the draft stays uncleared."""
 
 GROUNDING_SCHEMA = {
     "type": "object",
@@ -261,15 +284,31 @@ def check(provider: ScoringProvider, bank: Bank, letter_text: str,
             f"=== {k['heading']} ===\n{letter_text}")
 
     # The posting tag comes from the caller, which holds the row.
+    cap = max_output_tokens()
     with metering.tagged(task_type="grounding_check",
                          agent="grounding_checker", transaction_name=kind):
-        response = provider.score(model=model, system_prompt=system_prompt,
-                                  user_text=user, schema=schema_for(kind))
+        response = provider.score_capped(
+            max_output_tokens=cap, model=model, system_prompt=system_prompt,
+            user_text=user, schema=schema_for(kind))
     if response.refused:
         raise RuntimeError(
             f"grounding check refused by {model}: {response.refusal_reason}")
 
-    payload = json.loads(response.text or "")
+    text = response.text or ""
+    if response.truncated:
+        raise GroundingLoopError(
+            f"the checker looped: {model} hit the {cap}-token output ceiling "
+            f"({len(text):,} characters of claims, cut off). Nothing was "
+            f"judged. Reword the draft and check again; if it keeps "
+            f"happening, raise JOBPIPE_GROUNDING_MAX_OUTPUT_TOKENS "
+            f"deliberately.")
+    try:
+        payload = json.loads(text)
+    except ValueError as exc:
+        raise GroundingLoopError(
+            f"the checker did not return one JSON object ({len(text):,} "
+            f"characters, {exc}). Nothing was judged; the draft stays "
+            f"uncleared.") from exc
     claims = payload.get("claims") or []
     if not claims:
         # An empty result is indistinguishable from a clean letter, and would

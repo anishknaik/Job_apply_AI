@@ -146,6 +146,19 @@ class VertexGeminiProvider(ScoringProvider):
 
     def score(self, *, model: str, system_prompt: str, user_text: str,
               schema: dict) -> ProviderResponse:
+        return self._generate(model=model, system_prompt=system_prompt,
+                              user_text=user_text, schema=schema)
+
+    def score_capped(self, *, max_output_tokens: int, model: str,
+                     system_prompt: str, user_text: str,
+                     schema: dict) -> ProviderResponse:
+        return self._generate(model=model, system_prompt=system_prompt,
+                              user_text=user_text, schema=schema,
+                              max_output_tokens=max_output_tokens)
+
+    def _generate(self, *, model: str, system_prompt: str, user_text: str,
+                  schema: dict,
+                  max_output_tokens: int | None = None) -> ProviderResponse:
         from google.genai import types
 
         config = types.GenerateContentConfig(
@@ -156,6 +169,8 @@ class VertexGeminiProvider(ScoringProvider):
             response_mime_type="application/json",
             response_schema=schema,
         )
+        if max_output_tokens is not None:
+            config.max_output_tokens = max_output_tokens
 
         # Off where the model allows it, not left at whatever the default is:
         # thinking output is a distinct and more expensive SKU, and scoring
@@ -187,7 +202,17 @@ class VertexGeminiProvider(ScoringProvider):
             input_tokens=getattr(usage, "prompt_token_count", 0) or 0,
             output_tokens=getattr(usage, "candidates_token_count", 0) or 0,
             cached_tokens=getattr(usage, "cached_content_token_count", 0) or 0,
+            truncated=_hit_ceiling(response),
         )
+
+
+def _hit_ceiling(response) -> bool:
+    """MAX_TOKENS on any candidate: the output was cut off at the ceiling."""
+    for candidate in getattr(response, "candidates", None) or []:
+        reason = getattr(candidate, "finish_reason", None)
+        if reason is not None and getattr(reason, "name", str(reason)) == "MAX_TOKENS":
+            return True
+    return False
 
 
 def _refusal_reason(response) -> str:

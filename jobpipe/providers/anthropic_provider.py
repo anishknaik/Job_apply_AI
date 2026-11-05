@@ -71,9 +71,21 @@ class AnthropicProvider(ScoringProvider):
 
     def score(self, *, model: str, system_prompt: str, user_text: str,
               schema: dict) -> ProviderResponse:
+        return self._generate(model=model, system_prompt=system_prompt,
+                              user_text=user_text, schema=schema)
+
+    def score_capped(self, *, max_output_tokens: int, model: str,
+                     system_prompt: str, user_text: str,
+                     schema: dict) -> ProviderResponse:
+        return self._generate(model=model, system_prompt=system_prompt,
+                              user_text=user_text, schema=schema,
+                              max_tokens=max_output_tokens)
+
+    def _generate(self, *, model: str, system_prompt: str, user_text: str,
+                  schema: dict, max_tokens: int = 1024) -> ProviderResponse:
         response = self._client.messages.create(
             model=model,
-            max_tokens=1024,
+            max_tokens=max_tokens,
             system=self._system_blocks(system_prompt),
             # No temperature — see module docstring.
             thinking={"type": "disabled"},
@@ -91,4 +103,5 @@ class AnthropicProvider(ScoringProvider):
             refused=response.stop_reason == "refusal",
             refusal_reason=("safety classifier declined"
                             if response.stop_reason == "refusal" else ""),
+            truncated=response.stop_reason == "max_tokens",
         )

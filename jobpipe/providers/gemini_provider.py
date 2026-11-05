@@ -83,6 +83,26 @@ class GeminiProvider(ScoringProvider):
 
     def score(self, *, model: str, system_prompt: str, user_text: str,
               schema: dict) -> ProviderResponse:
+        return self._generate(model=model, system_prompt=system_prompt,
+                              user_text=user_text, schema=schema)
+
+    def score_capped(self, *, max_output_tokens: int, model: str,
+                     system_prompt: str, user_text: str,
+                     schema: dict) -> ProviderResponse:
+        return self._generate(model=model, system_prompt=system_prompt,
+                              user_text=user_text, schema=schema,
+                              max_output_tokens=max_output_tokens)
+
+    def _generate(self, *, model: str, system_prompt: str, user_text: str,
+                  schema: dict,
+                  max_output_tokens: int | None = None) -> ProviderResponse:
+        generation_config: dict = {"temperature": 0}
+        if max_output_tokens is not None:
+            # The SDK's GenerationConfig names this field; NOT verified
+            # against the live Developer API (2026-11-05, the cloud has no
+            # key). Vertex is the backend in use, and its field is verified
+            # by the SDK's own model.
+            generation_config["max_output_tokens"] = max_output_tokens
         response = self._client.interactions.create(
             model=model,
             # The profile sits here, unchanged on every call, which is what
@@ -92,7 +112,7 @@ class GeminiProvider(ScoringProvider):
             # response_format is the schema itself; `type` is a JSON-schema
             # type. Verified against the live API.
             response_format=schema,
-            generation_config={"temperature": 0},
+            generation_config=generation_config,
         )
 
         usage = getattr(response, "usage", None)

@@ -31,6 +31,12 @@ class ProviderResponse:
     cached_tokens: int = 0
     refused: bool = False
     refusal_reason: str = ""
+    # The model hit the output ceiling and `text` is cut off. Not a refusal
+    # (a parse failure downstream must stay visible as one), but a caller
+    # that asked for a ceiling needs to know it was reached: the grounding
+    # check once produced ~285k characters of claims (HANDOFF §8), and a
+    # truncated JSON object looks like any other parse error without this.
+    truncated: bool = False
 
 
 class ProviderError(RuntimeError):
@@ -63,3 +69,19 @@ class ScoringProvider(ABC):
     def score(self, *, model: str, system_prompt: str, user_text: str,
               schema: dict) -> ProviderResponse:
         """Run one scoring call constrained to `schema`, deterministically."""
+
+    def score_capped(self, *, max_output_tokens: int, model: str,
+                     system_prompt: str, user_text: str,
+                     schema: dict) -> ProviderResponse:
+        """`score`, with a ceiling on the output.
+
+        The grounding check needs one (2026-11-05: Flash Lite looped and
+        produced ~285k characters of claims, identically twice). The ceiling
+        is a separate method rather than a parameter on `score` so that a
+        provider - or a test double - that knows nothing of ceilings still
+        works: this default ignores the cap and calls `score`. The real
+        providers override it and set `truncated` on the response when the
+        ceiling was hit, which is what the caller checks for.
+        """
+        return self.score(model=model, system_prompt=system_prompt,
+                          user_text=user_text, schema=schema)
