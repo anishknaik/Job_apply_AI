@@ -200,6 +200,19 @@ class TestAshby:
         location = next(f for f in form.fields if f.label == "Location")
         assert location.kind == spec.SELECT and location.options is None
 
+    def test_script_source_is_not_the_form(self):
+        """A page whose inline script carries the field markup as a string
+        (the fake ATS builds itself that way) must not yield every field
+        twice."""
+        entry = ('<div class="ashby-application-form-field-entry" data-field-path="_systemfield_name">'
+                 '<label class="_required_x ashby-application-form-question-title" for="_systemfield_name">Name</label>'
+                 '<input id="_systemfield_name" name="_systemfield_name"></div>')
+        html = (f"<html><body>{entry}<button class='ashby-application-form-submit-button'>Go</button>"
+                f"<script>var s = '{entry}';</script></body></html>")
+        out = spec.parse_ashby_form(html)
+        assert [f.key for f in out.fields] == ["_systemfield_name"]
+        assert out.fields[0].kind == "text", "an <input> with no type is text"
+
     def test_a_page_without_the_form_is_refused(self):
         with pytest.raises(spec.SpecError):
             spec.parse_ashby_form("<html><body>Loading…</body></html>")

@@ -216,6 +216,7 @@ _ASHBY_END = re.compile(
     r'<button\b[^>]*\bashby-application-form-submit-button\b|'
     r'<div\b[^>]*\bashby-application-form-section-container\b', re.I)
 _TAG = re.compile(r"<[^>]+>")
+_SCRIPT_BLOCK = re.compile(r"<script\b.*?</script>", re.I | re.S)
 
 
 def _strip_tags(text: str) -> str:
@@ -250,6 +251,8 @@ def _ashby_widget(segment: str, path: str) -> tuple[str, tuple[Option, ...] | No
         if kind == TEXT and path == "_systemfield_phone":
             kind = PHONE
         return kind, None
+    if re.search(r"<input\b", s, re.I):
+        return TEXT, None             # an <input> with no type is a text input
     return UNKNOWN, None
 
 
@@ -261,6 +264,10 @@ def parse_ashby_form(html_text: str, app_data: dict | None = None,
     title, the company and the reCAPTCHA site key; the form itself comes
     from the field-entry divs.
     """
+    # Script source is not the form: an inline script that builds or
+    # hydrates the page can carry the same markup as text, and would read
+    # as a second copy of every field.
+    html_text = _SCRIPT_BLOCK.sub(" ", html_text or "")
     starts = [m.start() for m in _ASHBY_ENTRY.finditer(html_text)]
     if not starts:
         raise SpecError("no ashby-application-form-field-entry in the page")

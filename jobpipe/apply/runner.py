@@ -62,6 +62,7 @@ class RunOutcome:
     error: str | None = None
     form_url: str | None = None
     browser: object = None          # set only with keep_open; the caller closes it
+    review: object = None           # review.ReviewContext, set with keep_open
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +352,13 @@ def _drive(conn, row, posting_id, ats, url, mode, config, outcome, shots,
 
         report = _fill.fill_form(page, form, resolution, screenshot_dir=shots, tag="filled")
         outcome.screenshots.extend(report.screenshots)
+        from .review import ReviewContext
+        outcome.review = ReviewContext(
+            page=page, ats=ats, form=form, resolution=resolution,
+            company=row["company"] or form.company, posting_id=posting_id, run_dir=shots,
+            learned_store=sources.learned if sources.learned is not None else _learned.Store(),
+            learned_path=(sources.learned.path if sources.learned is not None and sources.learned.path
+                          else _learned.DEFAULT_PATH))
         signals_now = tuple(_fill.collect_signals(page).kinds)
         decision = _decide.decide(_decide.Inputs(
             config=config, mode=mode, resolution=resolution,

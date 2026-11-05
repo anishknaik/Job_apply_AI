@@ -13,6 +13,9 @@
   var q = new URLSearchParams(location.search);
   var ats = q.get('ats') || 'greenhouse';
   var outcome = q.get('outcome') || 'confirm';
+  // ?auto_after=<ms>: the page submits itself after that long, standing in
+  // for Anish clicking submit during a review wait.
+  var autoAfter = parseInt(q.get('auto_after') || '0', 10);
   var stage = document.getElementById('stage');
   window.__submits = 0;
   if (ats === 'greenhouse') {
@@ -23,10 +26,19 @@
   } else {
     stage.innerHTML = '<div class="ashby-application-form-container">' +
       '<div class="ashby-application-form-field-entry" data-field-path="_systemfield_name">' +
+      '<label class="_required_x ashby-application-form-question-title" for="_systemfield_name">Name</label>' +
       '<input id="_systemfield_name" name="_systemfield_name" value="Jane"></div>' +
+      // A radio group the runner has no source for: what Anish chooses here
+      // is what the review wait remembers.
+      '<div data-field-path="r-heard"><fieldset class="ashby-application-form-input-radio-group">' +
+      '<label class="_required_x ashby-application-form-question-title" for="r-heard">How did you hear about Fake?</label>' +
+      '<div class="ashby-application-form-input-radio-group-option"><span><input type="radio" id="r-heard-0" name="r-heard"></span><label for="r-heard-0" class="ashby-application-form-input-radio-group-option-label">Blog or news article</label></div>' +
+      '<div class="ashby-application-form-input-radio-group-option"><span><input type="radio" id="r-heard-1" name="r-heard"></span><label for="r-heard-1" class="ashby-application-form-input-radio-group-option-label">Company website</label></div>' +
+      '</fieldset></div>' +
       '<button class="ashby-application-form-submit-button"><span>Submit Application</span></button></div>';
-    stage.querySelector('button').addEventListener('click', clicked);
+    stage.querySelector('button.ashby-application-form-submit-button').addEventListener('click', clicked);
   }
+  if (autoAfter > 0) { setTimeout(clicked, autoAfter); }
   function clicked() {
     window.__submits += 1;
     setTimeout(function () {
@@ -48,6 +60,10 @@
         var word = 'recap' + 'tcha';
         stage.insertAdjacentHTML('afterbegin', '<div id="chall' + 'enge"><p>Please verify you are ' + 'human to continue.</p>' +
           '<ifr' + 'ame src="' + word + '/api2/bframe?k=x" title="' + word + ' box"></ifr' + 'ame></div>');
+      }
+      else if (outcome === 'gone') {
+        // The form leaves and nothing recognisable replaces it.
+        stage.innerHTML = '<p>Loading…</p>';
       }
       // timeout: nothing happens, ever.
     }, 300);

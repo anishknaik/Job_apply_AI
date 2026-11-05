@@ -73,11 +73,14 @@ def main(argv: list[str] | None = None) -> int:
 
     print(runner.report_text(outcome))
     if outcome.browser is not None:
+        from . import review
         try:
-            input("\nThe browser stays open for review. Press Enter here to close it. ")
-        except EOFError:
-            pass
-        outcome.browser.close()
+            if outcome.review is not None:
+                result = review.wait(outcome.review)
+                print(f"review ended: {result.ended_by}"
+                      + (", form gone" if result.form_gone else ", form still on the page"))
+        finally:
+            outcome.browser.close()
     return 0 if outcome.error is None else 1
 
 
