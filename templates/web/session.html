@@ -46,7 +46,7 @@
       <td>{{ r.title }}</td>
       <td><span class="badge {% if r.outcome == 'applied' %}green{% elif r.outcome in ('error', 'closed') %}red{% elif r.outcome in ('ready_for_review', 'needs_variant') %}amber{% endif %}">{{ r.outcome }}</span></td>
       <td><span class="badge{% if r.status == 'applied' %} green{% endif %}">{{ r.status or 'untracked' }}</span></td>
-      <td class="small">{{ r.note }}</td>
+      <td class="small">{% if r.resume and r.resume.flagged %}<span class="badge amber">resume flag</span> {% endif %}{{ r.note }}</td>
     </tr>
     {% endfor %}
     </tbody>
@@ -62,9 +62,10 @@
     <p class="small"><strong>Resume</strong> · <span class="badge">{{ r.resume.variant }}</span> {{ r.resume.why }} · {{ r.resume.pages }} page at {{ r.resume.font_pt }}pt</p>
     <div class="dropped"><strong>Dropped to fit one page:</strong> {% if r.resume.dropped %}{{ r.resume.dropped | join(', ') }}{% else %}nothing{% endif %}
       {% if r.resume.flagged %}<div class="small" style="margin-top: 6px"><strong>Flagged — the posting names what these bullets carry:</strong>
-        <ul class="plain">{% for f in r.resume.flagged %}<li>{{ f.bullet }} <span class="muted">({{ f.skills | join(', ') }})</span></li>{% endfor %}</ul>
+        <ul class="plain">{% for f in r.resume.flagged %}<li>{{ f.bullet }} <span class="muted">({% for s in f.skills %}{{ s }}{% if f.mentions and f.mentions[s] > 1 %} ×{{ f.mentions[s] }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %})</span></li>{% endfor %}</ul>
         Stop and re-render from the posting page if one of these matters; the fix is the variant's ordering or a skills tag, never a per-application tweak.</div>{% endif %}
     </div>
+    {% if r.resume.posting_skills %}<p class="hint">Posting vocabulary (bank tags it names, promoted before the cut): {% for s, n in r.resume.posting_skills.items() %}{{ s }}{% if n > 1 %} ×{{ n }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
     {% endif %}
   {% endif %}
   {% if r.drafts %}

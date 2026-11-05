@@ -72,10 +72,10 @@
           {% for v in variants %}<option value="{{ v }}" {% if v == suggested %}selected{% endif %}>{{ v }}</option>{% endfor %}
         </select>
       </label>
-      <label>posting skills <input name="posting_skills" placeholder="comma-separated, e.g. pytorch, vllm" size="28"></label>
+      <label>posting skills <input name="posting_skills" placeholder="comma-separated, e.g. pytorch, vllm" size="28" value="{{ vocabulary | join(', ') }}"></label>
       <button class="primary">Render resume</button>
     </form>
-    <p class="hint">Grid suggests <strong>{{ suggested }}</strong>: {{ why }}. Skills promote a matching bullet up to four slots before the one-page loop cuts it.</p>
+    <p class="hint">Grid suggests <strong>{{ suggested }}</strong>: {{ why }}. Skills promote a matching bullet up to four slots before the one-page loop cuts it.{% if vocabulary %} Prefilled with the bank's tags the posting names, as an apply session renders it.{% endif %}</p>
   </section>
 
   {# ---- Cover letter ------------------------------------------------- #}

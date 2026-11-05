@@ -9,8 +9,12 @@ is the one place they run unasked-per-posting. For each posting, in order:
 
   1. liveness  - `runner.inspect` opens the form headless; gone -> the
                  posting is recorded `discarded` (source=agent) and skipped
-  2. resume    - `render_resume` from the grid variant; the drop list is
-                 kept for the panel. No variant -> skipped, named
+  2. resume    - `render_resume` from the grid variant, with the bank's
+                 skill tags the posting names as its vocabulary
+                 (bullets.posting_vocabulary), so relevance promotes before
+                 the one-page loop cuts. A dropped bullet carrying one of
+                 those tags is flagged on the panel - flagged, not skipped.
+                 No variant -> skipped, named
   3. drafts    - for each open-ended question the form asks with no stored,
                  grounding-passed answer, and for the letter when the form
                  has a letter field or an "anything else" box, Gemini
@@ -482,27 +486,48 @@ class Session:
         return None
 
     def _resume(self, conn, rec: PostingRecord) -> bool:
+        vocabulary = self._posting_skills(conn, rec)
         try:
             out = self.t.render_resume(conn, rec.id, variant=None,
-                                       posting_skills=self._posting_skills(conn, rec))
+                                       posting_skills=list(vocabulary))
         except ToolError as exc:
-            rec.resume = {"error": str(exc)}
+            rec.resume = {"error": str(exc), "posting_skills": vocabulary}
             rec.outcome, rec.note = NEEDS_VARIANT, ("no variant resolves from the grid; "
                                                    "render one from the posting page")
             return False
+        flagged = self._flagged(out["dropped"], vocabulary)
         rec.resume = {"variant": out["variant"], "why": out["why"], "path": out["path"],
                       "pages": out["pages"], "font_pt": out["font_pt"],
                       "rendered": out["rendered"], "dropped": out["dropped"],
-                      "flagged": self._flagged(out["dropped"], rec)}
+                      "posting_skills": vocabulary, "flagged": flagged}
+        # Flagged, not skipped (PHASE7_PLAN §2): the form is still filled, the
+        # panel marks the row, and he decides in review whether to stop and
+        # re-render from the posting page.
         return True
 
-    def _posting_skills(self, conn, rec: PostingRecord) -> list[str]:
-        """Filled in by slice 5: the bank's skill tags the posting names."""
-        return []
+    def _posting_skills(self, conn, rec: PostingRecord) -> dict[str, int]:
+        """The bank's specific skill tags the posting's title and text name,
+        with counts, most-named first. Fed to render_resume so its relevance
+        promotion runs, and kept for the panel. A bank that will not load
+        renders without it (render_resume then fails on the same bank and
+        says why), rather than stopping here."""
+        from ..bullets import posting_vocabulary
+        row = db.get_posting(conn, rec.id)
+        if row is None:
+            return {}
+        try:
+            bank = self.bank()
+        except Exception as exc:                             # noqa: BLE001
+            log.warning("posting %s: no vocabulary, bank not loaded (%s)", rec.id, exc)
+            return {}
+        return posting_vocabulary(bank, f"{row['title'] or ''}\n{row['description'] or ''}")
 
-    def _flagged(self, dropped: list[str], rec: PostingRecord) -> list[dict]:
-        """Filled in by slice 5: dropped bullets the posting asked for."""
-        return []
+    def _flagged(self, dropped: list[str], vocabulary: dict[str, int]) -> list[dict]:
+        """Dropped bullets carrying a skill the posting names."""
+        from ..bullets import flag_dropped
+        if not dropped or not vocabulary:
+            return []
+        return flag_dropped(self.bank(), dropped, vocabulary)
 
     # -- drafts ----------------------------------------------------------------
 

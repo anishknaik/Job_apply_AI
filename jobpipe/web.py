@@ -287,6 +287,16 @@ def create_app(db_path: str | None = None, session_dir: Path | None = None) -> F
         score = detail["score"] or {}
         suggested, why = variants.resolve(score.get("archetype"),
                                           score.get("domain"))
+        # The vocabulary an apply session renders with, prefilled so a
+        # re-render from here starts where the session did. Free; a bank
+        # that will not load leaves the box empty.
+        try:
+            from .bullets import load_bank, posting_vocabulary
+            p = detail["posting"]
+            vocabulary = list(posting_vocabulary(
+                load_bank(), f"{p.get('title') or ''}\n{p.get('description') or ''}"))
+        except Exception:                                    # noqa: BLE001
+            vocabulary = []
         return page(
             request, "posting.html",
             p=detail["posting"], score=detail["score"],
@@ -298,7 +308,7 @@ def create_app(db_path: str | None = None, session_dir: Path | None = None) -> F
             files={name: (folder / name).exists() for name in SERVABLE},
             folder=folder,
             variants=sorted(variants.ORDERINGS),
-            suggested=suggested, why=why,
+            suggested=suggested, why=why, vocabulary=vocabulary,
             run=_run_view(last_run),
             run_alive=_alive(posting_id),
             run_modes=RUN_MODES,

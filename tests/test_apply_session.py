@@ -389,6 +389,75 @@ class TestOnePostingEndToEnd:
         assert rec.outcome == "skipped" and "already applied" in rec.note and d.calls == []
 
 
+def remittance_bank():
+    """A bank whose gt-remittance - the bullet the render double drops -
+    carries postgresql, and one generic tag."""
+    def b(bid, *skills):
+        return Bullet(id=bid, role="r1", text=f"{bid}.", source="profile §1",
+                      archetypes=("swe_generalist",), skills=skills, metrics=False, rank=1)
+    return Bank(meta={"name": "Jane Example"}, education={}, roles={"r1": {}},
+                bullets={"gt-remittance": b("gt-remittance", "postgresql", "transactions"),
+                         "a": b("a", "llm", "pipelines")}, skills={})
+
+
+def describe(conn, pid, text):
+    conn.execute("UPDATE postings SET description = ? WHERE id = ?", (text, pid))
+    conn.commit()
+
+
+class TestTheResumeStep:
+    """Slice 5: the vocabulary reaches render_resume, and a dropped bullet the
+    posting asked for is flagged - and only flagged."""
+
+    def test_the_banks_tags_the_posting_names_reach_render_resume(self, db_path, conn, tmp_path):
+        pid = seed(conn)
+        describe(conn, pid, "<p>LLM work on Postgres. PostgreSQL daily. Transactions.</p>")
+        d = Doubles()
+        rec = make(db_path, tmp_path, [pid], d, bank_loader=remittance_bank).run().postings[0]
+        render = next(c for c in d.calls if c[0] == "render")
+        assert render[3] == ["postgresql", "llm"], "most-named first, generic tags left out"
+        assert rec.resume["posting_skills"] == {"postgresql": 2, "llm": 1}
+
+    def test_a_dropped_bullet_the_posting_names_is_flagged_not_skipped(self, db_path, conn, tmp_path):
+        pid = seed(conn)
+        describe(conn, pid, "Payments on PostgreSQL.")
+        d = Doubles()
+        rec = make(db_path, tmp_path, [pid], d, bank_loader=remittance_bank).run().postings[0]
+        assert rec.resume["dropped"] == ["gt-remittance"]
+        assert rec.resume["flagged"] == [{"bullet": "gt-remittance", "skills": ["postgresql"],
+                                          "mentions": {"postgresql": 1}}]
+        assert rec.outcome == "applied" and "run" in names(d), "flagged, never skipped"
+
+    def test_a_generic_match_flags_nothing(self, db_path, conn, tmp_path):
+        pid = seed(conn)
+        describe(conn, pid, "Transactions, pipelines, ownership.")
+        d = Doubles()
+        rec = make(db_path, tmp_path, [pid], d, bank_loader=remittance_bank).run().postings[0]
+        assert rec.resume["flagged"] == [] and rec.resume["posting_skills"] == {}
+
+    def test_a_bank_that_will_not_load_renders_without_a_vocabulary(self, db_path, conn, tmp_path):
+        def broken():
+            raise FileNotFoundError("config/bullets.yaml")
+        pid = seed(conn)
+        d = Doubles()
+        rec = make(db_path, tmp_path, [pid], d, bank_loader=broken).run().postings[0]
+        render = next(c for c in d.calls if c[0] == "render")
+        assert render[3] == [] and rec.resume["flagged"] == []
+
+    def test_the_panel_shows_the_flag_and_the_vocabulary(self, db_path, conn, tmp_path):
+        from fastapi.templating import Jinja2Templates
+        pid = seed(conn)
+        describe(conn, pid, "PostgreSQL, PostgreSQL.")
+        make(db_path, tmp_path, [pid], Doubles(), bank_loader=remittance_bank).run()
+        state = json.loads((tmp_path / "session" / "state.json").read_text(encoding="utf-8"))
+        root = Path(__file__).resolve().parent.parent / "templates" / "web"
+        html = Jinja2Templates(directory=str(root)).get_template("session.html").render(
+            state=state, alive=False, queue=[], cap=5, days=2, draft_model="m", refresh=False,
+            request=None)
+        assert "resume flag" in html and "gt-remittance" in html
+        assert "postgresql ×2" in html
+
+
 class TestTheCap:
     def test_drafting_stops_at_the_cap_and_the_form_is_still_filled(self, db_path, conn, tmp_path):
         a, b = seed(conn, "A", "1"), seed(conn, "B", "2")

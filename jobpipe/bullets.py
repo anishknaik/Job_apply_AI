@@ -247,3 +247,102 @@ def match_score(bullet: Bullet, vocabulary) -> int:
     """
     wanted = {_key(v) for v in vocabulary if v and str(v).strip()}
     return sum(1 for s in bullet.skills if _key(s) in wanted)
+
+
+# ---------------------------------------------------------------------------
+# A posting's vocabulary, read deterministically (Phase 7A slice 5)
+# ---------------------------------------------------------------------------
+#
+# Under MCP a session names `posting_skills` after reading the posting. The
+# apply session renders unattended, so the vocabulary is read from the text
+# instead: the bank's own `skills` tags that the posting names. Only the
+# bank's tags, because `match_score` compares against nothing else - a term
+# no bullet carries could never promote one.
+#
+# Tags the bank uses as ordinary English ("testing", "ownership",
+# "performance") appear in nearly every posting, so a match on them says
+# nothing about what THIS posting asks for. They are left out of the
+# vocabulary entirely - neither promoting a bullet nor flagging one - so a
+# drop flag means a specific technology or method the posting names.
+# Add to this set, not to a posting, when a tag turns out to be noise.
+GENERIC_TAGS = frozenset({
+    "backend", "client_delivery", "end_to_end", "evaluation", "founding",
+    "infrastructure", "integration", "ownership", "performance", "pipelines",
+    "prototyping", "regression", "routing", "scoping", "scoring",
+    "stakeholder_communication", "startup", "testing", "tracking",
+    "transactions",
+})
+
+# Other spellings postings use for a tag. A tag's own forms - its parts
+# joined by a space, a hyphen or nothing, with an optional plural - are
+# matched without listing them here.
+TAG_ALIASES = {
+    "aws_bedrock": ("bedrock",),
+    "aws_sagemaker": ("sagemaker",),
+    "fine_tuning": ("fine-tune", "fine tune", "finetune"),
+    "huggingface": ("hugging face",),
+    "kubernetes": ("k8s",),
+    "llm": ("large language model",),
+    "mcp": ("model context protocol",),
+    "postgresql": ("postgres",),
+    "rag": ("retrieval augmented generation", "retrieval-augmented generation"),
+    "rest_api": ("restful",),
+    "scikit_learn": ("sklearn",),
+    "tool_use": ("tool calling", "function calling"),
+    "vector_database": ("vector db", "vector store"),
+}
+
+_EDGE = r"[a-z0-9+#]"
+
+
+def _tag_pattern(tag: str):
+    import re
+    parts = [re.escape(p) for p in str(tag).lower().split("_") if p]
+    forms = [r"[\s\-]?".join(parts)]
+    forms += [re.escape(a.lower()) for a in TAG_ALIASES.get(tag, ())]
+    return re.compile(rf"(?<!{_EDGE})(?:{'|'.join(forms)})(?:e?s)?(?!{_EDGE})")
+
+
+def _plain_text(text: str | None) -> str:
+    """Posting text with markup removed: some boards store HTML."""
+    import html
+    import re
+    text = re.sub(r"<[^>]+>", " ", text or "")
+    # \s is Unicode-aware, so &nbsp; (U+00A0) folds to a space here and a
+    # spaced alias like "retrieval augmented generation" still matches.
+    return re.sub(r"\s+", " ", html.unescape(text)).lower()
+
+
+def posting_vocabulary(bank: Bank, text: str | None) -> dict[str, int]:
+    """The bank's specific skill tags this posting names, with how often.
+
+    Most-named first. Deterministic and free: a word-boundary match per tag,
+    over the posting's own text, which stays data - nothing here acts on it.
+    """
+    plain = _plain_text(text)
+    tags = sorted({s for b in bank.bullets.values() for s in b.skills}
+                  - GENERIC_TAGS)
+    counts = {}
+    for tag in tags:
+        n = len(_tag_pattern(tag).findall(plain))
+        if n:
+            counts[tag] = n
+    return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def flag_dropped(bank: Bank, dropped, vocabulary: dict[str, int]) -> list[dict]:
+    """Dropped bullets carrying a tag the posting names - CLAUDE.md's
+    "a concrete defect". Most-named first; an unknown id is ignored, since
+    the drop list came from this bank's own render."""
+    flags = []
+    for bid in dropped or []:
+        bullet = bank.bullets.get(bid)
+        if bullet is None:
+            continue
+        hits = sorted({s for s in bullet.skills if s in vocabulary},
+                      key=lambda s: (-vocabulary[s], s))
+        if hits:
+            flags.append({"bullet": bid, "skills": hits,
+                          "mentions": {s: vocabulary[s] for s in hits}})
+    flags.sort(key=lambda f: -sum(f["mentions"].values()))
+    return flags
