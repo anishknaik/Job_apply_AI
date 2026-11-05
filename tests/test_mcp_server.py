@@ -711,6 +711,9 @@ class TestCheckGrounding:
         ok = True
         accuracy = 1.0
         problems: list = []
+        # GroundingResult carries its token counts since Phase 7A slice 3,
+        # and check_grounding returns them for the session's cost estimate.
+        usage = {"input": 5_000, "output": 300, "cached": 0}
 
         def report(self):
             return "grounding OK - 1 claim(s) all supported"
