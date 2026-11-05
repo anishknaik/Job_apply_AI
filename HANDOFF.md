@@ -1034,6 +1034,41 @@ Still open from these runs:
 Checks 2-4 above still stand (an Ashby submit through the wait, a learned
 answer reused, the required check clean on both ATSes).
 
+### 2026-11-05, later: check 2 (Ashby), the sheet, two Stage A rules
+
+**Check 2, mostly done.** Deepgram, People AI & Automation Engineer (18642,
+Ashby): review mode, Anish submitted, verdict `confirmed` from Ashby's
+success box, `applied` recorded by the runner within a second - with a
+reCAPTCHA iframe still on the confirmation page, which is why a leftover
+challenge signal is not read as failure. Not exercised: learning on Ashby
+(that form held only profile and self-ID questions). The required check
+came back clean on four live Ashby pages.
+
+**The sheet now shows every application.** It added rows only from the
+ranked top 25, so an application outside it (Deepgram) never got a row.
+`cli sync` now also writes every posting with a status other than
+`not_applied`, whatever its rank, score or age (`db.get_tracked_rows`).
+Verified in the real sheet: Deepgram on the roles tab, status Applied.
+
+**Two Stage A rules**, after the scorer rated postings 9/10 that one line
+of the posting ruled out (`config/filters.yaml` 7b, `jobpipe/filters.py`):
+- `graduation_window`: a new-grad window that leaves out a May 2025
+  graduate ("graduating between December 2026 and July 2027", "within the
+  last 6 months"). "Graduating by <date>" is deliberately not matched.
+- `location_remote_abroad`: a bare "Remote" beside a non-US place ("London;
+  Remote") - Harvey's form then asked to be based in London. A US city or
+  a US state token keeps the posting.
+Audited before enabling: 27 previously passing postings removed, every one
+checked by hand; two first-draft false positives (Nuro's "graduating by",
+Luma's "Redwood City, CA") were fixed before the refilter. Refilter on
+2026-11-05: 16 by each rule across the corpus. The next scoring run will
+not pay for them.
+
+Applications recorded today, 2026-11-05: Sierra, Chime, Deepgram through
+the runner; Affirm, OpenAI (18833), Cohere (25952), Snowflake (25733),
+Stripe (19565), PostHog (20767) from Anish's batch of the day before,
+`letter_required=false` assumed for those six.
+
 ### Open
 
 - The new states are in `states.labels()`, which feeds the sheet's status

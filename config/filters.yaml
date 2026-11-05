@@ -492,6 +492,17 @@ sponsorship_exclude:
 # 7. Description blocklist. Catches the dealbreaker buried in paragraph nine.
 #    Matched against the plain-text description.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# 7b. Graduation window. When the candidate graduated, YYYY-MM. A new-grad
+#     posting whose stated window leaves that date out fails Stage A:
+#     "graduating between December 2026 and July 2027", "graduate in Fall
+#     2026 or Spring 2027", "completed ... within the last 6 months". Added
+#     2026-11-05 after the scorer rated three such postings 9/10. "Graduating
+#     by <date>" is NOT matched - a past graduate satisfies it literally.
+#     Audit: `cli histogram` reports it as graduation_window. null disables.
+# ---------------------------------------------------------------------------
+graduated: "2025-05"
+
 description_exclude:
   - security clearance
   - ts/sci

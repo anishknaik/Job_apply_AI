@@ -312,3 +312,25 @@ class TestBackwardCompatibility:
         rows = db.get_sheet_rows(conn, limit=20)
         assert len(rows) == 1
         assert rows[0]["apply_score"] == 7, "should fall back to overall"
+
+
+class TestTrackedRows:
+    """Deepgram, 2026-11-05: applied through the runner, outside the top
+    25, and so never on the sheet."""
+
+    def test_any_status_but_not_applied_is_tracked_whatever_its_rank(self, conn):
+        low = add(conn, "Low", "applied role", overall=3, apply_score=2)
+        stale = add(conn, "Stale", "old role", overall=8, apply_score=8, seen="2026-01-01T00:00:00+00:00")
+        untouched = add(conn, "Plain", "role", overall=9, apply_score=9)
+        marked_no = add(conn, "No", "role", overall=9, apply_score=9)
+        db.record_status(conn, low, "applied", source="agent")
+        db.record_status(conn, stale, "interviewing", source="sheet")
+        db.record_status(conn, marked_no, "not_applied", source="sheet")
+        ids = {r["id"] for r in db.get_tracked_rows(conn)}
+        assert ids == {low, stale}
+        assert untouched not in ids and marked_no not in ids
+
+    def test_exclude_still_applies(self, conn):
+        pid = add(conn, "India Co", "role", overall=8, apply_score=8)
+        db.record_status(conn, pid, "applied", source="agent")
+        assert db.get_tracked_rows(conn, exclude=lambda row: row["company"] == "India Co") == []

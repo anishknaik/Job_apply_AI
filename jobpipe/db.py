@@ -625,6 +625,33 @@ _SHEET_SELECT = """
 """
 
 
+# Statuses that do not put a posting on the sheet by themselves.
+UNTRACKED_STATUSES = ("not_applied",)
+
+
+def get_tracked_rows(conn: sqlite3.Connection, exclude=None) -> list:
+    """Postings Anish is acting on - applied, in review, interviewing, any
+    status but not_applied - whatever their rank, staleness or score.
+
+    The sheet adds rows only from the ranked top N, so an application made
+    to a posting outside it never got a row (Deepgram, 2026-11-05: applied
+    through the runner, absent from the sheet). The database stays the
+    source of truth; this makes the sheet show what he applied to.
+    """
+    current = current_statuses(conn)
+    ids = [pid for pid, status in current.items()
+           if status and status not in UNTRACKED_STATUSES]
+    out = []
+    for start in range(0, len(ids), 500):       # stay under SQLite's var cap
+        chunk = ids[start:start + 500]
+        out.extend(conn.execute(
+            f"{_SHEET_SELECT} WHERE p.id IN ({', '.join('?' * len(chunk))}) "
+            f"ORDER BY p.first_seen_at", chunk).fetchall())
+    if exclude is not None:
+        out = [row for row in out if not exclude(row)]
+    return out
+
+
 def get_rows_by_url(conn: sqlite3.Connection, urls) -> list:
     """Current scores for specific postings, regardless of their rank.
 

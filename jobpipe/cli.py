@@ -583,6 +583,15 @@ def cmd_sync(args) -> int:
                              limit=args.limit,
                              per_company=args.per_company or None,
                              exclude=india.lane_only)
+    # Whatever Anish has applied to or is acting on gets a row too, ranked or
+    # not: an application outside the top N otherwise never reached the sheet.
+    ranked = {row["id"] for row in rows}
+    tracked = [row for row in db.get_tracked_rows(conn, exclude=india.lane_only)
+               if row["id"] not in ranked]
+    if tracked:
+        print(f"  {len(tracked)} tracked posting(s) outside the top {args.limit} "
+              f"kept on the sheet")
+    rows = list(rows) + tracked
     if not rows:
         print("nothing to sync — run `score --yes` first?")
         return 0
@@ -648,7 +657,8 @@ def cmd_sync(args) -> int:
 
     total = (result.appended + result.updated + result.refreshed
              + result.unchanged)
-    print(f"synced {total} row(s) ({len(rows)} in the top {args.limit}): "
+    print(f"synced {total} row(s) ({len(rows) - len(tracked)} in the top {args.limit}"
+          f"{f', {len(tracked)} tracked' if tracked else ''}): "
           f"{result.appended} added, {result.updated} updated, "
           f"{result.unchanged} unchanged")
     if result.refreshed:

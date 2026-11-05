@@ -36,6 +36,9 @@ class FilterRules:
     sponsorship_allow: list[str]
     sponsorship_exclude: list[str]
     description_exclude: list[str]
+    # Year-month the candidate graduated ("2025-05"); None disables the
+    # graduation-window rule.
+    graduated: str | None = None
 
 
 def load_rules(path: Path | str = DEFAULT_FILTERS_PATH) -> FilterRules:
@@ -72,6 +75,7 @@ def load_rules(path: Path | str = DEFAULT_FILTERS_PATH) -> FilterRules:
         sponsorship_allow=terms("sponsorship_allow"),
         sponsorship_exclude=terms("sponsorship_exclude"),
         description_exclude=terms("description_exclude"),
+        graduated=(str(raw["graduated"]) if raw.get("graduated") else None),
     )
 
 
@@ -122,6 +126,19 @@ def mask_protected(title: str, protected: list[str]) -> str:
 _LOCATION_SPLIT = re.compile(r"[;|/,]")
 
 
+# Location terms that say where work happens without saying which country.
+GENERIC_REMOTE = ("remote", "anywhere", "distributed")
+# A US state as a whole location token ("Redwood City, CA" splits to "ca").
+# Only the remote-abroad rule reads it: a US city the allow list does not
+# name still keeps a posting that also says "Remote".
+US_STATES = frozenset("""al ak az ar ca co ct de fl ga hi id il in ia ks ky la me md ma mi mn
+ms mo mt ne nv nh nj nm ny nc nd oh ok or pa ri sc sd tn tx ut vt va wa wv wi wy dc
+alabama alaska arizona arkansas california colorado connecticut delaware florida georgia
+hawaii idaho illinois indiana iowa kansas kentucky louisiana maine maryland massachusetts
+michigan minnesota mississippi missouri montana nebraska nevada ohio oklahoma oregon
+pennsylvania tennessee texas utah vermont virginia wisconsin wyoming""".split())
+
+
 def _location_tokens(location: str) -> list[str]:
     return [part.strip() for part in _LOCATION_SPLIT.split(location)
             if part.strip()]
@@ -141,13 +158,27 @@ def _location_verdict(location: str, remote_flag: bool,
         return True, "passed"
 
     excluded_hits = []
+    generic_ok = False
+    specific = [t for t in rules.location_allow if t not in GENERIC_REMOTE]
     for token in tokens:
         bad = _first_match(token, rules.location_exclude)
         if bad:
             excluded_hits.append(bad)
             continue
-        if not rules.location_allow or _first_match(token, rules.location_allow):
+        if not rules.location_allow:
             return True, "passed"
+        if _first_match(token, specific):
+            return True, "passed"
+        if _first_match(token, rules.location_allow):
+            generic_ok = True          # "remote", "anywhere": acceptable alone
+
+    # A bare "Remote" beside a non-US place is remote in that country:
+    # Harvey's "London; Remote" passed on the word and its form then asked
+    # to be based in London (2026-11-05). Alone, "Remote" still passes.
+    if generic_ok and excluded_hits and not any(t in US_STATES for t in tokens):
+        return False, f"location_remote_abroad: {excluded_hits[0]!r}"
+    if generic_ok:
+        return True, "passed"
 
     # No token was independently acceptable.
     if remote_flag and not excluded_hits:
@@ -245,6 +276,64 @@ def extract_sponsorship_sentences(description: str | None,
     return out
 
 
+# ---------------------------------------------------------------------------
+# Graduation windows (2026-11-05). New-grad postings that state a window the
+# candidate's graduation date falls outside of: "graduating between December
+# 2026 and July 2027", "you will graduate in Fall 2026 or Spring 2027",
+# "completed ... within the last 6 months". The scorer rated several of these
+# 9/10 and the form would have carried his real date.
+#
+# Deliberately NOT matched: "graduating by December 2026" and "by August 2027
+# or earlier". A 2025 graduate satisfies "by" literally, even where a campus
+# programme means otherwise, and a false exclusion here is invisible and
+# permanent while a false pass costs one scoring call.
+# ---------------------------------------------------------------------------
+_GRAD_SENTENCE = re.compile(r"[^.;\n\u2022]+")
+_GRAD_WORD = re.compile(r"\bgraduat\w*|\bgraduation date\b|\bcomplet\w*\b[^.]{0,60}\bdegree\b|\bdegree\b[^.]{0,60}\bcomplet\w*", re.I)
+_SEASON = r"(?:spring|summer|fall|autumn|winter|january|february|march|april|may|june|july|august|september|october|november|december)"
+# A window: "between X and Y", "either ...", "in [season] 20XX", or
+# "graduating [season] 20XX". Bare "in" is not one ("a degree in Computer
+# Science ... graduating by December 2026" is a "by" phrase).
+_GRAD_IN = re.compile(rf"\b(between|either)\b|\bin\s+(?:{_SEASON}\s+)?20\d\d|\bgraduat\w*\s+{_SEASON}?\s*20\d\d", re.I)
+_GRAD_YEAR = re.compile(r"\b(20\d\d)\b")
+# "by [the end of] [season] 20XX" - removed before looking for a real window.
+_BY_DATE = re.compile(rf"\bby\s+(?:the end of\s+)?(?:{_SEASON}\s+)?20\d\d", re.I)
+_GRAD_WITHIN = re.compile(r"within the (?:last|past)\s+(\d+)\s*(month|year)s?", re.I)
+_GRAD_INCLUSIVE = re.compile(r"recent(ly)? (graduat|complet)|or (have )?(already )?(graduated|completed)|graduated (in|within) the (last|past) (two|three|2|3)", re.I)
+
+
+def graduation_window(description: str, graduated: str | None,
+                      now: datetime | None = None) -> str | None:
+    """The sentence stating a graduation window that leaves out someone who
+    graduated in `graduated` (YYYY-MM), or None. Pure."""
+    if not graduated or not description:
+        return None
+    try:
+        g_year, g_month = (int(x) for x in graduated.split("-")[:2])
+    except ValueError:
+        return None
+    now = now or datetime.now(timezone.utc)
+    months_since = (now.year - g_year) * 12 + (now.month - g_month)
+    for m in _GRAD_SENTENCE.finditer(description):
+        sentence = m.group(0)
+        if not _GRAD_WORD.search(sentence) or _GRAD_INCLUSIVE.search(sentence):
+            continue
+        within = _GRAD_WITHIN.search(sentence)
+        if within:
+            n = int(within.group(1)) * (12 if within.group(2).lower() == "year" else 1)
+            if n < months_since:
+                return " ".join(sentence.split())[:160]
+            continue
+        years = [int(y) for y in _GRAD_YEAR.findall(sentence)]
+        if not years or not _GRAD_IN.search(sentence):
+            continue
+        if re.search(r"\bby\b", sentence, re.I) and not _GRAD_IN.search(_BY_DATE.sub(" ", sentence)):
+            continue            # "graduating by December 2026": satisfied literally
+        if min(years) > g_year:
+            return " ".join(sentence.split())[:160]
+    return None
+
+
 def _parse_dt(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -324,6 +413,13 @@ def evaluate(posting_row, rules: FilterRules,
         required = minimum_years_required(description)
         if required is not None and required > rules.max_years_experience:
             return False, f"max_years_experience: {required}y required"
+
+    # 7b. Graduation window: a new-grad posting whose stated window leaves out
+    #     the candidate's graduation date. Read from the original description
+    #     (sentence boundaries and capitals do not matter; years do).
+    window = graduation_window(posting_row["description"] or "", rules.graduated, now)
+    if window:
+        return False, f"graduation_window: {window[:80]!r}"
 
     # 8. Description blocklist — the clearance line in paragraph nine.
     hit = _first_match(description, rules.description_exclude)
