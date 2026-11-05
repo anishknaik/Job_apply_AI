@@ -13,9 +13,17 @@ kept. When the form goes - his submit, or a navigation - the run folder
 gets the confirmation evidence (screenshot, URL, a body-text excerpt, the
 page HTML and submit.classify's verdict), the choices he made on fields
 the runner did not fill are recorded as learned answers, and both are
-printed. Nothing here clicks, and nothing here records a status: `applied`
-is still Anish's or a session's to record after the confirmation page.
-Greenhouse's confirmation is UNVERIFIED until this capture sees one.
+printed. Nothing here clicks.
+
+**After his submit the posting is marked applied** (Anish, 2026-11-05: "once
+I review and submit, I want the agent to just mark the posting as
+applied"). The form leaving the page after he clicked submit is his
+confirmation; `ctx.record_applied` is called unless the page shows the
+ATS's error box, in which case nothing is recorded and the evidence says
+why. Greenhouse's confirmation wording is UNVERIFIED, so a
+Greenhouse submit usually reads `unconfirmed` - the form is gone and
+nothing was recognised - and that still counts; the saved screenshot and
+text are there to check against.
 
 Playwright's sync API must stay on the thread that opened the browser, so
 the only thread here reads stdin.
@@ -77,6 +85,15 @@ class ReviewContext:
     run_dir: Path
     learned_store: object = None
     learned_path: Path | None = None
+    record_applied: object = None    # () -> recorded status; None records nothing
+
+
+# Verdicts after the form leaves that mean it did NOT go through. Only the
+# ATS's own error box: classify() also says `challenge` whenever reCAPTCHA's
+# script is still on the page, which it is after a successful submit on
+# every form seen so far; a challenge Anish actually faced sits over the
+# form, and the form is then still there.
+NOT_SUBMITTED = (_submit.ERROR,)
 
 
 @dataclass
@@ -86,6 +103,7 @@ class ReviewResult:
     evidence: dict | None = None
     choices: dict = field(default_factory=dict)
     learned_recorded: list[str] = field(default_factory=list)
+    status_recorded: str | None = None
     waited: float = 0.0
 
 
@@ -154,6 +172,12 @@ def wait(ctx: ReviewContext, lines: StdinLines | None = None, *, poll: float = 2
                 result.form_gone = True
                 result.evidence = capture_evidence(ctx.page, ctx.ats, ctx.run_dir)
                 result.learned_recorded = _record(ctx, result.choices)
+                verdict = (result.evidence or {}).get("verdict")
+                if ctx.record_applied is not None and verdict not in NOT_SUBMITTED:
+                    try:
+                        result.status_recorded = ctx.record_applied()
+                    except Exception as exc:                 # noqa: BLE001
+                        print(f"  could not record applied: {exc}", file=out, flush=True)
                 _print_evidence(result, out)
         except Exception as exc:                             # noqa: BLE001
             if not _page_alive(ctx.page):
@@ -196,4 +220,12 @@ def _print_evidence(result: ReviewResult, out) -> None:
               f"{', '.join(result.learned_recorded)}", file=out)
     else:
         print("  remembered no answers (nothing chosen on a learnable question the runner left)", file=out)
-    print("  status not changed: record `applied` after checking the confirmation.", file=out, flush=True)
+    if result.status_recorded:
+        print(f"  status recorded: {result.status_recorded} (run `python -m jobpipe.cli sync` "
+              "to put it in the sheet)", file=out, flush=True)
+    elif ev.get("verdict") in NOT_SUBMITTED:
+        print(f"  status not changed: the page shows {ev.get('verdict')}, so it did not go through.",
+              file=out, flush=True)
+    else:
+        print("  status not changed: record `applied` after checking the confirmation.",
+              file=out, flush=True)

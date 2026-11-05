@@ -76,6 +76,19 @@ def main(argv: list[str] | None = None) -> int:
         from . import review
         try:
             if outcome.review is not None:
+                # After Anish's submit, the posting is marked applied (review.py).
+                letter_required = bool((outcome.report or {}).get("letter_required"))
+
+                def record_applied(pid=args.posting_id):
+                    c = tools._conn(args.db)
+                    try:
+                        return tools.advance_status(c, pid, "applied",
+                                                    letter_required=letter_required,
+                                                    source="agent")["status"]
+                    finally:
+                        c.close()
+
+                outcome.review.record_applied = record_applied
                 result = review.wait(outcome.review)
                 print(f"review ended: {result.ended_by}"
                       + (", form gone" if result.form_gone else ", form still on the page"))

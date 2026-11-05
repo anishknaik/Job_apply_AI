@@ -153,3 +153,51 @@ class TestWhenTheFormGoes:
         assert result.form_gone and result.evidence["verdict"] is None
         assert "no confirmation recognised" in out.getvalue()
         assert "UNVERIFIED" in out.getvalue()
+
+
+class TestMarkedAppliedAfterHisSubmit:
+    """Anish, 2026-11-05: once he reviews and submits, the posting is
+    marked applied. The callback stands in for advance_status."""
+
+    def run(self, site, tmp_path, url, ats):
+        calls = []
+        lines = Lines()
+        threading.Timer(2.2, lines.push).start()
+        out = io.StringIO()
+        with open_browser(tmp_path) as b:
+            page = b.new_page()
+            page.goto(f"{site}/{url}")
+            ctx = context(page, tmp_path, ats=ats)
+            ctx.record_applied = lambda: calls.append("applied") or "applied"
+            result = review.wait(ctx, lines, poll=0.2, out=out)
+        return result, calls, out.getvalue()
+
+    def test_a_confirmed_submit_is_recorded_applied(self, site, tmp_path):
+        result, calls, text = self.run(site, tmp_path,
+                                       "fake_ats.html?ats=ashby&outcome=confirm&auto_after=700", "ashby")
+        assert calls == ["applied"] and result.status_recorded == "applied"
+        assert "status recorded: applied" in text
+
+    def test_a_vanished_form_nothing_recognised_still_counts(self, site, tmp_path):
+        """Greenhouse's wording is unverified; his submit is the confirmation."""
+        result, calls, _ = self.run(site, tmp_path,
+                                    "fake_ats.html?ats=greenhouse&outcome=gone&auto_after=700", "greenhouse")
+        assert result.form_gone and calls == ["applied"]
+
+    def test_an_error_after_submit_records_nothing(self, site, tmp_path):
+        result, calls, _ = self.run(site, tmp_path,
+                                    "fake_ats.html?ats=ashby&outcome=error&auto_after=700", "ashby")
+        assert calls == [] and result.status_recorded is None
+
+    def test_a_run_he_closes_without_submitting_records_nothing(self, site, tmp_path):
+        result, calls, _ = self.run(site, tmp_path, "fake_ats.html?ats=ashby&outcome=timeout", "ashby")
+        assert not result.form_gone and calls == []
+
+    def test_no_callback_no_status(self, site, tmp_path):
+        lines = Lines()
+        threading.Timer(2.2, lines.push).start()
+        with open_browser(tmp_path) as b:
+            page = b.new_page()
+            page.goto(f"{site}/fake_ats.html?ats=ashby&outcome=confirm&auto_after=700")
+            result = review.wait(context(page, tmp_path), lines, poll=0.2, out=io.StringIO())
+        assert result.form_gone and result.status_recorded is None

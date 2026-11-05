@@ -386,3 +386,20 @@ class TestCli:
         import argparse
         # The parser is built inside main(); mirror its contract: no flag -> dry run.
         assert decide.DRY_RUN == "dry_run"
+
+
+class TestAlreadyApplied:
+    """2026-11-05: a review run opened on a posting Anish had applied to by
+    hand the day before (the sheet was not synced). Refused now, before a
+    browser opens; a dry run still works."""
+
+    @pytest.mark.parametrize("mode", [decide.REVIEW_MODE, decide.AUTO_MODE])
+    def test_review_and_auto_refuse_an_applied_posting(self, conn, tmp_path, mode):
+        pid = seed(conn, tmp_path)
+        db.record_status(conn, pid, "applied", source="sheet")
+        conn.commit()
+        opened = []
+        with pytest.raises(runner.RunnerError, match="already applied"):
+            runner.run(conn, pid, mode, config_for(tmp_path), targets=TARGETS,
+                       browser_factory=lambda *a, **k: opened.append(1))
+        assert opened == []

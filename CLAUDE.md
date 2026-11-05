@@ -326,7 +326,11 @@ confirmation evidence to the run folder and records the choices he made on
 questions it left, into the gitignored `config/learned_answers.yaml`, so
 the same question is answered the same way on another posting - choice
 widgets only, never self-ID, never the never-fill rows, never a profile
-fact. Two more things it fills from existing sources: the reviewed letter
+fact. It then **records `applied` itself** (`source="agent"`) - his submit is
+the confirmation, by his decision of 2026-11-05 - unless the page shows the
+ATS's error box; run `cli sync` afterwards. It refuses to fill a posting
+already `applied`, so sync the sheet before a run if he applied by hand.
+Two more things it fills from existing sources: the reviewed letter
 into an "anything else" textarea, and "Have you previously worked at
 {company}?" with No from the bank's experience roles. One application has
 gone through it (Sierra, review mode, 2026-11-04); `HANDOFF.md` §8 has what

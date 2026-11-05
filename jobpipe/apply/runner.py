@@ -250,6 +250,11 @@ def run(conn, posting_id: int, mode: str, config: ApplyConfig, *,
     row = db.get_posting(conn, posting_id)
     if row is None:
         raise RunnerError(f"no posting with id {posting_id}")
+    if mode != _decide.DRY_RUN and db.current_statuses(conn).get(posting_id) == "applied":
+        # A second application is worse than a missed one. Refused before a
+        # browser opens; a dry run, which fills nothing, is still allowed.
+        raise RunnerError(f"posting {posting_id} is already applied; nothing was opened. "
+                          "If that status is wrong, record the right one first.")
     ats, url = form_url_for(row, targets)
     url = form_url or url
 
