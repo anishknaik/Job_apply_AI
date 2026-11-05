@@ -48,6 +48,7 @@ class Sources:
     short_answers: dict[str, dict] = field(default_factory=dict)  # normalised question -> row
     company: str | None = None                      # this posting's employer
     employers: tuple[str, ...] | None = None        # his past employers; None = unknown
+    learned: Any = None                             # learned.Store, or None
 
     def answer(self, question: str) -> dict | None:
         return self.short_answers.get(_answers.normalise_question(question))
@@ -450,5 +451,34 @@ def resolve_field(f: _spec.Field, sources: Sources) -> Resolved:
     return _no_source(f, meaning, f"unrecognised {f.kind} question; no source to fill it from")
 
 
+def _from_memory(item: Resolved, sources: Sources) -> Resolved:
+    """A remembered answer, only where the table left a blocker or a blank,
+    only for a learnable choice widget, only as an exact option."""
+    from . import learned as _learned
+    f = item.field
+    if item.action not in (BLOCKER, BLANK) or sources.learned is None:
+        return item
+    if not _learned.learnable(f, item.meaning):
+        return item
+    entry = sources.learned.get(f.label, sources.company)
+    if entry is None:
+        return item
+    seen = entry.latest.label() if entry.latest else "hand-edited"
+    source = f"learned:{seen}"
+    candidates = _learned.candidate_answers(entry.answer, sources.company)
+    if f.options is None:
+        return Resolved(f, SELECT, candidates[0], source, item.meaning,
+                        note="remembered answer; options read from the live widget, "
+                             "exact text only, otherwise left unset and reported")
+    for wanted in candidates:
+        opt = _exact_option(f, wanted)
+        if opt is not None:
+            return Resolved(f, SELECT, opt.label, source, item.meaning, note="remembered answer")
+    note = (f"remembered answer {entry.answer!r} is not an option here "
+            f"({[o.label for o in f.options]}); " + item.note)
+    return Resolved(f, item.action, item.value, item.source, item.meaning, note)
+
+
 def resolve(form: _spec.FormSpec, sources: Sources) -> Resolution:
-    return Resolution(tuple(resolve_field(f, sources) for f in form.fields))
+    return Resolution(tuple(_from_memory(resolve_field(f, sources), sources)
+                            for f in form.fields))

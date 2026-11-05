@@ -83,6 +83,7 @@ def go(conn, pid, mode, site, tmp_path, page="greenhouse_form.html", config=None
     kw.setdefault("answers_loader", answers)
     kw.setdefault("prepare_letter", refuse_letter)
     kw.setdefault("employers_loader", lambda: ("Acme Analytics",))
+    kw.setdefault("learned_loader", lambda: None)
     kw.setdefault("fetch_json", lambda url: ALLOY)
     return runner.run(conn, pid, mode, config or config_for(tmp_path), targets=TARGETS,
                       form_url=f"{site}/{page}", headless=True, **kw)
@@ -201,6 +202,33 @@ class TestDryRun:
         assert any(r.startswith("enabled: this run is dry_run") for r in out.reasons)
         assert "Jane" not in row["report"], "hashes, never values"
         assert out.screenshots and Path(out.screenshots[0]).exists()
+
+
+@needs_chromium
+class TestLearnedAnswersInARun:
+    def test_a_dry_run_plans_a_remembered_answer(self, conn, site, tmp_path):
+        """Alloy's relocation question is a required select nobody has a
+        source for. With Anish's earlier choice on file, the dry run plans
+        it from memory and the report says so."""
+        from jobpipe.apply import learned
+        store = learned.Store()
+        learned.record(store, "If you are not based in the NYC metro area, are you willing to relocate?",
+                       "N/A", "select", "Example Co", 1, "2026-11-05")
+        pid = seed(conn, tmp_path)
+        out = go(conn, pid, decide.DRY_RUN, site, tmp_path, learned_loader=lambda: store)
+        by = {f["key"]: f for f in out.report["fields"]}
+        assert by["question_36029297002"]["status"] == "planned"
+        assert by["question_36029297002"]["source"] == "learned:Example Co #1 2026-11-05"
+        assert by["question_36029295002"]["status"] == "blocker", "salary is never remembered"
+
+    def test_a_broken_store_is_a_note_not_a_crash(self, conn, site, tmp_path):
+        from jobpipe.apply import learned
+
+        def broken():
+            raise learned.LearnedError("bad yaml")
+        pid = seed(conn, tmp_path)
+        out = go(conn, pid, decide.DRY_RUN, site, tmp_path, learned_loader=broken)
+        assert out.error is None and any("learned answers not loaded" in n for n in out.report["notes"])
 
 
 @needs_chromium

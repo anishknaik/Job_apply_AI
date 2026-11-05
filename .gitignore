@@ -109,5 +109,7 @@ demo/
 # for whoever clones next.
 .jobpipe-browser/
 config/apply.yaml
+# The runner's remembered answers: Anish's own choices on real forms.
+config/learned_answers.yaml
 # Filled-form screenshots and run reports: real applications, real name.
 output/apply/

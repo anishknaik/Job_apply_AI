@@ -260,6 +260,49 @@ def _radio(entry, wanted: str) -> tuple[str, str]:
     return (OK if text == wanted.strip() else MISMATCH), text
 
 
+def read_choice(frame, f: _spec.Field) -> str | None:
+    """What a choice widget currently shows as chosen, or None. The same
+    reads the fillers verify with: a radio's checked label, a yes/no's
+    pressed button, a select's shown value."""
+    control = _control(frame, f)
+    if control is None:
+        return None
+    try:
+        if f.kind == _spec.RADIO:
+            checked = control.locator('input[type="radio"]:checked')
+            if not checked.count():
+                return None
+            rid = checked.first.get_attribute("id") or ""
+            label = control.locator(f'label[for="{rid}"]')
+            text = " ".join((label.first.inner_text() or "").split()) if label.count() else ""
+            return text or None
+        if f.kind == _spec.YESNO:
+            pressed = control.locator('button[data-option][aria-pressed="true"]')
+            if not pressed.count():
+                return None
+            return " ".join((pressed.first.inner_text() or "").split()) or None
+        if f.kind in (_spec.SELECT, _spec.LOCATION):
+            text = _selected_text(frame, control)
+            if not text or text.lower().rstrip(".…") in ("select", "start typing", "type here", "choose"):
+                return None
+            if f.options is not None and not any(o.label.strip() == text for o in f.options):
+                return None
+            return text
+    except Exception:                                        # noqa: BLE001
+        return None
+    return None
+
+
+def read_choices(page, form: _spec.FormSpec) -> dict[str, str | None]:
+    """A snapshot of every choice widget on the form: key -> chosen text or
+    None. Empty when the form is no longer on the page."""
+    frame, _root = form_root(page, form.ats)
+    if frame is None:
+        return {}
+    return {f.key: read_choice(frame, f) for f in form.fields
+            if f.kind in (_spec.SELECT, _spec.RADIO, _spec.YESNO)}
+
+
 def apply_one(frame, item: _resolve.Resolved) -> FieldResult:
     f = item.field
     result = FieldResult(key=f.key, label=f.label, action=item.action, status=OK,

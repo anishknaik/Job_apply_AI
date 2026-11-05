@@ -1,0 +1,35 @@
+# Remembered answers (Phase 6). Copy to config/learned_answers.yaml - or let
+# the runner create it: after a review-mode run in which Anish submits, the
+# runner writes the choices he made on questions it did not fill. The real
+# file is gitignored; it is his choices.
+#
+# Key: the question, whitespace collapsed and case-folded, with the posting's
+# company replaced by {company}, so one entry serves the same question at
+# another company. Nothing fuzzier than that (answers.normalise_question).
+#
+# Only choice widgets are ever stored or reused: select, radio, yesno. Never
+# free text (that is save_short_answer + check_grounding), never
+# self-identification or an EEOC/demographic section, never salary, ids,
+# payment, attestations or signatures, never a fact whose source of truth is
+# the profile (work authorization, sponsorship, prior employment, resume,
+# letter). A remembered answer is used only where the resolver would
+# otherwise leave a blocker or a blank, and only as an exact option on the
+# new form. The report shows it as `learned:<company> #<posting> <date>`.
+#
+# An option that names the company is stored with {company} in the answer
+# too, and expanded for the new posting before the exact match.
+#
+# Hand edits are welcome; `answer` must be the form's exact option text.
+answers:
+  "how did you first learn about {company} as an employer?":
+    question: "How did you first learn about Example Co as an employer?"
+    answer: "Company website"
+    kind: select
+    seen_on:
+      - {company: "Example Co", posting_id: 1, date: "2026-11-05"}
+  "are you able to work from a {company} office listed for this role?":
+    question: "Are you able to work from a Example Co office listed for this role?"
+    answer: "Yes, I am based in one of {company}'s office locations."
+    kind: radio
+    seen_on:
+      - {company: "Example Co", posting_id: 2, date: "2026-11-05"}
