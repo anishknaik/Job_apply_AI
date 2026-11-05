@@ -1,13 +1,16 @@
 # jobpipe — Context
 
 > Written 2026-08-29, **§2 and §7 remeasured 2026-08-31; §2 and §4 again on
-> 2026-09-10, 2026-10-04 and 2026-11-05.** Every number in §2 was read from
+> 2026-09-10, 2026-10-04 and 2026-11-05, and once more later on 2026-11-05
+> on the `apply-session` branch, after Phase 7A was finished (§1, §2, §3,
+> §4, §6, §7, §8.10).** Every number in §2 was read from
 > the live system on the date it carries rather than copied forward,
 > because several figures in `PHASE1_SUMMARY.md` and `POST_PHASE2_FIXES.md`
 > had drifted.
 >
 > **Read order for a new session:** `PROJECT.md` (why) → `HANDOFF.md` (where
-> things stand right now — its "Start here" block first) →
+> things stand right now — its "Start here" block first, and §9 for the
+> apply session) →
 > `PHASE5_PLAN.md`, `PHASE6_PLAN.md`, `PHASE7_PLAN.md` (the decisions and
 > build orders) → this file (the standing design, §1–§6) → `CLAUDE.md`
 > (what you may and may not run).
@@ -43,7 +46,7 @@ metric is interviews per hour spent, not applications per day.
 | 4 | Recruiter research → outreach drafts | Not started |
 | 5 | **MCP server + Cowork** | Slice 0 + Tracks A, B and C built; runs under the desktop app and Cowork since 2026-10-04 |
 | 6 | **Apply runner** — fills Greenhouse and Ashby forms in its own browser; auto-submit only where nothing checks for bots, otherwise Anish reviews and submits (`PHASE6_PLAN.md`) | Built 2026-11-04, in real use: 3 applications in review mode (Sierra, Chime, Deepgram), each submitted by Anish; records `applied` after his submit. Auto-submit has never fired |
-| 7 | **Apply session + AI agent** — the workbench works through the queue; Gemini 2.5 Pro drafts essays and letters; an agent for Workday/Lever/SmartRecruiters (`PHASE7_PLAN.md`) | Planned 2026-11-05, to be built in cloud sessions |
+| 7 | **Apply session + AI agent** — the workbench works through the queue; Gemini 2.5 Pro drafts essays and letters; an agent for Workday/Lever/SmartRecruiters (`PHASE7_PLAN.md`) | **7A built 2026-11-05** on branch `apply-session`, not merged and not run live (slices 0-4 in a cloud session, 5-6 locally; `HANDOFF.md` §9). 7B (the agent) not started |
 
 ---
 
@@ -58,11 +61,12 @@ metric is interviews per hour spent, not applications per day.
 | Rubric versions in the corpus | `2026-10-03.5` 1,016, none 627, `2026-08-31.3` 80, `.2` 3, `.4` 1 |
 | Applications | 45 applied (210 status events); 3 through the Phase 6 runner |
 | Documents | 130 rows — 81 resumes, 33 letters, 16 form answers |
-| **Edit distances computed** | **2** — PostHog 0.032, U. of Utah 0.033 (the runner-era letters went into optional boxes, so `letter_required=false` and they are not counted) |
+| **Edit distances computed** | **7**, not the 2 this row said until now: PostHog 0.032, U. of Utah 0.033, and **five at exactly 0.000** — Sentry, Scale AI, Vapi (Claude sessions, 2026-10-13), Sierra and Chime (runner, 2026-11-04/05). Mean 0.009. `measure` does **not** filter on `letter_required` (§8.10), so letters that went into optional boxes are counted, and whether any of the five was edited in the form rather than in the `.sent.md` is unknown |
 | Targets | 169 companies — tier 1: 8, tier 2: 104, tier 3: 57 |
 | ATS split | greenhouse 82, ashby 79, smartrecruiters 6, workday 2 |
 | Bullet bank | 24 bullets across 11 roles (the jobpipe project's three added in November) |
-| Tests | **1,371**, offline |
+| Tests | **1,465** on `apply-session`, all passing locally (1,371 on `master`), offline |
+| Apply runs | 20 rows in `apply_runs` (dry runs and review runs together) |
 | Last scheduled run | 2026-11-04 16:55 UTC — 15,280 fetched, 330 new, 0 scored (it ran before `-Spend` was re-registered that day) |
 | Billing | Vertex, GCP credit (ends mid-November). The prepaid AI Studio balance is no longer drawn on |
 
@@ -140,6 +144,17 @@ browser:  fill from form_answers + prepare_letter, stop before submit
 Anish submits -> advance_status -> sync
 ```
 
+**The apply session (Phase 7A, `apply-session` branch)** runs the same path
+on a loop, from the workbench's `/session` page, as a child process Anish
+starts. For each ticked posting: is the form still live → `render_resume`
+from the grid variant, with the bank's tags the posting names as
+`posting_skills`, flagging any dropped bullet carrying one → Gemini 2.5 Pro
+drafts the open-ended answers and the letter (`apply/draft.py`) →
+`save_*` with the model recorded as writer → `check_grounding` (a failing
+draft is left blank) → the Phase 6 runner fills in review mode → Anish
+submits → the runner records `applied` → next. Drafting is capped per
+session (`JOBPIPE_MAX_DRAFTS_PER_SESSION`, 10).
+
 Sheet selection (`db.get_sheet_rows`): `apply_score >= 4` floor, optional
 per-company tier threshold, `last_seen_at` within 7 days, **top 25 by rank**,
 max 3 per company applied *during* selection rather than after truncation.
@@ -151,9 +166,11 @@ more (`india.MIN_SCORE`, since 2026-10-08) and any not yet scored, best first.
 
 ## 4. Module map
 
-15,651 lines of Python across 56 modules, 1,371 offline tests (2026-11-05;
-the table below was last itemised at 38 modules and does not yet list
-`jobpipe/apply/` — see `PHASE6_PLAN.md` §3 for that package).
+17,246 lines of Python across 58 modules and 1,465 offline tests on
+`apply-session` (`master`: 15,651 lines, 56 modules, 1,371 tests), counted
+with `wc -l` on 2026-11-05. The table below was last itemised at 38 modules.
+Of `jobpipe/apply/` it lists only the two Phase 7A modules; see
+`PHASE6_PLAN.md` §3 for the rest of that package.
 
 | Module | Lines | Does |
 |---|---|---|
@@ -179,6 +196,12 @@ the table below was last itemised at 38 modules and does not yet list
 | `status_mirror.py` | 122 | Sheet status ↔ event log: edits in, newer statuses written back |
 | `letter_pdf.py` | 78 | The reviewed letter as a one-page PDF, read back before it is used |
 | `fetchers/` | 738 | Greenhouse, Ashby, SmartRecruiters, Workday, SSRF-guarded HTTP |
+| `apply/session.py` | 769 | Phase 7A: the apply session's worker: queue, `state.json` + `command` file, the per-posting loop, the drafting cap, the cost estimate |
+| `apply/draft.py` | 309 | Phase 7A: Gemini 2.5 Pro drafts form answers and letters under `letters.py`'s rules; one retry, then a blank |
+
+`bullets.py` also holds `posting_vocabulary` and `flag_dropped` since
+Phase 7A slice 5: a posting's skill vocabulary read from its text, and the
+drop flags it drives. `web.py` serves the session's six routes.
 
 Config: `master_profile.md` (657 lines, gitignored, source of truth for every
 claim), `bullets.yaml` (570), `filters.yaml` (458), `states.yml` (108),
@@ -271,6 +294,14 @@ These hold across every phase and are not negotiable per-task.
 
 - **Never submit an application.** Fill the form, stop before submit.
 - **Never send email.** Drafts only, always.
+- **Who writes prose changed on 2026-11-05 (Phase 7A), by Anish's
+  decision.** Until then Claude wrote and Gemini checked. In an apply
+  session, Gemini 2.5 Pro drafts and Gemini 2.5 Flash Lite checks: two
+  models of one family, so some of the writer/checker independence of
+  §8.6 is given up. What holds the line instead: a draft that fails
+  `check_grounding` is left blank, and `decide.py`'s
+  `answers_session_written` stops any form carrying non-Claude prose from
+  auto-submitting, so Anish reviews and submits every one.
 - **Never fabricate.** Every claim traces to `bullets.yaml` or
   `master_profile.md`. If the posting wants something he has not done, the
   honest output is a document without it. If a claim is true but unsupported,
@@ -300,6 +331,7 @@ GCP billing account where the credits live.**
 | Escalation | `gemini-2.5-pro` | 67–84% of a run in practice, see below |
 | Grounding | `gemini-2.5-flash-lite` | caches nothing on Vertex; irrelevant, no long prefix |
 | Cover letter prose | `gemini-2.5-flash` | was `3.5-flash`, which Vertex does not serve |
+| Apply-session drafts (7A) | `gemini-2.5-pro` | `JOBPIPE_DRAFT_MODEL`; capped per session. Not yet run live |
 | `measure`, `status`, `sync`, tests | — | free |
 
 All four defaults are backend-keyed and resolve inside the Vertex provider's
@@ -321,6 +353,19 @@ billing page and has not been read. The "~85¢ full re-score" figure this
 project quoted until then was a 3.x-era number and under-priced that run by
 several times (`HANDOFF.md` §5). **Price a run from tokens, never from that
 figure.**
+
+**2.5 Pro thinks, and the thinking is billed and capped.** Pro cannot turn
+thinking off (§7, the `thinking_budget=0` 400). Its thinking tokens bill at
+the output rate, yet jobpipe's ledger reads `candidates_token_count`, which
+leaves them out. Three consequences, none measured yet:
+- every Pro cost jobpipe has reported is low, escalation included;
+- the apply session's panel estimate is low too, though its docstring says
+  it errs high;
+- thinking counts against `max_output_tokens`, so the drafting ceilings
+  (2,048 tokens for an answer, 4,096 for a letter) may truncate drafts.
+
+`HANDOFF.md` §9 lists these as risks for the first live session. Read the
+GCP billing page, not the panel.
 
 The historical figures below were measured on the Developer API and 3.x models
 and are kept for comparison only: daily scoring ~2.5¢/day at ~0.18¢/posting,
@@ -430,7 +475,8 @@ Everything here was reproduced on 2026-08-29. **Status as of 2026-08-31:**
 | 8.6 grounding not independent of the writer | **fixed by inversion** — slice 4: Claude writes, `check_grounding` routes to Gemini |
 | 8.7 smaller confirmed items | mostly closed in Slice 0; `title_exclude 'lead'` audited and kept, `63fa270` |
 | 8.8 already done but not recorded | still accurate |
-| 8.9 posting text frozen at first sight | **open** — found 2026-09-10, `HANDOFF.md` §4 |
+| 8.9 posting text frozen at first sight | **fixed** 2026-11-04, `HANDOFF.md` §4 |
+| 8.10 `measure` ignores `letter_required` | **open** — found 2026-11-05, below |
 
 Defects found on 2026-10-03 are in `HANDOFF.md` §4, not here: closed rows on
 the main tab, eight boards returning nothing, and Barclays titles Stage A
@@ -444,6 +490,32 @@ sheet actually uses. Both are off by default with their mechanisms kept and
 tested. The lesson, recorded in `HANDOFF.md` §5: MAE and bias measure a
 decision the sheet does not make. Do not reopen 8.5 without reading that
 first.
+
+### 8.10 `measure` counts every letter, whatever `letter_required` says
+
+Found 2026-11-05 while remeasuring §2. When an application is recorded
+without `letter_required`, `advance_status` reminds that "measure reports on
+letter-required applications only". `HANDOFF.md` §2 also says the runner's
+letters "are not counted" because the flag is false. **Neither is true.**
+`measure.py` never reads `letter_required`: it measures every letter whose
+`.sent.md` exists.
+
+So `measure` reports n=7, mean 0.009. Five of the seven are at exactly
+0.000: Sentry and Vapi (`letter_required=0`), Scale AI (`=1`), Sierra and
+Chime. The "why this role" slot reads 0.018 across six letters, where
+the one assembled letter that was certainly edited put it at 0.110. That
+open question (`HANDOFF.md` §3) now looks answered, and it is not: it
+has been averaged down by letters that may never have been edited, or
+were edited in the form where the `.sent.md` cannot see it. That is §8.3's
+failure (a zero recorded as data) arriving by a different road.
+
+Not fixed; it is a decision for Anish, and two questions go with it:
+- Were any of the five edited in the form? If so, the zero is false. If
+  not, it is a real "sent as drafted", which is data, but about the
+  writer, not about the edit.
+- Should `measure` filter on `letter_required`, split by writer model, or
+  both? Gemini-drafted letters from apply sessions will join the
+  population as soon as 7A runs (`HANDOFF.md` §9, risk 3).
 
 ### 8.1 Ten tests fail — a date time-bomb, not a product bug
 
