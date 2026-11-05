@@ -240,5 +240,5 @@ class TestTheWriterOnRecord:
         registered = asyncio.run(tools.build_server(":memory:").list_tools())
         by_name = {t.name: t for t in registered}
         for name in ("save_short_answer", "save_cover_letter"):
-            schema = by_name[name].inputSchema
+            schema = by_name[name].input_schema
             assert "model" not in schema.get("properties", {}), name
