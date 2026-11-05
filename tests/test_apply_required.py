@@ -84,6 +84,11 @@ class TestOnThePage:
         form = spec.parse_ashby_form(html, spec.extract_app_data(html))
         with open_browser(tmp_path) as b:
             page = b.new_page()
+            # The captured page still carries Ashby's script tags. With a
+            # network, they load the live app, which re-renders the page away
+            # from the captured form; tests stay offline, so block them.
+            page.route("**/*", lambda route: route.continue_()
+                       if route.request.url.startswith(fixtures_site) else route.abort())
             page.goto(f"{fixtures_site}/ashby_sierra_0dfe7805_application.html")
             markers, missing = required.check(page, form)
             assert len(markers) == 13 == len(form.required) and missing == []
