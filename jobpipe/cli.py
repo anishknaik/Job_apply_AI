@@ -978,18 +978,43 @@ def cmd_measure(args) -> int:
               "should be sent as generated.")
         return 0
 
-    print(f"{'company':<14}{'variant':<14}{'words':<12}{'distance'}")
+    required_label = {measure.REQUIRED: "yes", measure.NOT_REQUIRED: "no",
+                      measure.UNRECORDED: "?"}
+    print(f"{'company':<14}{'variant':<14}{'writer':<20}{'letter req.':<13}"
+          f"{'words':<12}{'distance'}")
     for entry in measured:
         words = f"{entry['words_generated']}->{entry['words_sent']}"
         print(f"{entry['company'][:13]:<14}"
-              f"{(entry['archetype'] or '?')[:13]:<14}{words:<12}"
+              f"{(entry['archetype'] or '?')[:13]:<14}"
+              f"{(entry.get('writer') or '?')[:19]:<20}"
+              f"{required_label[measure.population(entry)]:<13}{words:<12}"
               f"{entry['distance']:.3f}")
 
     summary = measure.summarise(measured)
-    print(f"\nmean {summary['mean']:.3f}   best {summary['best']:.3f}   "
-          f"worst {summary['worst']:.3f}   n={summary['n']}")
+    if summary["n"]:
+        print(f"\nletter-required applications: mean {summary['mean']:.3f}   "
+              f"best {summary['best']:.3f}   worst {summary['worst']:.3f}   "
+              f"n={summary['n']}")
+    else:
+        print("\nno letter-required application measured yet - the headline "
+              "is over those only. Record letter_required when an "
+              "application goes in.")
 
-    if summary["by_slot"]:
+    # Never a subset without naming what it left out.
+    names = {measure.NOT_REQUIRED: "the form did not require a letter",
+             measure.UNRECORDED: "letter_required never recorded"}
+    for name, group in summary["excluded"].items():
+        print(f"  not in the headline: {group['n']} where {names[name]} "
+              f"(mean {group['mean']:.3f}, {group['zeros']} at 0.000)")
+
+    if summary["by_writer"]:
+        print("\nby writer (every measured letter; letter-required in brackets):")
+        for writer, w in summary["by_writer"].items():
+            req = (f"({w['required_n']}: {w['required_mean']:.3f})"
+                   if w["required_n"] else "(none required)")
+            print(f"  {writer:<22} n={w['n']:<3} mean {w['mean']:.3f}  {req}")
+
+    if summary.get("by_slot"):
         print("\nby paragraph slot — the number that says which "
               "instruction is wrong:")
         for slot, value in summary["by_slot"].items():
@@ -1001,9 +1026,9 @@ def cmd_measure(args) -> int:
     # Say what was left out, and why. A slot mean quietly computed over a
     # subset is the kind of number that gets quoted later as if it had
     # covered everything.
-    if summary["slot_skipped"]:
+    if summary.get("slot_skipped"):
         if summary["by_slot"]:
-            print(f"\n  over {summary['slot_n']} of {summary['n']} letters. "
+            print(f"\n  over {summary['slot_n']} of {summary['n']} letter-required letters. "
                   f"{summary['slot_skipped']} skipped — not the "
                   f"seven-block assembled shape, so their paragraphs do not "
                   f"line up with these. Their whole-document distance is in "
@@ -1013,13 +1038,13 @@ def cmd_measure(args) -> int:
                   f"letter(s) has the seven-block assembled shape, so there "
                   f"is nothing the slots can be compared across.")
 
-    if len(summary["by_archetype"]) > 1:
+    if len(summary.get("by_archetype") or {}) > 1:
         print("\nby variant:")
         for variant, value in summary["by_archetype"].items():
             print(f"  {variant:<20} {value:.3f}")
 
-    if summary["n"] < 15:
-        print(f"\n  {summary['n']} letter(s) measured. §7 expects the trend to "
+    if 0 < summary["n"] < 15:
+        print(f"\n  {summary['n']} letter-required letter(s) measured. §7 expects the trend to "
               f"fall over the first ~15; below that this is a smoke test that "
               f"the plumbing works, not evidence about the prompt.")
 

@@ -61,7 +61,7 @@ metric is interviews per hour spent, not applications per day.
 | Rubric versions in the corpus | `2026-10-03.5` 1,016, none 627, `2026-08-31.3` 80, `.2` 3, `.4` 1 |
 | Applications | 45 applied (210 status events); 3 through the Phase 6 runner |
 | Documents | 130 rows — 81 resumes, 33 letters, 16 form answers |
-| **Edit distances computed** | **7**, not the 2 this row said until now: PostHog 0.032, U. of Utah 0.033, and **five at exactly 0.000** — Sentry, Scale AI, Vapi (Claude sessions, 2026-10-13), Sierra and Chime (runner, 2026-11-04/05). Mean 0.009. `measure` does **not** filter on `letter_required` (§8.10), so letters that went into optional boxes are counted, and whether any of the five was edited in the form rather than in the `.sent.md` is unknown |
+| **Edit distances computed** | **7** letters measured: PostHog 0.032 and U. of Utah 0.033 (hand-written in Cowork, `letter_required` never recorded), and **five at exactly 0.000** — Sentry, Scale AI, Vapi, Sierra, Chime (Claude-session letters). Anish confirmed on 2026-11-05 that he sent all five unchanged. Since §8.10's fix the headline is letter-required only: **n=1** (Scale AI, 0.000); the other six are counted beside it, and every letter is split by writer |
 | Targets | 169 companies — tier 1: 8, tier 2: 104, tier 3: 57 |
 | ATS split | greenhouse 82, ashby 79, smartrecruiters 6, workday 2 |
 | Bullet bank | 24 bullets across 11 roles (the jobpipe project's three added in November) |
@@ -476,7 +476,7 @@ Everything here was reproduced on 2026-08-29. **Status as of 2026-08-31:**
 | 8.7 smaller confirmed items | mostly closed in Slice 0; `title_exclude 'lead'` audited and kept, `63fa270` |
 | 8.8 already done but not recorded | still accurate |
 | 8.9 posting text frozen at first sight | **fixed** 2026-11-04, `HANDOFF.md` §4 |
-| 8.10 `measure` ignores `letter_required` | **open** — found 2026-11-05, below |
+| 8.10 `measure` ignores `letter_required` | **fixed** 2026-11-05 — headline letter-required only, the rest counted beside it, split by writer |
 
 Defects found on 2026-10-03 are in `HANDOFF.md` §4, not here: closed rows on
 the main tab, eight boards returning nothing, and Barclays titles Stage A
@@ -509,13 +509,32 @@ has been averaged down by letters that may never have been edited, or
 were edited in the form where the `.sent.md` cannot see it. That is §8.3's
 failure (a zero recorded as data) arriving by a different road.
 
-Not fixed; it is a decision for Anish, and two questions go with it:
-- Were any of the five edited in the form? If so, the zero is false. If
-  not, it is a real "sent as drafted", which is data, but about the
-  writer, not about the edit.
-- Should `measure` filter on `letter_required`, split by writer model, or
-  both? Gemini-drafted letters from apply sessions will join the
-  population as soon as 7A runs (`HANDOFF.md` §9, risk 3).
+**Resolved the same day, by Anish's answers.**
+
+- The five zeros are real. He read each letter and sent it unchanged, so
+  0.000 is a true "sent as drafted". He also said that if Gemini drafts
+  in the same template, that is good enough. It does: `draft.draft_letter`
+  uses `letters.py`'s prompt, his voice exemplars and banned phrases, and
+  returns the four body paragraphs `save_cover_letter` assembles.
+- **Both fixes, as he asked.** `measure.collect` reads each letter's
+  writer (`documents.model`) and its `letter_required` (the latest
+  `applied` event that carries the flag). `summarise` puts only the
+  letter-required ones in the headline: n, mean, best, worst, slots and
+  variants. The not-required and never-recorded letters are reported
+  beside it with their own n, mean and count of zeros, and every letter is
+  split by writer with that writer's letter-required figures. The CLI, the
+  MCP tool and the workbench page all show the three parts.
+
+Read on real data after the fix: headline n=1 (Scale AI, 0.000). Not
+required: 4, all 0.000. Never recorded: 2, mean 0.032. By writer:
+`claude-mcp` n=5, mean 0.000; `cowork-handwritten` n=2, mean 0.032.
+
+**The `why this role` question is still open, and now visibly so.** Its
+0.110 came from PostHog, one of the two letters whose application was
+never recorded, so it sits outside the headline until it is. Recording
+PostHog (10414) and Utah (16669) as applied, with the true flag, is
+Anish's to confirm, because only he knows whether those forms required
+a letter.
 
 ### 8.1 Ten tests fail — a date time-bomb, not a product bug
 

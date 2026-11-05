@@ -238,13 +238,16 @@ class TestOnlyRealPairsAreMeasured:
 
 
 class TestSummary:
-    def _entry(self, distance, archetype="ai_ml", slots=(0.0, 0.0)):
+    def _entry(self, distance, archetype="ai_ml", slots=(0.0, 0.0),
+               letter_required=True, writer="claude-mcp"):
         # Padded to the assembled seven-block shape. summarise() aggregates
         # by_slot only over letters with that shape, so a bare two-slot
         # fixture would be skipped and these assertions would read an empty
-        # dict rather than the means they are checking.
+        # dict rather than the means they are checking. Letter-required by
+        # default, since the headline is over those only.
         slots = tuple(slots) + (0.0,) * (len(measure.SLOT_NAMES) - len(slots))
         return {"distance": distance, "archetype": archetype,
+                "letter_required": letter_required, "writer": writer,
                 "paragraphs": [measure.ParagraphChange(i, d, "a", "b")
                                for i, d in enumerate(slots)]}
 
@@ -271,6 +274,94 @@ class TestSummary:
         assert summary["by_archetype"]["data_science"] == 0.5
 
 
+class TestLetterRequiredAndWriter:
+    """CONTEXT §8.10. advance_status promised that measure counted
+    letter-required applications only, and measure never read the flag:
+    five letters sent as drafted into optional boxes had pulled the `why
+    this role` slot from 0.110 to 0.018."""
+
+    _entry = TestSummary._entry
+
+    def test_the_headline_is_letter_required_only(self):
+        s = measure.summarise([
+            self._entry(0.10, slots=(0, 0, 0.11)),
+            self._entry(0.0, letter_required=False),
+            self._entry(0.0, letter_required=False),
+            self._entry(0.03, letter_required=None, writer="cowork-handwritten")])
+        assert s["n"] == 1 and s["mean"] == pytest.approx(0.10)
+        assert s["by_slot"][2] == pytest.approx(0.11), "the optional zeros do not dilute it"
+        assert s["measured"] == 4 and s["population"] == "required"
+
+    def test_what_is_left_out_is_counted_beside_it(self):
+        s = measure.summarise([self._entry(0.1),
+                               self._entry(0.0, letter_required=False),
+                               self._entry(0.0, letter_required=False),
+                               self._entry(0.04, letter_required=None)])
+        assert s["excluded"]["not_required"] == {"n": 2, "mean": 0.0, "zeros": 2}
+        assert s["excluded"]["unrecorded"]["n"] == 1
+        assert s["excluded"]["unrecorded"]["mean"] == pytest.approx(0.04)
+
+    def test_nothing_required_is_a_headline_of_zero_not_a_crash(self):
+        s = measure.summarise([self._entry(0.0, letter_required=False)])
+        assert s["n"] == 0 and "mean" not in s
+        assert s["excluded"]["not_required"]["n"] == 1
+        assert s["by_writer"]["claude-mcp"]["required_n"] == 0
+
+    def test_split_by_writer_over_every_letter(self):
+        s = measure.summarise([
+            self._entry(0.0, writer="claude-mcp", letter_required=False),
+            self._entry(0.2, writer="claude-mcp"),
+            self._entry(0.1, writer="gemini-2.5-pro"),
+            self._entry(0.03, writer="cowork-handwritten", letter_required=None)])
+        w = s["by_writer"]
+        assert list(w) == ["claude-mcp", "cowork-handwritten", "gemini-2.5-pro"]
+        assert w["claude-mcp"] == {"n": 2, "mean": pytest.approx(0.1),
+                                   "required_n": 1, "required_mean": pytest.approx(0.2)}
+        assert w["cowork-handwritten"]["required_mean"] is None
+        assert w["gemini-2.5-pro"]["required_n"] == 1
+
+    def _letter(self, conn, tmp_path, source_id, model):
+        from jobpipe.normalize import Posting
+        p = Posting(ats_type="ashby", source_id=source_id, company=f"Co{source_id}",
+                    title="Engineer", location="NYC", remote_flag=False,
+                    description="", url=f"u{source_id}", posted_at=None)
+        pid, _ = db.upsert_posting(conn, p, p.content_hash)
+        folder = tmp_path / source_id
+        folder.mkdir()
+        (folder / "cover_letter.sent.md").write_text("the letter", encoding="utf-8")
+        db.insert_document(conn, pid, "cover_letter", model=model,
+                           generated_path=str(folder / "cover_letter.md"),
+                           content="the letter", generated_at="2020-01-01T00:00:00+00:00")
+        conn.commit()
+        return pid
+
+    def test_collect_reads_the_flag_and_the_writer(self, conn, tmp_path):
+        required = self._letter(conn, tmp_path, "1", "claude-mcp")
+        optional = self._letter(conn, tmp_path, "2", "gemini-2.5-pro")
+        never = self._letter(conn, tmp_path, "3", "cowork-handwritten")
+        db.record_status(conn, required, "applied", letter_required=True)
+        db.record_status(conn, optional, "applied", letter_required=False)
+        conn.commit()
+        got = {m["posting_id"]: m for m in measure.collect(conn)}
+        assert got[required]["letter_required"] is True
+        assert got[optional]["letter_required"] is False
+        assert got[never]["letter_required"] is None
+        assert got[optional]["writer"] == "gemini-2.5-pro"
+
+    def test_the_latest_applied_event_that_carries_the_flag_wins(self, conn, tmp_path):
+        pid = self._letter(conn, tmp_path, "1", "claude-mcp")
+        db.record_status(conn, pid, "applied", letter_required=False)
+        db.record_status(conn, pid, "interview")
+        db.record_status(conn, pid, "applied", letter_required=True)
+        db.record_status(conn, pid, "rejected")
+        conn.commit()
+        assert measure.letter_required(conn, pid) is True
+        other = self._letter(conn, tmp_path, "2", "claude-mcp")
+        db.record_status(conn, other, "applied")          # recorded without the flag
+        conn.commit()
+        assert measure.letter_required(conn, other) is None
+
+
 class TestSentPath:
     def test_the_convention(self):
         assert measure.sent_path_for("a/b/cover_letter.md").name == \
@@ -290,11 +381,12 @@ class TestSlotAlignmentGuard:
 
     def _shaped(self, distance, n_slots, slot_value=0.9):
         return {"distance": distance, "archetype": "data_science",
+                "letter_required": True, "writer": "cowork-handwritten",
                 "paragraphs": [measure.ParagraphChange(i, slot_value, "a", "b")
                                for i in range(n_slots)]}
 
     def test_a_free_form_letter_is_excluded_from_by_slot(self):
-        assembled = {"distance": 0.03, "archetype": "ai_ml",
+        assembled = {"distance": 0.03, "archetype": "ai_ml", "letter_required": True,
                      "paragraphs": [measure.ParagraphChange(i, 0.1, "a", "b")
                                     for i in range(len(measure.SLOT_NAMES))]}
         summary = measure.summarise([assembled, self._shaped(0.03, 10)])

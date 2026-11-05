@@ -3,7 +3,7 @@
 {% block content %}
 <h1>Measure</h1>
 <p class="lede">Normalised edit distance between each generated letter and the copy actually sent.
-Letter-required applications only, so the population is not random and the claim is narrowed to match.</p>
+The headline is over letter-required applications only, so the population is not random and the claim is narrowed to match; the letters left out are counted beside it, and every letter is split by who wrote it.</p>
 
 {% if result.hint %}
 <section class="card">
@@ -12,13 +12,24 @@ Letter-required applications only, so the population is not random and the claim
 </section>
 {% else %}
 {% set s = result.summary %}
+{% set excluded_names = {'not_required': 'the form did not require a letter', 'unrecorded': 'letter_required never recorded'} %}
+{% if s.n %}
 <div class="grid four">
-  <div class="stat"><div class="n">{{ s.n }}</div><div class="l">Letters measured</div></div>
+  <div class="stat"><div class="n">{{ s.n }}</div><div class="l">Letter-required letters</div></div>
   <div class="stat"><div class="n green">{{ '%.3f' % s.mean }}</div><div class="l">Mean distance</div></div>
   <div class="stat"><div class="n">{{ '%.3f' % s.best }}</div><div class="l">Best</div></div>
   <div class="stat"><div class="n">{{ '%.3f' % s.worst }}</div><div class="l">Worst</div></div>
 </div>
+{% else %}
+<div class="notice warn">No letter-required application has been measured yet. The headline is over those only; record <code>letter_required</code> when an application goes in.</div>
+{% endif %}
+{% if s.excluded %}
+<div class="notice" style="margin-top: 12px"><strong>Not in the headline:</strong>
+  <ul class="plain small">{% for name, g in s.excluded.items() %}<li>{{ g.n }} letter(s) where {{ excluded_names[name] }} — mean {{ '%.3f' % g.mean }}, {{ g.zeros }} at 0.000</li>{% endfor %}</ul>
+</div>
+{% endif %}
 <div class="grid two" style="margin-top: 16px">
+{% if s.n %}
 <section class="card">
   <h2>By slot <span class="hint">({{ s.slot_n }} aligned{% if s.slot_skipped %}, {{ s.slot_skipped }} skipped for not having the assembled seven-block shape{% endif %})</span></h2>
   <table>
@@ -31,7 +42,7 @@ Letter-required applications only, so the population is not random and the claim
   </table>
 </section>
 <section class="card">
-  <h2>By archetype</h2>
+  <h2>By archetype <span class="hint">(letter-required)</span></h2>
   <table>
     <thead><tr><th>Archetype</th><th class="num">Mean</th></tr></thead>
     <tbody>
@@ -41,16 +52,31 @@ Letter-required applications only, so the population is not random and the claim
     </tbody>
   </table>
 </section>
+{% endif %}
+<section class="card">
+  <h2>By writer <span class="hint">(every measured letter)</span></h2>
+  <table>
+    <thead><tr><th>Writer</th><th class="num">n</th><th class="num">Mean</th><th class="num">Letter-required</th></tr></thead>
+    <tbody>
+    {% for writer, w in s.by_writer.items() %}
+    <tr><td>{{ writer }}</td><td class="num">{{ w.n }}</td><td class="num">{{ '%.3f' % w.mean }}</td>
+      <td class="num">{% if w.required_n %}{{ w.required_n }}: {{ '%.3f' % w.required_mean }}{% else %}<span class="muted">none</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
 </div>
 <section class="card">
   <h2>Per letter</h2>
   <table>
-    <thead><tr><th>Posting</th><th>Archetype</th><th>Generated</th><th class="num">Distance</th><th class="num">Words gen → sent</th></tr></thead>
+    <thead><tr><th>Posting</th><th>Archetype</th><th>Writer</th><th>Letter required</th><th>Generated</th><th class="num">Distance</th><th class="num">Words gen → sent</th></tr></thead>
     <tbody>
     {% for m in result.letters %}
     <tr>
       <td><a class="row-link" href="/posting/{{ m.posting_id }}">{{ m.company }}</a> <span class="muted">— {{ m.title }}</span></td>
       <td>{{ m.archetype or '?' }}</td>
+      <td class="small">{{ m.writer or '?' }}</td>
+      <td>{% if m.letter_required is none %}<span class="muted">not recorded</span>{% elif m.letter_required %}yes{% else %}no{% endif %}</td>
       <td class="num muted small">{{ m.generated_at }}</td>
       <td class="num">{{ '%.3f' % m.distance }}</td>
       <td class="num">{{ m.words_generated }} → {{ m.words_sent }}</td>

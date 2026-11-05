@@ -9,6 +9,10 @@ breakdown underneath it. An aggregate of 0.08 says the draft was close; it
 does not say that paragraph three gets rewritten every single time, which is
 the thing that would tell you which instruction is wrong.
 
+The headline covers letter-required applications only, with the letters
+left out of it reported beside it, and every letter is also split by who
+wrote it (`summarise`, and CONTEXT §8.10 for why).
+
 The resume is deliberately not measured this way. It is assembled from a
 fixed bank, so it should be sent as generated — hand-editing it discards the
 traceability that makes §2.1 a guarantee rather than a hope. If a resume is
@@ -216,17 +220,92 @@ def collect(conn) -> list[dict]:
             "company": posting["company"] if posting else "?",
             "title": posting["title"] if posting else "?",
             "archetype": row["archetype"], "generated_at": row["generated_at"],
+            "writer": row["model"] or "?",
+            "letter_required": letter_required(conn, row["posting_id"]),
             **result,
         })
     conn.commit()
     return out
 
 
-def summarise(measured: list[dict]) -> dict:
-    """The three numbers §7 asks for, plus the per-slot one that is useful."""
-    if not measured:
-        return {"n": 0}
+def letter_required(conn, posting_id: int) -> bool | None:
+    """What the latest `applied` event that says so recorded: did the form
+    ask for a letter? None when no applied event carries the flag - an
+    application recorded without it, or a letter whose application was
+    never recorded at all."""
+    row = conn.execute(
+        "SELECT letter_required FROM status_events WHERE posting_id = ? "
+        "AND status = 'applied' AND letter_required IS NOT NULL "
+        "ORDER BY id DESC LIMIT 1", (posting_id,)).fetchone()
+    return None if row is None else bool(row[0])
 
+
+# Which letters the headline is about (PHASE5_PLAN §5.3, CONTEXT §8.10).
+#
+# A letter the form did not ask for is one he could send as drafted at no
+# cost - into an optional "anything else" box, say - so its distance says
+# little about how good the draft was. Five such letters measured 0.000 on
+# 2026-11-05 and had pulled the `why this role` slot from 0.110 to 0.018,
+# although advance_status had promised all along that measure counted
+# letter-required applications only. It never read the flag.
+#
+# The headline - n, mean, best, worst, the slots, the variants - is
+# therefore over letter-required applications ONLY. The other two
+# populations are reported beside it, with their own n and mean, rather
+# than dropped: a number computed over a subset gets quoted later as if it
+# had covered everything, unless the subset is named next to it.
+REQUIRED, NOT_REQUIRED, UNRECORDED = "required", "not_required", "unrecorded"
+
+
+def population(entry: dict) -> str:
+    flag = entry.get("letter_required")
+    if flag is None:
+        return UNRECORDED
+    return REQUIRED if flag else NOT_REQUIRED
+
+
+def _mean(values: list[float]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+def summarise(measured: list[dict]) -> dict:
+    """The headline over letter-required applications, the populations left
+    out of it, and the same letters split by who wrote them."""
+    if not measured:
+        return {"n": 0, "measured": 0, "excluded": {}, "by_writer": {}}
+
+    groups: dict[str, list[dict]] = {REQUIRED: [], NOT_REQUIRED: [], UNRECORDED: []}
+    for entry in measured:
+        groups[population(entry)].append(entry)
+
+    out = _headline(groups[REQUIRED]) if groups[REQUIRED] else {"n": 0}
+    out["population"] = REQUIRED
+    out["measured"] = len(measured)
+    out["excluded"] = {
+        name: {"n": len(entries), "mean": _mean([e["distance"] for e in entries]),
+               "zeros": sum(1 for e in entries if e["distance"] == 0)}
+        for name, entries in groups.items() if name != REQUIRED and entries}
+
+    # By writer: a Claude session, a hand-written Cowork letter, and (from
+    # Phase 7A) a Gemini draft are different populations. Over every measured
+    # letter, with each writer's letter-required figures beside it, so a
+    # writer whose letters were all optional is visible as such.
+    by_writer: dict[str, dict] = {}
+    for entry in measured:
+        w = by_writer.setdefault(entry.get("writer") or "?", {"all": [], "required": []})
+        w["all"].append(entry["distance"])
+        if population(entry) == REQUIRED:
+            w["required"].append(entry["distance"])
+    out["by_writer"] = {
+        writer: {"n": len(v["all"]), "mean": _mean(v["all"]),
+                 "required_n": len(v["required"]),
+                 "required_mean": _mean(v["required"])}
+        for writer, v in sorted(by_writer.items())}
+    return out
+
+
+def _headline(measured: list[dict]) -> dict:
+    """The three numbers §7 asks for, plus the per-slot one that is useful."""
     distances = [m["distance"] for m in measured]
 
     # Per-slot means are only comparable across letters that share the

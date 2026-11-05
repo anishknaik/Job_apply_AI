@@ -491,3 +491,9 @@ what was put in it.
 nobody edited since the last sync, and only if it still holds what was just
 read. A cell he changed is his edit, and it flows the other way, into the
 database (`status_mirror.py`).
+
+Give `letter_required` truthfully, every time. `measure`'s headline counts
+only letters whose application was recorded `letter_required=true`; a
+letter left without the flag is reported as "never recorded", outside the
+headline, and every letter is also split by who wrote it (`CONTEXT.md`
+§8.10).

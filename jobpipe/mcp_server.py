@@ -246,9 +246,11 @@ def stats(conn) -> dict[str, Any]:
 def measure(conn) -> dict[str, Any]:
     """Edit distance between generated letters and the copies actually sent.
 
-    Reports on letter-required applications only — skipping a letter where the
-    form has no field for one is correct, so the population is not random and
-    the claim is narrowed to match (PHASE5_PLAN §5.3).
+    The headline reports on letter-required applications only — skipping a
+    letter where the form has no field for one is correct, so the population
+    is not random and the claim is narrowed to match (PHASE5_PLAN §5.3). The
+    letters left out are counted in `summary.excluded`, and every letter is
+    split by writer in `summary.by_writer` (CONTEXT §8.10).
     """
     measured = _measure.collect(conn)
     summary = _measure.summarise(measured)

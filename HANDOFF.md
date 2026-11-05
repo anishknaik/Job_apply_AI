@@ -1209,6 +1209,16 @@ postings is not yet known. If one is, the fix goes in `GENERIC_TAGS` or
    excludes session-copied letters; `measure` splits by writer model; or the
    review wait reads the letter field back into the `.sent.md` before
    submit.
+
+   **Decided 2026-11-05.** Anish read the five 0.000 letters and sent them
+   unchanged, so a zero is a true "sent as drafted". A Gemini letter in the
+   same template is good enough for him, and `draft_letter` uses it. On his
+   word, `measure` now does both: the headline is letter-required only, and
+   every letter is split by writer, so Gemini drafts form their own row and
+   never blend into Claude's (CONTEXT §8.10). What remains: an edit typed
+   into the form is still invisible to `measure`. That is accepted while he
+   sends drafts as written; the review-wait read-back is the fix if that
+   changes.
 4. The GCP credit ends mid-November. After that, drafting bills to the
    card.
 
@@ -1232,12 +1242,20 @@ workbench.
 2. **A drafted answer failing grounding** is left blank with the reason
    shown, and the form still fills.
 3. **The cost figure against the GCP billing page** (risk 2).
-4. Decide risk 3 before any session meets a form that requires a letter.
+4. ~~Decide risk 3~~ - decided, above. After the first session that drafts
+   a letter, check `measure` shows a `gemini-2.5-pro` row under "by writer".
+5. **PostHog (10414) and University of Utah (16669) have no `applied`
+   event**, so their letters, the only two ever edited, sit outside the
+   headline as "never recorded". The open `why this role` question (0.110,
+   §3) rests on PostHog's. If Anish confirms he applied and whether each
+   form required a letter, record it with `advance_status(...,
+   letter_required=...)`.
 
 ### Tests
 
 The full suite on this branch, locally on 2026-11-05: **1,465 passed, 0
-failed** in about 2.5 minutes, with the gitignored files present. The first
+failed** before the `measure` change, which added six tests (see the commit
+for the count after it) in about 2.5 minutes, with the gitignored files present. The first
 local run found 8 failures that the cloud session could not see: slice 3
 made `check_grounding` return `result.usage`, and the double in
 `tests/test_mcp_server.py` (`TestCheckGrounding._Result`) had no such
