@@ -213,6 +213,73 @@ class _Lock:
 
 
 # ---------------------------------------------------------------------------
+# Liveness (Phase 7A): is the form still there, and what does it ask
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Inspection:
+    """What a headless look at the form page found. `alive` false means
+    the posting is gone - two of the 2026-11-05 picks had been taken down
+    hours after the fetch saw them - and `reason` says what was seen."""
+    posting_id: int
+    alive: bool
+    ats: str | None = None
+    url: str | None = None
+    form: _spec.FormSpec | None = None
+    reason: str = ""
+    signals: list[str] = field(default_factory=list)
+
+
+def inspect(conn, posting_id: int, config: ApplyConfig, *, targets: list | None = None,
+            fetch_json=None, form_url: str | None = None,
+            browser_factory=Browser) -> Inspection:
+    """Open the form page headless, wait for the form, parse what it asks,
+    close. Fills nothing, records nothing in apply_runs; takes the runner's
+    lock so it never shares the profile with a live review window."""
+    row = db.get_posting(conn, posting_id)
+    if row is None:
+        raise RunnerError(f"no posting with id {posting_id}")
+    try:
+        ats, url = form_url_for(row, targets)
+    except RunnerError as exc:
+        return Inspection(posting_id, False, reason=str(exc))
+    url = form_url or url
+    if fetch_json is None:
+        from ..fetchers.http import get_json as fetch_json
+
+    form = None
+    if ats == _spec.GREENHOUSE:
+        token = board_token(row, targets)
+        try:
+            payload = fetch_json(_spec.greenhouse_questions_url(token, row["source_id"]))
+        except Exception as exc:                             # noqa: BLE001
+            # Greenhouse answers 404 for a closed job; any other failure
+            # is also "not something to open a browser on right now".
+            return Inspection(posting_id, False, ats, url,
+                              reason=f"questions JSON not fetched: {exc}"[:300])
+        form = _spec.parse_greenhouse(payload, company=row["company"])
+
+    with _Lock(Path(config.output_dir)):
+        with browser_factory(config, headless=True) as browser:
+            page = browser.new_page()
+            try:
+                page.goto(url, wait_until="load")
+            except Exception as exc:                         # noqa: BLE001
+                return Inspection(posting_id, False, ats, url,
+                                  reason=f"page did not load: {exc}"[:300])
+            if not _wait_for_form(page, ats, config.browser.page_timeout):
+                return Inspection(posting_id, False, ats, url,
+                                  reason=f"no {_fill.FORM_ROOTS[ats]} on the page within "
+                                         f"{config.browser.page_timeout:.0f}s (taken down?)",
+                                  signals=list(_fill.collect_signals(page).kinds))
+            if form is None:
+                html = page.content()
+                form = _spec.parse_ashby_form(html, _spec.extract_app_data(html), apply_url=url)
+            signals = list(_fill.collect_signals(page).kinds)
+    return Inspection(posting_id, True, ats, url, form, signals=signals)
+
+
+# ---------------------------------------------------------------------------
 # The run
 # ---------------------------------------------------------------------------
 

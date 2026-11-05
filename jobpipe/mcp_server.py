@@ -865,6 +865,8 @@ def check_grounding(conn, posting_id: int,
         "claims": len(result.claims),
         "problems": result.problems,
         "report": result.report(),
+        # Tokens, for the apply session's running cost estimate.
+        "usage": dict(result.usage),
     }
     if question is not None:
         out["question"] = doc["question"]

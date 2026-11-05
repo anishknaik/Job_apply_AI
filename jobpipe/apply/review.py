@@ -40,7 +40,8 @@ from pathlib import Path
 
 from . import fill as _fill, learned as _learned, submit as _submit
 
-STDIN, BROWSER_CLOSED, MAX_WAIT = "stdin", "browser_closed", "max_wait"
+STDIN, BROWSER_CLOSED, MAX_WAIT, FORM_GONE = ("stdin", "browser_closed", "max_wait",
+                                                "form_gone")
 
 
 class StdinLines:
@@ -146,8 +147,15 @@ def capture_evidence(page, ats: str, run_dir: Path) -> dict:
 
 
 def wait(ctx: ReviewContext, lines: StdinLines | None = None, *, poll: float = 2.0,
-         max_wait: float | None = None, out=None) -> ReviewResult:
-    """Keep the window open and watch the form. See the module docstring."""
+         max_wait: float | None = None, out=None,
+         end_when_form_gone: bool = False) -> ReviewResult:
+    """Keep the window open and watch the form. See the module docstring.
+
+    `end_when_form_gone` ends the wait once the form has left the page and
+    the evidence, the learned choices and the status are recorded - the
+    apply session (Phase 7A) moves to the next posting on its own, where
+    the CLI keeps the confirmation page up until Anish presses Enter.
+    """
     lines = lines or StdinLines()
     out = out or sys.stdout
     started = time.monotonic()
@@ -179,6 +187,9 @@ def wait(ctx: ReviewContext, lines: StdinLines | None = None, *, poll: float = 2
                     except Exception as exc:                 # noqa: BLE001
                         print(f"  could not record applied: {exc}", file=out, flush=True)
                 _print_evidence(result, out)
+                if end_when_form_gone:
+                    result.ended_by = FORM_GONE
+                    break
         except Exception as exc:                             # noqa: BLE001
             if not _page_alive(ctx.page):
                 result.ended_by = BROWSER_CLOSED
