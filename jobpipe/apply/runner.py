@@ -134,7 +134,10 @@ def build_sources(conn, posting_id: int, form: _spec.FormSpec, *,
 
     letter_text = letter_pdf = None
     wants_file = any(_resolve.meaning_of(f) == "cover_letter" and f.kind == _spec.FILE for f in form.fields)
-    wants_text = any(_resolve.meaning_of(f) == "cover_letter" and f.kind == _spec.TEXTAREA for f in form.fields)
+    # A letter text box, or an "anything else" textarea the reviewed letter
+    # goes into when there is one (resolve.py, additional_info).
+    wants_text = any(_resolve.meaning_of(f) in ("cover_letter", "additional_info")
+                     and f.kind == _spec.TEXTAREA for f in form.fields)
     if wants_file or wants_text:
         try:
             out = prepare_letter(conn, posting_id, pdf=wants_file)

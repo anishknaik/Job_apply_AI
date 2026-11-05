@@ -346,6 +346,40 @@ class TestOpenEnded:
         assert out.action == "fill"
 
 
+# -- "anything else" boxes take the reviewed letter (2026-11-04) ----------------------
+
+class TestAdditionalInformation:
+    LETTER = "Dear Team,\n\nReviewed body.\n\nSincerely,\nJane\n"
+
+    @pytest.mark.parametrize("label,required", [
+        ("Anything else? (Optional)", False),
+        ("Is there anything else you'd like us to know?", True),
+        ("Additional information", False),
+    ])
+    def test_a_textarea_takes_the_reviewed_letter(self, label, required):
+        out = one(fld("q", label, "textarea", required=required),
+                  sources(letter_text=self.LETTER))
+        assert (out.action, out.value, out.source) == ("fill", self.LETTER, "prepare_letter")
+        assert out.meaning == "additional_info"
+
+    def test_a_single_line_box_never_takes_the_letter(self):
+        out = one(fld("q", "Anything else?", "text", required=False),
+                  sources(letter_text=self.LETTER))
+        assert out.action == "blank" and out.source is None
+
+    def test_without_a_letter_a_stored_answer_is_used(self):
+        q = "Anything else? (Optional)"
+        rows = {spec_norm(q): {"id": 9, "content": "One more thing.", "grounding_ok": 1,
+                              "grounding_model": "gemini-2.5-flash-lite"}}
+        out = one(fld("q", q, "textarea", required=False), sources(short_answers=rows))
+        assert (out.action, out.value, out.source) == ("fill", "One more thing.", "documents:short_answer#9")
+
+    def test_without_a_letter_or_answer_optional_is_blank_and_required_blocks(self):
+        assert one(fld("q", "Anything else? (Optional)", "textarea", required=False)).action == "blank"
+        out = one(fld("q", "Is there anything else we should know?", "textarea", required=True))
+        assert out.action == "blocker" and "save_short_answer" in out.note
+
+
 # -- row 7: never fill ----------------------------------------------------------------
 
 class TestNeverFill:

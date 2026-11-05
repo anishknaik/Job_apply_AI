@@ -137,6 +137,25 @@ class TestSources:
         assert any("form_answers unavailable" in n for n in notes)
         assert any("no resume rendered" in n for n in notes)
 
+    def test_an_anything_else_box_asks_for_the_reviewed_letter(self, conn, tmp_path):
+        """prepare_letter is called for a form with an additional-information
+        textarea, not only for a cover-letter field; its refusal is a note."""
+        pid = seed(conn, tmp_path)
+        from jobpipe.apply.spec import Field, FormSpec
+        form = FormSpec(ats="ashby", job_id="1", company="Sierra", title="x", fields=(
+            Field("cf82", "Anything else? (Optional)", "textarea", False),))
+        calls = []
+
+        def letter(conn_, pid_, pdf=False):
+            calls.append(pdf)
+            return {"text": "Dear Team,\n\nReviewed.\n", "words": 3}
+        sources, notes, _ = runner.build_sources(conn, pid, form, answers_loader=answers,
+                                                 prepare_letter=letter)
+        assert calls == [False] and sources.letter_text.startswith("Dear Team")
+        sources, notes, _ = runner.build_sources(conn, pid, form, answers_loader=answers,
+                                                 prepare_letter=refuse_letter)
+        assert sources.letter_text is None and any("prepare_letter refused" in n for n in notes)
+
     def test_short_answers_and_their_writers(self, conn, tmp_path):
         pid = seed(conn, tmp_path)
         tools.save_short_answer(conn, pid, "Why Alloy?", "Because of the fraud work.")

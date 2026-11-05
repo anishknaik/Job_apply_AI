@@ -94,6 +94,11 @@ class Resolution:
 _MEANINGS: tuple[tuple[str, str], ...] = (
     ("cover_letter", r"cover\s*letter"),
     ("resume", r"\bresume\b|\bcv\b|curriculum"),
+    # "Anything else?" boxes. A reviewed letter goes here when there is one
+    # (Anish's decision, 2026-11-04); otherwise they are open-ended.
+    ("additional_info", r"anything else|additional information|additional (comments|details)|"
+                        r"anything (you'?d|you would) like (us|to)|is there anything|"
+                        r"other information|any other (information|details|comments)"),
     ("signature", r"signature|\binitials?\b|\be-?sign\b"),
     ("attestation", r"\bi\s+(certify|acknowledge|understand|agree|confirm|attest|declare|consent)\b|certif(y|ication) that|acknowledg(e|ement) (that|of)"),
     ("government_id", r"\bssn\b|social security|passport|national id|government[- ]issued|date of birth|\bdob\b|driver'?s? licen"),
@@ -347,6 +352,16 @@ def resolve_field(f: _spec.Field, sources: Sources) -> Resolved:
                 return Resolved(f, FILL, sources.letter_text, "prepare_letter", meaning)
             return _no_source(f, meaning, "no reviewed letter; copy_for_editing, review, then prepare_letter")
         return _no_source(f, meaning, f"a {f.kind} widget cannot take a letter")
+
+    if meaning == "additional_info":
+        # The reviewed letter - prepare_letter reads only cover_letter.sent.md
+        # and refuses otherwise - fills an additional-information box, required
+        # or optional. Only a textarea: a single-line box cannot hold a letter.
+        # With no reviewed letter the box is an ordinary open-ended question.
+        if f.kind == _spec.TEXTAREA and sources.letter_text is not None:
+            return Resolved(f, FILL, sources.letter_text, "prepare_letter", meaning,
+                            note="the reviewed letter, into the additional-information box")
+        return _open_ended(f, sources, meaning)
 
     if meaning == "first_name" or meaning == "last_name":
         first, last, note = _split_name(identity)
