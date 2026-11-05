@@ -139,10 +139,21 @@ def _gh_question(q: dict, section: str) -> Field:
                  description=_strip_tags(q.get("description") or ""))
 
 
+DEMOGRAPHIC_PREFIX = "demographic_question_"
+
+
+def page_id(key: str) -> str:
+    """The id the rendered page gives a field. Greenhouse renders a
+    demographic question's control with its bare numeric id, not the
+    prefixed key the spec uses (seen live on Affirm and Chime, 2026-11-05)."""
+    return key[len(DEMOGRAPHIC_PREFIX):] if key.startswith(DEMOGRAPHIC_PREFIX) else key
+
+
 def _gh_demographic(q: dict) -> Field:
     """`demographic_questions.questions[]` as Greenhouse documents it:
-    id, label, required, type, answer_options[{id, label}]. UNVERIFIED
-    against a live board - no sampled posting carried one (2026-11-04)."""
+    id, label, required, type, answer_options[{id, label}]. Seen live on
+    Affirm and Chime (2026-11-05); the rendered control's id is the bare
+    numeric id - see page_id()."""
     kind = {"multi_value_single_select": SELECT,
             "multi_value_multi_select": MULTISELECT,
             "input_text": TEXT, "textarea": TEXTAREA}.get(str(q.get("type")), UNKNOWN)

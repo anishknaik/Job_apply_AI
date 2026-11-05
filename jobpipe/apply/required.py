@@ -76,6 +76,10 @@ def missing_from_spec(markers: list[str] | None, form: _spec.FormSpec) -> list[s
         return None
     keys = {f.key for f in form.fields}
     keys |= {re.sub(r"\[\]$", "", k) for k in keys}
+    # Greenhouse renders a demographic question's control with its bare id
+    # ("4024620002"); the spec keys it demographic_question_<id> (Chime,
+    # 2026-11-05). The same question, not a missing one.
+    keys |= {_spec.page_id(k) for k in keys}
     allowed = ALLOWED.get(form.ats, {})
     return [m for m in markers if m not in keys and m not in allowed]
 

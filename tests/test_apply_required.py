@@ -111,3 +111,26 @@ class TestOnThePage:
             markers, missing = required.check(page, form)
         assert "resume" in markers and "country" in markers and "candidate-location" in markers
         assert missing == []
+
+
+class TestGreenhouseDemographicIds:
+    """Chime, 2026-11-05: the page marks a required demographic question
+    by its bare id; the spec keys it demographic_question_<id>."""
+
+    def test_a_bare_demographic_id_is_the_same_question(self):
+        form = FormSpec("greenhouse", "1", "x", "x", (
+            spec.Field("demographic_question_4024620002", "Gender", "select", True,
+                       section="demographic"),))
+        assert required.missing_from_spec(["4024620002"], form) == []
+
+    def test_a_marker_with_no_field_is_still_missing(self):
+        form = FormSpec("greenhouse", "1", "x", "x", (
+            spec.Field("demographic_question_4024620002", "Gender", "select", True,
+                       section="demographic"),))
+        assert required.missing_from_spec(
+            ["4024620002", "gdpr_demographic_data_consent_given_1"], form) == [
+            "gdpr_demographic_data_consent_given_1"]
+
+    def test_page_id(self):
+        assert spec.page_id("demographic_question_42") == "42"
+        assert spec.page_id("question_42") == "question_42"

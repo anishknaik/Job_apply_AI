@@ -134,6 +134,10 @@ def _control(frame, f: _spec.Field):
                       f'input[type="file"][name="{key}"]']
     elif f.kind in (_spec.YESNO, _spec.RADIO):
         candidates = [f'[data-field-path="{key}"]']
+    elif _spec.page_id(key) != key:
+        bare = _spec.page_id(key)
+        # A bare numeric id is not a valid #selector; match the attribute.
+        candidates = [f'[id="{bare}"]', f'[name="{bare}"]', f'[id="{key}"]']
     else:
         candidates = [f'#{_css(key)}', f'[name="{key}"]',
                       f'[data-field-path="{key}"] input',
