@@ -27,7 +27,8 @@ from urllib.parse import parse_qs, urlparse
 from mcp.server.mcpserver.exceptions import ToolError
 
 from .. import answers as _answers, db, letters, mcp_server as tools
-from . import decide as _decide, fill as _fill, resolve as _resolve
+from . import decide as _decide, employers as _employers, fill as _fill
+from . import resolve as _resolve
 from . import spec as _spec, submit as _submit
 from .browser import Browser
 from .config import ApplyConfig
@@ -113,10 +114,16 @@ def form_url_for(row, targets: list | None) -> tuple[str, str]:
 
 def build_sources(conn, posting_id: int, form: _spec.FormSpec, *,
                   answers_loader=tools.form_answers,
-                  prepare_letter=tools.prepare_letter) -> tuple[_resolve.Sources, list[str], dict[str, str]]:
+                  prepare_letter=tools.prepare_letter,
+                  employers_loader=_employers.load,
+                  company: str | None = None) -> tuple[_resolve.Sources, list[str], dict[str, str]]:
     """Sources from the tool bodies. Returns (sources, notes, answer_writers).
     A tool's refusal becomes a note and an absent source, never a guess."""
     notes: list[str] = []
+    company = company or form.company or None
+    employers = employers_loader()
+    if employers is None:
+        notes.append("past employers unknown: bullets.yaml not loaded")
     try:
         answers = answers_loader()
     except ToolError as exc:
@@ -158,7 +165,8 @@ def build_sources(conn, posting_id: int, form: _spec.FormSpec, *,
 
     return (_resolve.Sources(answers=answers, resume_path=resume_path,
                              letter_text=letter_text, letter_pdf=letter_pdf,
-                             short_answers=short), notes, writers)
+                             short_answers=short, company=company,
+                             employers=employers), notes, writers)
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +231,7 @@ def run(conn, posting_id: int, mode: str, config: ApplyConfig, *,
         targets: list | None = None, fetch_json=None, form_url: str | None = None,
         browser_factory=Browser, headless: bool | None = None,
         answers_loader=tools.form_answers, prepare_letter=tools.prepare_letter,
+        employers_loader=_employers.load,
         now: datetime | None = None, keep_open: bool = False) -> RunOutcome:
     """Run the apply runner once on one posting. See the module docstring
     for the three modes. `form_url` overrides the page (tests, or a saved
@@ -251,7 +260,8 @@ def run(conn, posting_id: int, mode: str, config: ApplyConfig, *,
                             targets=targets, fetch_json=fetch_json,
                             browser_factory=browser_factory, headless=headless,
                             answers_loader=answers_loader,
-                            prepare_letter=prepare_letter, now=now,
+                            prepare_letter=prepare_letter,
+                            employers_loader=employers_loader, now=now,
                             keep_open=keep_open)
     except RunnerBusy:
         db.finish_apply_run(conn, run_id, decision="error", error="runner busy")
@@ -270,7 +280,8 @@ def run(conn, posting_id: int, mode: str, config: ApplyConfig, *,
 
 def _run_in_browser(conn, row, ats, url, mode, config, outcome, shots, *,
                     targets, fetch_json, browser_factory, headless,
-                    answers_loader, prepare_letter, now, keep_open):
+                    answers_loader, prepare_letter, employers_loader, now,
+                    keep_open):
     posting_id = row["id"]
     form = None
     if ats == _spec.GREENHOUSE:
@@ -281,7 +292,7 @@ def _run_in_browser(conn, row, ats, url, mode, config, outcome, shots, *,
     browser = browser_factory(config, headless=headless).__enter__()
     try:
         _drive(conn, row, posting_id, ats, url, mode, config, outcome, shots,
-               browser, answers_loader, prepare_letter, now, form)
+               browser, answers_loader, prepare_letter, employers_loader, now, form)
     finally:
         if keep_open and outcome.error is None and mode != _decide.DRY_RUN:
             outcome.browser = browser
@@ -290,7 +301,7 @@ def _run_in_browser(conn, row, ats, url, mode, config, outcome, shots, *,
 
 
 def _drive(conn, row, posting_id, ats, url, mode, config, outcome, shots,
-           browser, answers_loader, prepare_letter, now, form):
+           browser, answers_loader, prepare_letter, employers_loader, now, form):
     if True:
         page = browser.new_page()
         page.goto(url, wait_until="load")
@@ -305,7 +316,8 @@ def _drive(conn, row, posting_id, ats, url, mode, config, outcome, shots,
 
         sources, notes, writers = build_sources(
             conn, posting_id, form, answers_loader=answers_loader,
-            prepare_letter=prepare_letter)
+            prepare_letter=prepare_letter, employers_loader=employers_loader,
+            company=row["company"])
         resolution = _resolve.resolve(form, sources)
         signals_before = tuple(_fill.collect_signals(page).kinds)
         letter_required = any(_resolve.meaning_of(f) == "cover_letter" and f.required

@@ -380,6 +380,85 @@ class TestAdditionalInformation:
         assert out.action == "blocker" and "save_short_answer" in out.note
 
 
+# -- "Have you previously worked at {company}?" (2026-11-04) -----------------------
+
+class TestPriorEmployment:
+    EMPLOYERS = ("Acme Analytics", "Gradient Tensor Inc")
+
+    def ask(self, label, company="Affirm", employers=EMPLOYERS, kind="select", options=YES_NO, required=True):
+        return one(fld("q", label, kind, required=required, options=options),
+                   sources(company=company, employers=employers))
+
+    @pytest.mark.parametrize("label", [
+        "Have you previously worked at Affirm?",
+        "Have you ever been employed by Affirm, Inc.?",
+        "Are you a former Affirm employee?",
+        "Did you intern at Affirm before?",
+    ])
+    def test_not_a_past_employer_answers_no(self, label):
+        out = self.ask(label)
+        assert (out.action, out.value) == ("select", "No")
+        assert out.source.startswith("employers:")
+
+    def test_a_past_employer_is_left_for_anish(self):
+        out = self.ask("Have you previously worked at Gradient Tensor?", company="Gradient Tensor")
+        assert out.action == "blocker" and "past employer" in out.note
+
+    def test_a_parenthesised_name_is_recognised_either_way(self):
+        assert self.ask("Have you worked at Cursor before?", company="Cursor (Anysphere)").value == "No"
+        assert self.ask("Were you previously employed by Anysphere?", company="Cursor (Anysphere)").value == "No"
+
+    def test_a_question_about_some_other_employer_is_not_answered(self):
+        out = self.ask("Have you worked at a startup before?")
+        assert out.action == "blocker" and "unrecognised" in out.note
+        out = self.ask("Have you previously worked at Stripe?", required=False)
+        assert out.action == "blank"
+
+    def test_unknown_employers_is_a_blocker_not_a_no(self):
+        out = self.ask("Have you previously worked at Affirm?", employers=None)
+        assert out.action == "blocker" and "unknown" in out.note
+
+    def test_no_exact_no_option_is_a_blocker(self):
+        out = self.ask("Have you previously worked at Affirm?",
+                       options=(Option("Yes, currently", "1"), Option("Yes, formerly", "2"), Option("Never", "3")))
+        assert out.action == "blocker" and "Never" in out.note
+
+    def test_a_radio_and_a_yes_no_work_too(self):
+        assert self.ask("Have you previously worked at Affirm?", kind="radio").value == "No"
+        assert self.ask("Have you previously worked at Affirm?", kind="yesno",
+                        options=(Option("Yes", "yes"), Option("No", "no"))).value == "No"
+
+    def test_a_text_box_cannot_take_it(self):
+        out = self.ask("Have you previously worked at Affirm?", kind="text", options=None)
+        assert out.action == "blocker" and "yes/no" in out.note
+
+
+class TestEmployersLoader:
+    def test_experience_roles_only(self):
+        from jobpipe.apply import employers
+
+        class Bank:
+            roles = {"acme": {"kind": "experience", "company": "Acme Analytics"},
+                     "qa": {"kind": "project", "company": "Document Q&A Assistant"},
+                     "gt": {"kind": "experience", "company": "Gradient Tensor Inc"}}
+        assert employers.from_bank(Bank()) == ("Acme Analytics", "Gradient Tensor Inc")
+
+    def test_missing_bank_is_unknown(self, tmp_path):
+        from jobpipe.apply import employers
+        assert employers.load(tmp_path / "absent.yaml") is None
+
+    def test_names_and_matching(self):
+        from jobpipe.apply import employers
+        assert employers.company_names("Cursor (Anysphere)") == ("Cursor (Anysphere)", "Cursor", "Anysphere")
+        assert employers.label_names_company("Have you worked at Affirm?", "Affirm, Inc.")
+        assert not employers.label_names_company("Answer affirmatively", "Affirm")
+        assert employers.is_past_employer("Gradient Tensor", ("Gradient Tensor Inc",))
+        # Whole-word containment counts either way and errs toward "ask
+        # Anish"; a bare substring does not.
+        assert employers.is_past_employer("Tensor", ("Gradient Tensor Inc",))
+        assert not employers.is_past_employer("Tens", ("Gradient Tensor Inc",))
+
+
 # -- row 7: never fill ----------------------------------------------------------------
 
 class TestNeverFill:

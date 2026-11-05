@@ -82,6 +82,7 @@ def seed(conn, tmp_path, ats="greenhouse", with_resume=True, status="queued"):
 def go(conn, pid, mode, site, tmp_path, page="greenhouse_form.html", config=None, **kw):
     kw.setdefault("answers_loader", answers)
     kw.setdefault("prepare_letter", refuse_letter)
+    kw.setdefault("employers_loader", lambda: ("Acme Analytics",))
     kw.setdefault("fetch_json", lambda url: ALLOY)
     return runner.run(conn, pid, mode, config or config_for(tmp_path), targets=TARGETS,
                       form_url=f"{site}/{page}", headless=True, **kw)
@@ -155,6 +156,20 @@ class TestSources:
         sources, notes, _ = runner.build_sources(conn, pid, form, answers_loader=answers,
                                                  prepare_letter=refuse_letter)
         assert sources.letter_text is None and any("prepare_letter refused" in n for n in notes)
+
+    def test_the_posting_company_and_employers_reach_the_resolver(self, conn, tmp_path):
+        pid = seed(conn, tmp_path)
+        from jobpipe.apply import spec
+        sources, notes, _ = runner.build_sources(
+            conn, pid, spec.parse_greenhouse(ALLOY), answers_loader=answers,
+            prepare_letter=refuse_letter, employers_loader=lambda: ("Acme Analytics",),
+            company="Alloy")
+        assert sources.company == "Alloy" and sources.employers == ("Acme Analytics",)
+        sources, notes, _ = runner.build_sources(
+            conn, pid, spec.parse_greenhouse(ALLOY), answers_loader=answers,
+            prepare_letter=refuse_letter, employers_loader=lambda: None)
+        assert sources.employers is None and any("employers unknown" in n for n in notes)
+        assert sources.company == "Alloy", "falls back to the form's company"
 
     def test_short_answers_and_their_writers(self, conn, tmp_path):
         pid = seed(conn, tmp_path)

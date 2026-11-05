@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import answers as _answers
-from . import spec as _spec
+from . import employers as _employers, spec as _spec
 
 # Actions the filler performs. `blank` and `skip` touch nothing.
 FILL, UPLOAD, SELECT, AUTOCOMPLETE, BLANK, SKIP, BLOCKER = (
@@ -46,6 +46,8 @@ class Sources:
     letter_text: str | None = None                  # prepare_letter, reviewed copy
     letter_pdf: Path | None = None                  # prepare_letter(pdf=True)
     short_answers: dict[str, dict] = field(default_factory=dict)  # normalised question -> row
+    company: str | None = None                      # this posting's employer
+    employers: tuple[str, ...] | None = None        # his past employers; None = unknown
 
     def answer(self, question: str) -> dict | None:
         return self.short_answers.get(_answers.normalise_question(question))
@@ -103,6 +105,12 @@ _MEANINGS: tuple[tuple[str, str], ...] = (
     ("attestation", r"\bi\s+(certify|acknowledge|understand|agree|confirm|attest|declare|consent)\b|certif(y|ication) that|acknowledg(e|ement) (that|of)"),
     ("government_id", r"\bssn\b|social security|passport|national id|government[- ]issued|date of birth|\bdob\b|driver'?s? licen"),
     ("payment", r"\bbank\b|payment|routing number|\biban\b"),
+    # Answered only when the label also names this posting's employer; see
+    # resolve_field. "Have you worked at a startup before?" is not this.
+    ("prior_employment", r"(previously|ever|before|formerly|in the past)\b.*\b(worked|employed|an employee|intern(ed)?)|"
+                         r"\b(worked|employed|intern(ed)?)\b.*\b(previously|before|in the past)|"
+                         r"\bformer\b.*\b(employee|employer|employment)|prior employment|"
+                         r"(are|were) you (a |an )?(current|former|previous) (employee|contractor)"),
     ("salary", r"salary|compensation|\bpay\b|desired rate|hourly rate|expected (rate|earnings)"),
     ("sponsorship", r"sponsor"),
     ("work_authorization", r"authori[sz]ed to work|legally (authori[sz]ed|eligible|permitted)|work authori[sz]ation|eligible to work|right to work"),
@@ -352,6 +360,23 @@ def resolve_field(f: _spec.Field, sources: Sources) -> Resolved:
                 return Resolved(f, FILL, sources.letter_text, "prepare_letter", meaning)
             return _no_source(f, meaning, "no reviewed letter; copy_for_editing, review, then prepare_letter")
         return _no_source(f, meaning, f"a {f.kind} widget cannot take a letter")
+
+    if meaning == "prior_employment":
+        if not _employers.label_names_company(f.label, sources.company):
+            # "Have you worked at a startup before?" - not about this employer.
+            return _no_source(f, meaning, f"unrecognised {f.kind} question; no source to fill it from")
+        if sources.employers is None:
+            return _no_source(f, meaning, "past employers unknown (bullets.yaml not loaded); left for Anish")
+        if _employers.is_past_employer(sources.company, sources.employers):
+            return Resolved(f, BLOCKER, meaning=meaning,
+                            note=f"{sources.company} is a past employer; left for Anish")
+        if f.kind not in (_spec.SELECT, _spec.YESNO, _spec.RADIO):
+            return _no_source(f, meaning, f"a {f.kind} widget cannot take yes/no")
+        opt = _exact_option(f, "No")
+        if opt is None:
+            return _no_source(f, meaning, f"no option exactly equals 'No'; options: "
+                                          f"{[o.label for o in f.options or ()]}")
+        return Resolved(f, SELECT, opt.label, "employers:bullets.yaml (not a past employer)", meaning)
 
     if meaning == "additional_info":
         # The reviewed letter - prepare_letter reads only cover_letter.sent.md
