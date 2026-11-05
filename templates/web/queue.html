@@ -3,6 +3,9 @@
 {% block content %}
 <h1>Queue</h1>
 <p class="lede">Ordered by company tier, then apply score.{% if result.unscored_backlog is defined %} Unscored backlog: {{ result.unscored_backlog }}.{% endif %}</p>
+{% if live_session %}
+<div class="notice green"><strong>Apply session {{ live_session.status }}</strong> — {{ live_session.applied }} applied so far, {{ live_session.remaining }} to go. The statuses on this page are the database's, so a posting moves to <strong>applied</strong> here the moment the runner records your submit. <a href="/session">Open the panel</a>.</div>
+{% endif %}
 
 <div class="chips">
   {% for sid in status_ids if sid in counts %}

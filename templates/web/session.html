@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}jobpipe — apply session{% endblock %}
+{% block head %}
+{#- The panel refreshes itself with a meta refresh while a session runs: no
+    script, so this page still cannot press a button on its own. -#}
+{% if refresh %}<meta http-equiv="refresh" content="3">{% endif %}
+{% endblock %}
+{% block content %}
+<h1>Apply session</h1>
+<p class="lede">Works the queue one posting at a time: resume from the grid, drafts by {{ draft_model }} checked by the grounding model, the form filled by the runner, then <strong>you review and submit</strong>. Every form with a drafted answer is review-only by rule; nothing here submits.</p>
+
+{% if state %}
+<section class="card">
+  <h2>Session {{ state.session_id }}
+    <span class="badge {% if state.status == 'running' %}green{% elif state.status in ('paused', 'error') %}amber{% endif %}">{{ state.status }}</span>
+    {% if state.stale %}<span class="badge red">worker gone</span>{% endif %}
+  </h2>
+  <div class="meta" style="margin-bottom: 10px">
+    <span class="badge">cost so far ${{ '%.3f' % state.cost_usd }} <span class="muted">(estimate, list prices)</span></span>
+    <span class="badge">drafted for {{ state.drafted_for }} of {{ state.cap }} postings</span>
+    <span class="badge">{{ state.calls }} model calls</span>
+    <span class="hint">started {{ state.started_at }} · updated {{ state.updated_at }}{% if state.finished_at %} · finished {{ state.finished_at }}{% endif %}</span>
+  </div>
+  {% if state.stale %}<div class="notice danger">The worker that wrote this is no longer running under this server (a restart, or it was killed). The record below stands; start a new session when ready.</div>{% endif %}
+  {% if state.error %}<div class="notice danger">{{ state.error }}</div>{% endif %}
+  {% if state.status == 'paused' %}<div class="notice warn"><strong>Paused.</strong> {{ state.pause_reason }}</div>{% endif %}
+  {% if alive and not state.stale %}
+  <div class="actions">
+    <form class="inline" method="post" action="/session/skip"><button>Skip this posting</button></form>
+    {% if state.status == 'paused' %}
+    <form class="inline" method="post" action="/session/pause"><input type="hidden" name="action" value="resume"><button class="primary">Resume</button></form>
+    {% else %}
+    <form class="inline" method="post" action="/session/pause"><input type="hidden" name="action" value="pause"><button>Pause after this posting</button></form>
+    {% endif %}
+    <form class="inline" method="post" action="/session/stop"><button class="dark">Stop</button></form>
+    <span class="hint">Skip and Stop close the runner's window; your submit is what records applied.</span>
+  </div>
+  {% endif %}
+
+  <table>
+    <thead><tr><th>Company</th><th>Title</th><th>Outcome</th><th>Status</th><th>Note</th></tr></thead>
+    <tbody>
+    {% for r in state.postings %}
+    <tr>
+      <td><a class="row-link" href="/posting/{{ r.id }}">{{ r.company }}</a>{% if r.id == state.current %} <span class="badge green">now · {{ r.phase or 'working' }}</span>{% endif %}</td>
+      <td>{{ r.title }}</td>
+      <td><span class="badge {% if r.outcome == 'applied' %}green{% elif r.outcome in ('error', 'closed') %}red{% elif r.outcome in ('ready_for_review', 'needs_variant') %}amber{% endif %}">{{ r.outcome }}</span></td>
+      <td><span class="badge{% if r.status == 'applied' %} green{% endif %}">{{ r.status or 'untracked' }}</span></td>
+      <td class="small">{{ r.note }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {% for r in state.postings if r.id == state.current or r.outcome != 'pending' %}
+  {% if r.resume or r.drafts or r.fill or r.liveness %}
+  <h3>{{ r.company }} — {{ r.title }}</h3>
+  {% if r.liveness and not r.liveness.alive %}<div class="notice danger">Form not found: {{ r.liveness.reason }}{% if r.liveness.status_recorded %} · recorded {{ r.liveness.status_recorded }}{% endif %}</div>{% endif %}
+  {% if r.resume %}
+    {% if r.resume.error %}<div class="notice warn">Resume not rendered: {{ r.resume.error }}</div>
+    {% else %}
+    <p class="small"><strong>Resume</strong> · <span class="badge">{{ r.resume.variant }}</span> {{ r.resume.why }} · {{ r.resume.pages }} page at {{ r.resume.font_pt }}pt</p>
+    <div class="dropped"><strong>Dropped to fit one page:</strong> {% if r.resume.dropped %}{{ r.resume.dropped | join(', ') }}{% else %}nothing{% endif %}
+      {% if r.resume.flagged %}<div class="small" style="margin-top: 6px"><strong>Flagged — the posting names what these bullets carry:</strong>
+        <ul class="plain">{% for f in r.resume.flagged %}<li>{{ f.bullet }} <span class="muted">({{ f.skills | join(', ') }})</span></li>{% endfor %}</ul>
+        Stop and re-render from the posting page if one of these matters; the fix is the variant's ordering or a skills tag, never a per-application tweak.</div>{% endif %}
+    </div>
+    {% endif %}
+  {% endif %}
+  {% if r.drafts %}
+  <table>
+    <thead><tr><th>Draft</th><th>Verdict</th><th>Filled</th><th>Why</th><th class="num">Cost</th></tr></thead>
+    <tbody>
+    {% for d in r.drafts %}
+    <tr>
+      <td>{{ d.kind }}{% if d.question and d.kind == 'answer' %}: <span class="small">{{ d.question }}</span>{% endif %}
+        {% if d.kind == 'letter' and d.filled %} <a class="ext small" href="/posting/{{ r.id }}">edit .sent.md ↗</a>{% endif %}</td>
+      <td>{% if d.verdict == 'passed' %}<span class="verdict-pass">passed</span>{% if d.accuracy is defined and d.accuracy is not none %} <span class="hint">{{ '%.2f' % d.accuracy }}</span>{% endif %}{% elif d.verdict == 'failed' %}<span class="verdict-fail">FAILED</span>{% elif d.verdict %}<span class="verdict-none">{{ d.verdict }}</span>{% else %}<span class="verdict-none">—</span>{% endif %}</td>
+      <td>{% if d.filled %}<span class="badge green">yes</span>{% else %}<span class="badge amber">left blank</span>{% endif %}</td>
+      <td class="small">{{ d.reason }}</td>
+      <td class="num small">{% if d.cost %}${{ '%.4f' % d.cost }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% if r.fill %}
+    <p class="small" style="margin-top: 8px"><strong>Fill</strong> · run #{{ r.fill.run_id }} · {{ r.fill.decision }}{% if r.fill.signals %} · bot check: {{ r.fill.signals | join(', ') }}{% endif %}{% if r.fill.error %} · <span class="verdict-fail">{{ r.fill.error }}</span>{% endif %}</p>
+    {% if r.fill.fields %}
+    <table>
+      <thead><tr><th>Field</th><th>Status</th><th>Source</th><th>Note</th></tr></thead>
+      <tbody>
+      {% for f in r.fill.fields %}
+      <tr><td>{{ f.label }}</td><td><span class="badge {% if f.status in ('ok', 'planned') %}green{% elif f.status in ('blocker', 'blocked', 'mismatch', 'not_found', 'error') %}red{% endif %}">{{ f.status }}</span></td><td class="small">{{ f.source or '—' }}</td><td class="small">{{ f.note }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% if r.fill.notes %}<ul class="plain small">{% for n in r.fill.notes %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}
+  {% endif %}
+  {% if r.review %}<p class="small"><strong>Review</strong> · ended by {{ r.review.ended_by }}{% if r.review.verdict %} · ATS showed {{ r.review.verdict }}{% endif %}{% if r.review.status_recorded %} · recorded <span class="badge green">{{ r.review.status_recorded }}</span>{% endif %}{% if r.review.learned %} · remembered {{ r.review.learned | join(', ') }}{% endif %}</p>{% endif %}
+  {% endif %}
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Start a session</h2>
+  {% if alive %}
+  <p class="muted">A session is running. Stop it before starting another.</p>
+  {% else %}
+  <p class="hint">The queue: scored, passed Stage A, seen in the last {{ days }} days, on a board the runner fills (Greenhouse, Ashby), with no status yet or not applied. Highest apply score first. Untick what you do not want; the first N ticked are worked. Drafting is capped at {{ cap }} postings per session (JOBPIPE_MAX_DRAFTS_PER_SESSION); past it forms are filled without drafts.</p>
+  <form method="post" action="/session/start">
+  <table>
+    <thead><tr><th></th><th class="num">Tier</th><th>Company</th><th>Title</th><th>Location</th><th class="num">Score</th><th>Board</th><th></th></tr></thead>
+    <tbody>
+    {% for r in queue %}
+    <tr>
+      <td><input type="checkbox" name="ids" value="{{ r.id }}" checked></td>
+      <td class="num muted">{{ r.tier if r.tier is not none else '—' }}</td>
+      <td><a class="row-link" href="/posting/{{ r.id }}">{{ r.company }}</a></td>
+      <td>{{ r.title }}</td>
+      <td>{{ r.location or '' }}</td>
+      <td class="num"><span class="badge {% if r.apply_score >= 8 %}green{% endif %}">{{ r.apply_score }}</span></td>
+      <td class="small">{{ r.ats_type }}</td>
+      <td class="num">{% if r.apply_url %}<a class="ext small" href="{{ r.apply_url }}" target="_blank" rel="noopener noreferrer">posting ↗</a>{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8" class="muted">Nothing in the queue right now.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="actions">
+    <label>work at most <input type="number" name="limit" min="1" value="{{ cap }}" style="width: 5em"></label>
+    <button class="primary" {% if not queue %}disabled{% endif %}>Start session</button>
+    <span class="hint">spends money: {{ draft_model }} drafts and grounding checks, under the cap</span>
+  </div>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

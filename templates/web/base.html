@@ -11,6 +11,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>{% block title %}jobpipe{% endblock %}</title>
+{% block head %}{% endblock %}
 <script>
   // Before first paint, so a dark page does not flash white. A stored choice
   // wins; otherwise the system setting applies through prefers-color-scheme.
@@ -277,6 +278,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
   <nav>
     <a href="/" {% if nav == 'home' %}class="current"{% endif %}>Dashboard</a>
     <a href="/queue" {% if nav == 'queue' %}class="current"{% endif %}>Queue</a>
+    <a href="/session" {% if nav == 'session' %}class="current"{% endif %}>Apply session</a>
     <a href="/answers" {% if nav == 'answers' %}class="current"{% endif %}>Form answers</a>
     <a href="/measure" {% if nav == 'measure' %}class="current"{% endif %}>Measure</a>
   </nav>

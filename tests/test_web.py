@@ -83,7 +83,8 @@ def client(db_path, tmp_path, monkeypatch):
     monkeypatch.setattr(tools, "_tier_map", lambda: {})
     # Application folders under the temp dir, never under the real output/.
     monkeypatch.setattr(pipeline_tailor, "OUTPUT_ROOT", tmp_path / "out")
-    return TestClient(web.create_app(db_path))
+    # The session worker's files under the temp dir, never under output/.
+    return TestClient(web.create_app(db_path, session_dir=tmp_path / "session"))
 
 
 def seed(conn, company="Abridge", title="AI Engineer", source_id="1",
@@ -148,12 +149,16 @@ class TestTheAllowlist:
     def test_no_route_of_a_forbidden_shape_exists(self, forbidden):
         assert not [p for _, p in web.ROUTE_ALLOWLIST if forbidden in p]
 
-    def test_every_write_is_a_post_under_a_posting(self):
-        """A write lives under the posting it changes, and only there — no
-        corpus-wide action has a route."""
+    def test_every_write_is_a_post_under_a_posting_or_the_session(self):
+        """A write lives under the posting it changes, or under /session/,
+        whose four POSTs start the worker or hand it one word (Phase 7A).
+        No corpus-wide action has a route: the session works only the
+        postings Anish ticked."""
         for method, path in web.ROUTE_ALLOWLIST:
             if method != "GET":
-                assert path.startswith("/posting/{posting_id}/"), path
+                assert (path.startswith("/posting/{posting_id}/")
+                        or path in ("/session/start", "/session/skip",
+                                    "/session/pause", "/session/stop")), path
 
 
 # ---------------------------------------------------------------------------
@@ -765,3 +770,161 @@ class TestApplyRunnerRoutes:
         assert f'href="/posting/{unconfirmed}"' in got.text
         assert f'href="/posting/{fine}"' not in got.text
         assert "never click again" in got.text
+
+
+# ---------------------------------------------------------------------------
+# Phase 7A: the apply session routes
+# ---------------------------------------------------------------------------
+
+class TestApplySessionRoutes:
+    """The worker is a child process; the routes start it, read its state
+    file and write one word to its command file. The launcher is faked,
+    so nothing here opens a browser or spends."""
+
+    class FakeProc:
+        def __init__(self):
+            self.returncode = None
+
+        def poll(self):
+            return self.returncode
+
+    @pytest.fixture
+    def launched(self, client, monkeypatch):
+        calls = []
+
+        def fake_launch(ids, limit, state_dir):
+            calls.append((list(ids), limit, Path(state_dir)))
+            return self.FakeProc()
+        monkeypatch.setattr(client.app.state, "launch_session", fake_launch)
+        monkeypatch.setattr(web, "_SESSION", {})
+        return calls
+
+    def write_state(self, client, **over):
+        from jobpipe.apply import session
+        state = session.SessionState("20261105T120000Z", "2026-11-05T12:00:00+00:00",
+                                     status="running", cap=10, cost_usd=0.1234, drafted_for=1)
+        for key, value in over.items():
+            setattr(state, key, value)
+        session.StateFile(client.app.state.session_dir).write(state)
+        return state
+
+    def test_the_six_routes_and_only_those(self):
+        paths = {p for _, p in web.ROUTE_ALLOWLIST if p.startswith("/session")}
+        assert paths == {"/session", "/session/state", "/session/start",
+                         "/session/skip", "/session/pause", "/session/stop"}
+        assert not [p for p in paths if "submit" in p or "auto" in p or "resume" in p]
+
+    def test_the_panel_lists_the_queue_and_a_start_form(self, client, conn):
+        pid = seed(conn)
+        got = client.get("/session")
+        assert got.status_code == 200
+        assert f'name="ids" value="{pid}"' in got.text
+        assert 'action="/session/start"' in got.text
+        assert "http-equiv" not in got.text, "no refresh while nothing runs"
+        assert "Nothing here" not in got.text
+
+    def test_start_launches_the_worker_on_the_ticked_postings_in_queue_order(self, client, conn, launched):
+        low = seed(conn, source_id="1", apply_score=6)
+        high = seed(conn, source_id="2", apply_score=9)
+        got = client.post("/session/start", data={"ids": [str(low), str(high)], "limit": "5"},
+                          headers=SAME_ORIGIN, follow_redirects=True)
+        assert "Session started" in got.text
+        assert launched == [([low, high], 5, client.app.state.session_dir)]
+
+    def test_start_refuses_nothing_ticked_and_postings_outside_the_queue(self, client, conn, launched):
+        applied = seed(conn, status="applied")
+        got = client.post("/session/start", data={}, headers=SAME_ORIGIN, follow_redirects=True)
+        assert "no postings ticked" in got.text
+        got = client.post("/session/start", data={"ids": str(applied)}, headers=SAME_ORIGIN,
+                          follow_redirects=True)
+        assert "in the session queue any more" in got.text
+        assert launched == []
+
+    def test_a_second_session_is_refused_while_one_runs(self, client, conn, launched):
+        pid = seed(conn)
+        client.post("/session/start", data={"ids": str(pid)}, headers=SAME_ORIGIN)
+        got = client.post("/session/start", data={"ids": str(pid)}, headers=SAME_ORIGIN,
+                          follow_redirects=True)
+        assert "already running" in got.text and len(launched) == 1
+
+    def test_the_buttons_write_one_word_and_only_while_the_worker_lives(self, client, conn, launched):
+        from jobpipe.apply import session
+        cmd = session.Commands(client.app.state.session_dir)
+        got = client.post("/session/skip", headers=SAME_ORIGIN, follow_redirects=True)
+        assert "no session running" in got.text and cmd.poll() is None
+        pid = seed(conn)
+        client.post("/session/start", data={"ids": str(pid)}, headers=SAME_ORIGIN)
+        client.post("/session/skip", headers=SAME_ORIGIN)
+        assert cmd.poll() == "skip"
+        client.post("/session/pause", headers=SAME_ORIGIN)
+        assert cmd.poll() == "pause"
+        client.post("/session/pause", data={"action": "resume"}, headers=SAME_ORIGIN)
+        assert cmd.poll() == "resume"
+        client.post("/session/stop", headers=SAME_ORIGIN)
+        assert cmd.poll() == "stop"
+
+    def test_the_session_posts_are_refused_cross_origin(self, client, conn, launched):
+        pid = seed(conn)
+        for path, data in (("/session/start", {"ids": str(pid)}), ("/session/skip", {}),
+                           ("/session/pause", {}), ("/session/stop", {})):
+            got = client.post(path, data=data, headers={"Origin": "https://evil.example"})
+            assert got.status_code == 403, path
+        assert launched == []
+
+    def test_the_state_route_and_the_panel_show_the_worker_file(self, client, conn, launched):
+        from jobpipe.apply import session
+        pid = seed(conn)
+        client.post("/session/start", data={"ids": str(pid)}, headers=SAME_ORIGIN)
+        state = self.write_state(client, current=pid)
+        state.postings.append(session.PostingRecord(pid, "Abridge", "AI Engineer", outcome="working",
+                                                    phase="drafts",
+                                                    resume={"variant": "ai_ml", "why": "grid",
+                                                            "pages": 1, "font_pt": 9.5,
+                                                            "dropped": ["gt-remittance"],
+                                                            "flagged": [{"bullet": "gt-remittance",
+                                                                         "skills": ["postgresql"]}]},
+                                                    drafts=[{"kind": "answer", "question": "Why?",
+                                                             "verdict": "failed", "filled": False,
+                                                             "reason": "left blank: [unsupported] led 40",
+                                                             "cost": 0.01}]))
+        session.StateFile(client.app.state.session_dir).write(state)
+        got = client.get("/session/state")
+        assert got.status_code == 200
+        body = got.json()
+        assert body["alive"] is True and body["state"]["cost_usd"] == 0.1234
+        page = client.get("/session")
+        assert "http-equiv=\"refresh\"" in page.text, "refreshes while the worker runs"
+        assert "gt-remittance" in page.text and "postgresql" in page.text
+        assert "left blank" in page.text and "FAILED" in page.text
+        assert "$0.123" in page.text
+        assert 'action="/session/skip"' in page.text and 'action="/session/stop"' in page.text
+
+    def test_applied_shows_from_the_database_not_the_file(self, client, conn, launched):
+        from jobpipe.apply import session
+        pid = seed(conn)
+        client.post("/session/start", data={"ids": str(pid)}, headers=SAME_ORIGIN)
+        state = self.write_state(client)
+        state.postings.append(session.PostingRecord(pid, "Abridge", "AI Engineer", outcome="applied"))
+        session.StateFile(client.app.state.session_dir).write(state)
+        tools.advance_status(conn, pid, "applied", source="agent")
+        page = client.get("/session")
+        assert "applied" in page.text
+        queue = client.get("/queue?status=applied")
+        assert f'href="/posting/{pid}"' in queue.text
+        assert "Apply session running" in queue.text and "1 applied so far" in queue.text
+
+    def test_a_dead_worker_with_a_running_file_is_shown_as_gone(self, client, conn):
+        self.write_state(client, status="running")
+        page = client.get("/session")
+        assert "worker gone" in page.text
+        assert 'action="/session/skip"' not in page.text
+        assert "http-equiv" not in page.text
+        assert client.get("/session/state").json()["state"]["stale"] is True
+
+    def test_the_panel_never_offers_submit_or_auto(self, client, conn, launched):
+        pid = seed(conn)
+        client.post("/session/start", data={"ids": str(pid)}, headers=SAME_ORIGIN)
+        self.write_state(client)
+        text = client.get("/session").text.lower()
+        for word in ("auto-submit", "--auto", "name=\"submit\"", "apply.yaml"):
+            assert word not in text, word

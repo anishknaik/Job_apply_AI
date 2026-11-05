@@ -45,6 +45,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from . import (answers as _answers, db, letters, measure as _measure,
                mcp_server as tools, pipeline_tailor, states, variants)
+from .apply import config as _apply_config, session as _session
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATES = Jinja2Templates(directory=str(REPO_ROOT / "templates" / "web"))
@@ -73,6 +74,17 @@ ROUTE_ALLOWLIST = (
     ("POST", "/posting/{posting_id}/fill"),
     ("POST", "/posting/{posting_id}/fill/close"),
     ("GET", "/posting/{posting_id}/run/{run_id}/screenshot/{name}"),
+    # Phase 7A, PHASE7_PLAN §2: the apply session. The worker is a child
+    # process; these start it, read its state file, and write one word to
+    # its command file. Nothing here submits, passes --auto, or touches
+    # apply.yaml or learned_answers.yaml. /session/pause carries
+    # action=pause|resume, so Resume needs no route of its own.
+    ("GET", "/session"),
+    ("GET", "/session/state"),
+    ("POST", "/session/start"),
+    ("POST", "/session/skip"),
+    ("POST", "/session/pause"),
+    ("POST", "/session/stop"),
 )
 
 # Runner processes this server started, by posting id. A review run keeps
@@ -95,6 +107,29 @@ def _launch_runner(posting_id: int, mode: str) -> subprocess.Popen:
     log = open(log_dir / f"web-run-{posting_id}.log", "ab")  # noqa: SIM115
     return subprocess.Popen(args, cwd=str(REPO_ROOT), stdin=subprocess.PIPE,
                             stdout=log, stderr=subprocess.STDOUT)
+
+def _launch_session(ids: list[int], limit: int | None, state_dir: Path) -> subprocess.Popen:
+    """`python -m jobpipe.apply.session --ids ... [--limit N]`, as a child.
+    The worker fills in review mode only (session.py); there is no flag
+    here that could make it do otherwise."""
+    args = [sys.executable, "-m", "jobpipe.apply.session",
+            "--ids", ",".join(str(i) for i in ids), "--state-dir", str(state_dir)]
+    if limit:
+        args += ["--limit", str(limit)]
+    log_dir = REPO_ROOT / "output" / "apply"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log = open(log_dir / "web-session.log", "ab")  # noqa: SIM115
+    return subprocess.Popen(args, cwd=str(REPO_ROOT), stdout=log, stderr=subprocess.STDOUT)
+
+
+# The session worker this server started, if any. One at a time.
+_SESSION: dict[str, subprocess.Popen] = {}
+
+
+def _session_alive() -> bool:
+    proc = _SESSION.get("proc")
+    return proc is not None and proc.poll() is None
+
 
 # The only files a posting's folder serves. A name, never a path, so nothing
 # outside output/applications/<slug>/ is reachable however the URL is shaped.
@@ -128,12 +163,17 @@ def _hostname(value: str | None) -> str | None:
     return urlparse(value).hostname
 
 
-def create_app(db_path: str | None = None) -> FastAPI:
+def create_app(db_path: str | None = None, session_dir: Path | None = None) -> FastAPI:
     app = FastAPI(title="jobpipe", docs_url=None, redoc_url=None,
                   openapi_url=None)
 
     def conn():
         return tools._conn(db_path)
+
+    # Where the session worker writes state.json and reads its command.
+    # Under the runner's output_dir (gitignored), as apply.yaml says.
+    app.state.session_dir = (Path(session_dir) if session_dir
+                             else _session.default_state_dir(_apply_config.load()))
 
     @app.middleware("http")
     async def loopback_only(request: Request, call_next):
@@ -218,7 +258,8 @@ def create_app(db_path: str | None = None) -> FastAPI:
         for entry in result["postings"]:
             entry["apply_url"] = _safe_url(entry.get("url"))
         return page(request, "queue.html", result=result, counts=counts,
-                    current=status, min_score=min_score)
+                    current=status, min_score=min_score,
+                    live_session=_live_session(app.state.session_dir))
 
     @app.get("/posting/{posting_id}", response_class=HTMLResponse)
     def posting(request: Request, posting_id: int):
@@ -392,8 +433,129 @@ def create_app(db_path: str | None = None) -> FastAPI:
             pass
         return back(posting_id, "ok", "Review window closed")
 
+    # -- the apply session (Phase 7A) ----------------------------------------
+
+    def session_view():
+        state = _session.StateFile(app.state.session_dir).read()
+        alive = _session_alive()
+        if state and state.get("status") in (_session.RUNNING, _session.PAUSED,
+                                             _session.STARTING) and not alive:
+            # The worker is gone (killed, crashed, or started by an earlier
+            # server) but its file says running: say so rather than show
+            # buttons that would write commands nobody reads.
+            state = dict(state, stale=True)
+        return state, alive
+
+    def session_back(kind: str, title: str, body: Any = None):
+        token = _flash(kind, title, body)
+        return RedirectResponse(f"/session?flash={token}", 303)
+
+    @app.get("/session", response_class=HTMLResponse)
+    def session_panel(request: Request):
+        state, alive = session_view()
+        connection = conn()
+        try:
+            queue_rows = _session.select_queue(connection, tier_map=tools._tier_map())
+            statuses = db.current_statuses(connection)
+        finally:
+            connection.close()
+        for entry in queue_rows:
+            entry["apply_url"] = _safe_url(entry.get("url"))
+        if state:
+            for rec in state.get("postings", []):
+                rec["status"] = statuses.get(rec["id"])
+        cap = _session.max_drafts_per_session()
+        return page(request, "session.html", state=state, alive=alive,
+                    queue=queue_rows, cap=cap, days=_session.QUEUE_DAYS,
+                    draft_model=_draft_model(),
+                    refresh=bool(state) and alive and not state.get("stale"))
+
+    @app.get("/session/state")
+    def session_state():
+        from fastapi.responses import JSONResponse
+        state, alive = session_view()
+        return JSONResponse({"alive": alive, "state": state})
+
+    @app.post("/session/start")
+    def session_start(ids: list[int] = Form([]), limit: str = Form("")):
+        """Start the worker on the ticked postings. The click is the ask:
+        this is the one place drafting spend starts, and it is Anish's."""
+        if _session_alive():
+            return session_back("error", "Session not started",
+                                "a session is already running; stop it first")
+        if not ids:
+            return session_back("error", "Session not started", "no postings ticked")
+        cap = _session.max_drafts_per_session()
+        try:
+            n = int(limit) if str(limit).strip() else None
+        except ValueError:
+            return session_back("error", "Session not started", f"limit must be a number, not {limit!r}")
+        connection = conn()
+        try:
+            allowed = {e["id"] for e in _session.select_queue(connection)}
+        finally:
+            connection.close()
+        chosen = [i for i in ids if i in allowed]
+        if not chosen:
+            return session_back("error", "Session not started",
+                                "none of the ticked postings is in the session queue any more")
+        if n is not None and n > 0:
+            chosen = chosen[:n]
+        # Clear a previous session's leftover command so the new worker
+        # does not read a stale Stop the moment it starts.
+        _session.Commands(app.state.session_dir).clear()
+        try:
+            _SESSION["proc"] = app.state.launch_session(chosen, n, app.state.session_dir)
+        except OSError as exc:
+            return session_back("error", "Session not started", str(exc))
+        return session_back("ok", "Session started",
+                            {"postings": len(chosen), "drafting cap": f"{cap} postings",
+                             "next": "the worker opens its own browser for each form; this page "
+                                     "refreshes itself while it runs"})
+
+    def command(word: str, title: str):
+        if not _session_alive():
+            return session_back("error", f"{title}: no session running",
+                                "nothing to send it to")
+        _session.Commands(app.state.session_dir).send(word)
+        return session_back("ok", title)
+
+    @app.post("/session/skip")
+    def session_skip():
+        return command(_session.SKIP, "Skip sent: the current posting is left as it is")
+
+    @app.post("/session/pause")
+    def session_pause(action: str = Form("pause")):
+        if action == "resume":
+            return command(_session.RESUME, "Resume sent")
+        return command(_session.PAUSE, "Pause sent: the session stops after the current posting")
+
+    @app.post("/session/stop")
+    def session_stop():
+        return command(_session.STOP, "Stop sent: the session ends after the current step")
+
     app.state.launch = _launch_runner
+    app.state.launch_session = _launch_session
     return app
+
+
+def _draft_model() -> str:
+    from .apply import draft
+    return draft.draft_model()
+
+
+def _live_session(session_dir: Path) -> dict | None:
+    """The running session, summarised for the queue page, or None."""
+    state = _session.StateFile(session_dir).read()
+    if not state or not _session_alive():
+        return None
+    if state.get("status") not in (_session.RUNNING, _session.PAUSED, _session.STARTING):
+        return None
+    postings = state.get("postings", [])
+    return {"status": state["status"],
+            "applied": sum(1 for r in postings if r.get("outcome") == _session.APPLIED),
+            "remaining": sum(1 for r in postings if r.get("outcome") in (_session.PENDING,
+                                                                          _session.WORKING))}
 
 
 def _alive(posting_id: int) -> bool:
