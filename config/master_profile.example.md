@@ -84,6 +84,10 @@ shared prefix, so appending leaves everything above it byte-identical.
 ```yaml
 identity:
   name: Jane Q. Example
+  # The split a form asks for. Without these the apply runner splits a
+  # two-word name and stops on anything longer rather than guess.
+  first_name: Jane
+  last_name: Example
   email: jane.example@example.com
   phone: "(555) 010-0000"
   linkedin: linkedin.com/in/example
@@ -107,6 +111,12 @@ experience:
 # The same facts as §10, in a shape a form filler reads without parsing prose.
 work_authorization:
   authorized_to_work_in_us: true
-  requires_sponsorship: false     # now or in the future
+  requires_sponsorship: false     # kept: scoring reads this one
+  # Forms ask the two separately, and on some statuses the answers differ.
+  # The apply runner reads the future flag whenever the question mentions
+  # the future ("now or in the future", "ever", "will you need"), the now
+  # flag otherwise; each falls back to requires_sponsorship above.
+  requires_sponsorship_now: false
+  requires_sponsorship_future: false
   status: US citizen
 ```

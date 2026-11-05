@@ -35,3 +35,11 @@ prove what `fill.py` and `submit.py` do and never do; they do not prove
 what Greenhouse's or Ashby's real components do. The fake ATS's success and
 error markup follow what was verified for Ashby and the UNVERIFIED wording
 assumed for Greenhouse (`submit.py`).
+
+`fake_ats.html` also takes `?auto_after=<ms>` (the page submits itself,
+standing in for Anish's click during a review wait), `?outcome=gone` (the
+form leaves with nothing recognisable after it), and carries a radio
+question the runner has no source for, which is what the review wait
+remembers. The Greenhouse double has the phone widget's `country`
+sub-field and the resume group's `aria-required` markers as on the real
+Alloy page, for the required-markers check.

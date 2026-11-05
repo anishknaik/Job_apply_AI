@@ -905,6 +905,81 @@ Also learned: a review run started from a non-interactive shell closes its
 browser immediately (`input()` gets EOF). Start it with `Start-Process` or
 from a terminal; the workbench's runner holds stdin open for the same reason.
 
+### 2026-11-05: five items from the first live runs (cloud, against doubles)
+
+Built on `apply-runner` after Sierra, one commit each, all offline:
+
+1. **The reviewed letter goes into "anything else" boxes.** An
+   additional-information *textarea*, required or optional, takes
+   `prepare_letter`'s text (it reads only `cover_letter.sent.md`), source
+   `prepare_letter`; a single-line box never does; without a reviewed
+   letter the box is the open-ended question it was. `build_sources` asks
+   `prepare_letter` for such forms too. The runner still writes no prose.
+2. **"Have you previously worked at {company}?" answers No** from the
+   bank's experience roles (`jobpipe/apply/employers.py`), only when the
+   label names this posting's employer - "Cursor (Anysphere)" by either
+   name - and only as an exact "No" option. A past employer, an unloadable
+   bank, or other wording is a blocker. Posting company and employers now
+   ride on `resolve.Sources`.
+3. **Remembered answers** (`jobpipe/apply/learned.py`,
+   `config/learned_answers.yaml`, gitignored; the example ships). Key: the
+   question, whitespace collapsed, case-folded, this company replaced by
+   `{company}`; an option that names the company is templated the same way
+   and expanded before the exact match (Sierra's "Yes, I am based in one of
+   Sierra's office locations." serves the same question elsewhere). Choice
+   widgets only; never self-ID, never-fill rows, or profile facts; reused
+   only where the table left a blocker or a blank; shown as
+   `learned:<company> #<posting> <date>`.
+4. **The review wait** (`jobpipe/apply/review.py`) replaces `input()`:
+   polls every 2 s, ends on a stdin line or a closed browser, never on EOF
+   (stdin is read on a daemon thread). When the form disappears after his
+   submit it saves `after-submit.png`, `after-submit.html` and
+   `confirmation.json` (URL, body excerpt, `submit.classify`'s verdict) to
+   the run folder, records his choices on the questions the runner left,
+   and prints both. **It does not advance status.** The workbench path is
+   unchanged: `/fill/close` still writes a newline and closes stdin.
+5. **The ninth decide.py condition, `required_match`**
+   (`jobpipe/apply/required.py`): the page's own required markers - Ashby
+   title labels with `_required`, by `for`; Greenhouse `aria-required`
+   controls by id or `aria-labelledby` - must all be spec keys, with
+   Greenhouse's phone `country` the one named exception. Not read fails;
+   dry runs run it; the report carries `required_on_page` and
+   `required_missing`. Sierra's real page agrees on all 13 required
+   questions, and with the radio groups dropped from the spec the check
+   names the five that went missing on 2026-11-04.
+
+Two parser fixes came out of the doubles and apply to real pages: Ashby
+field parsing ignores script source (a page that builds itself inline would
+otherwise yield every field twice), and an `<input>` with no `type` is text.
+
+**Verified only against the doubles**, not a real page: the review wait's
+end conditions and capture; `read_choices` on a real react-select or Ashby
+autocomplete; the letter landing in a real "anything else" textarea; a
+learned answer matched live in an Ashby listbox; the Greenhouse
+`aria-required` scan on a live form (the captured Alloy excerpt agrees; the
+live page has not been read by this code). Suite on the cloud checkout:
+1,163 passed, 2 skipped, the same 36 failures and 126 errors a clean
+checkout always has (gitignored `bullets.yaml`, the profile, `cli ground`,
+and that container's Playwright browser mismatch).
+
+**Live checks still owed, in this order** - all `--review`, none `--auto`:
+
+1. **Affirm (24670, Greenhouse)** in `--review`. Anish submits; the wait
+   captures the confirmation page. Update `submit.py`'s Greenhouse patterns
+   from `confirmation.json` and the screenshot (they are UNVERIFIED until
+   this). Check that his choices on the questions the runner left landed in
+   `config/learned_answers.yaml`, and that the pronoun and
+   state-of-residence rows read as expected.
+2. **The same on one Ashby form.** Confirm `verdict: confirmed` from the
+   success box, and that the radio choices were recorded.
+3. **A dry run on a third posting** that asks one of the remembered
+   questions: the report should show `learned:` as the source.
+4. **The required-markers check on real pages of both ATSes** -
+   `required_missing: []` in a dry run's report on each - before anyone
+   sets `auto_submit: true`. Every live form so far loads reCAPTCHA, so
+   `--auto` would decide review regardless; the check is for the day one
+   does not.
+
 ### Open
 
 - The new states are in `states.labels()`, which feeds the sheet's status

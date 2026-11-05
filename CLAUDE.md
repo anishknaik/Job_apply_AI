@@ -226,6 +226,7 @@ self-identification data.
 | `config/targets.csv` | 169 companies, `tier` drives queue order |
 | `config/filters.yaml` | Stage A rules. Do not loosen without an audit |
 | `config/answers.yaml` | self-ID, form logistics and reusable answers. Gitignored; never in a prompt |
+| `config/learned_answers.yaml` | choices Anish made on real forms, keyed by question with the company as `{company}`. Written by the apply runner; gitignored |
 | `output/applications/<role>/` | `resume.pdf`, and `cover_letter.md` → `.sent.md` → `.pdf` when a form wants one |
 | `templates/` | the resume and letter HTML the PDFs are rendered from |
 | `jobpipe.db` | SQLite, source of truth. Never delete rows |
@@ -316,10 +317,20 @@ same tools and the same table below - `form_answers`, `render_resume`,
 field with no source is a blocker, and the posting goes to review with it
 listed. Dry run is its default. It may click submit once, and only when
 `jobpipe/apply/decide.py`'s eight conditions all hold, which includes no
-bot check on the page; both ATSes load reCAPTCHA Enterprise on the rendered
+bot check on the page and that every required marker on the page is a
+field the spec knows; both ATSes load reCAPTCHA Enterprise on the rendered
 form, so expect review. From the workbench it runs in review or dry-run
-mode only. It has not yet been run on a real form; `HANDOFF.md` §8 has the
-supervised sequence.
+mode only. In review the window stays open until Anish presses Enter or
+closes it; when the form disappears after his submit the runner saves the
+confirmation evidence to the run folder and records the choices he made on
+questions it left, into the gitignored `config/learned_answers.yaml`, so
+the same question is answered the same way on another posting - choice
+widgets only, never self-ID, never the never-fill rows, never a profile
+fact. Two more things it fills from existing sources: the reviewed letter
+into an "anything else" textarea, and "Have you previously worked at
+{company}?" with No from the bank's experience roles. One application has
+gone through it (Sierra, review mode, 2026-11-04); `HANDOFF.md` §8 has what
+is verified and the live checks still owed.
 
 **Scope the browser.** The extension sees every tab in the logged-in
 browser. Open the application in a new tab of its own and work only there.

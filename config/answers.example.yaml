@@ -13,6 +13,10 @@
 #     (PHASE5_PLAN §6.1, "leave for Anish").
 #   * "Why this company?" and anything else specific to one posting. Those
 #     are drafted per application and checked with check_grounding.
+#   * choices made on a form's own dropdowns and radios ("How did you hear
+#     about {company}?", "Can you work from our office?"). The apply runner
+#     remembers those in learned_answers.yaml after a review-mode submit;
+#     see learned_answers.example.yaml.
 
 # ---------------------------------------------------------------------------
 # Voluntary self-identification (EEO / OFCCP).
