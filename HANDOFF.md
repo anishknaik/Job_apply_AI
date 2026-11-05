@@ -980,6 +980,60 @@ and that container's Playwright browser mismatch).
    `--auto` would decide review regardless; the check is for the day one
    does not.
 
+### 2026-11-05: live check 1 done - on Chime, not Affirm
+
+Affirm turned out to be one of seven postings Anish applied to by hand on
+2026-11-04 without syncing, so the database said `not_applied` and a review
+run opened on it; it was closed unsubmitted and recorded `applied`. Two
+decisions followed (`0369e33`): the runner **refuses review and auto on a
+posting already `applied`**, and **after his submit it records `applied`
+itself** (`source="agent"`) unless the ATS shows its error box. Sync the
+sheet before a run if he has applied by hand.
+
+Check 1 ran on **Chime, Software Engineer, Jade (29307, Greenhouse)**:
+review mode, resume rendered for it, a cover letter written in-session,
+grounding passed, approved, and attached by Anish as the
+`prepare_letter(pdf=true)` PDF. He submitted; the wait captured
+**Greenhouse's first real confirmation**: URL
+`job-boards.greenhouse.io/embed/job_app/confirmation?for=chime&token=...`,
+text "Thanks for your interest in Chime! Our team will review your
+submission...", verdict `confirmed`. `submit.py`'s Greenhouse patterns are
+now verified against it (fixture `greenhouse_chime_8868948002_confirmation.html`),
+`applied` was recorded by the runner, and `learned_answers.yaml` gained its
+first entry (Country).
+
+Fixed from what the live Greenhouse forms showed:
+- **Demographic questions** render with their bare numeric id, not the
+  spec's `demographic_question_<id>`: the filler could not find them and the
+  required check reported Chime's six required ones as missing
+  (`0c6e58a`, `spec.page_id`).
+- A **non-compete question** ("an agreement with a former employer") was
+  read as have-you-worked-here and so never remembered; now it is an
+  ordinary unrecognised question. A have-you-worked-here question for a
+  company checked *not* to be a past employer, whose options are sentences
+  ("I have not previously been employed at Affirm"), is now learnable, so
+  his pick is reused at other companies; a past employer never is.
+
+Still open from these runs:
+- **Greenhouse's Education section** (school, degree, discipline, dates) is
+  on some live forms and absent from the questions JSON; the required check
+  catches it (Affirm). Fill it from §12 `education`.
+- **Location (City)** on Greenhouse is cleared unless a suggestion is
+  picked; the runner types it and reads back equal, then it empties.
+- **Phone country** on Greenhouse is required and left unset.
+- **Resume read-back times out** on Greenhouse (the file is attached; the
+  input changes under the locator after Greenhouse parses it). Greenhouse
+  also autofills School/Degree from the parsed resume - not a jobpipe
+  source; Anish checks them.
+- **Hispanic/Latino and Race** (Greenhouse EEOC, conditional) were not
+  filled on Affirm.
+- **Grounding check looped** on one Chime draft: Flash Lite produced
+  ~285k characters of claims, identically twice, and the JSON was cut off.
+  A reworded draft passed. Cap its output and report a loop plainly.
+
+Checks 2-4 above still stand (an Ashby submit through the wait, a learned
+answer reused, the required check clean on both ATSes).
+
 ### Open
 
 - The new states are in `states.labels()`, which feeds the sheet's status

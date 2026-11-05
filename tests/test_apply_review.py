@@ -152,7 +152,7 @@ class TestWhenTheFormGoes:
             result = review.wait(context(page, tmp_path, ats="greenhouse"), lines, poll=0.2, out=out)
         assert result.form_gone and result.evidence["verdict"] is None
         assert "no confirmation recognised" in out.getvalue()
-        assert "UNVERIFIED" in out.getvalue()
+        assert "compare with the screenshot" in out.getvalue()
 
 
 class TestMarkedAppliedAfterHisSubmit:

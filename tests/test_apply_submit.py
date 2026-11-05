@@ -78,8 +78,8 @@ class TestOneClick:
 
 
 class TestClassify:
-    """The pure part, with the verified Ashby markup and the UNVERIFIED
-    Greenhouse wording."""
+    """The pure part, with the verified Ashby markup and Greenhouse's real
+    confirmation page (Chime, 2026-11-05)."""
     clean = signals.Verdict()
 
     def test_ashby_success_container_is_the_primary_signal(self):
@@ -95,6 +95,22 @@ class TestClassify:
     def test_greenhouse_thank_you_or_confirmation_url(self):
         assert submit.classify("greenhouse", "", "u", "Thank you for applying", self.clean) == "confirmed"
         assert submit.classify("greenhouse", "", "https://x/alloy/jobs/1/confirmation", "", self.clean) == "confirmed"
+
+    def test_greenhouse_real_confirmation_page(self):
+        """Chime, 2026-11-05: the first real Greenhouse confirmation, captured
+        by the review wait. Both the URL and the page text are recognised,
+        each on its own - and with reCAPTCHA still on the page, as it was."""
+        from pathlib import Path
+        import re
+        html = (Path(__file__).parent / "fixtures" / "apply" /
+                "greenhouse_chime_8868948002_confirmation.html").read_text(encoding="utf-8")
+        text = " ".join(re.sub(r"<[^>]+>", " ", re.sub(r"(?s)<(script|style)\b.*?</\1>", " ", html)).split())
+        url = "https://job-boards.greenhouse.io/embed/job_app/confirmation?for=chime&token=8868948002"
+        recaptcha = signals.detect('<script src="https://www.google.com/recaptcha/enterprise.js"></script>')
+        assert submit.classify("greenhouse", html, url, text, recaptcha) == "confirmed"
+        assert submit.classify("greenhouse", html, "https://job-boards.greenhouse.io/embed/job_app",
+                               text, self.clean) == "confirmed", "the text alone"
+        assert submit.classify("greenhouse", "", url, "", self.clean) == "confirmed", "the URL alone"
 
     def test_a_challenge_outranks_nothing(self):
         v = signals.detect("<iframe src='https://x/recaptcha/api2/bframe'></iframe>")

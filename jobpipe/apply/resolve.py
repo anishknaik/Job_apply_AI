@@ -364,8 +364,10 @@ def resolve_field(f: _spec.Field, sources: Sources) -> Resolved:
 
     if meaning == "prior_employment":
         if not _employers.label_names_company(f.label, sources.company):
-            # "Have you worked at a startup before?" - not about this employer.
-            return _no_source(f, meaning, f"unrecognised {f.kind} question; no source to fill it from")
+            # "Have you worked at a startup before?", or a non-compete question
+            # that mentions "a former employer" - not about this employer, so
+            # an ordinary unrecognised question, which memory may answer.
+            return _no_source(f, UNRECOGNISED, f"unrecognised {f.kind} question; no source to fill it from")
         if sources.employers is None:
             return _no_source(f, meaning, "past employers unknown (bullets.yaml not loaded); left for Anish")
         if _employers.is_past_employer(sources.company, sources.employers):
@@ -375,8 +377,13 @@ def resolve_field(f: _spec.Field, sources: Sources) -> Resolved:
             return _no_source(f, meaning, f"a {f.kind} widget cannot take yes/no")
         opt = _exact_option(f, "No")
         if opt is None:
-            return _no_source(f, meaning, f"no option exactly equals 'No'; options: "
-                                          f"{[o.label for o in f.options or ()]}")
+            # Checked: not a past employer. The form words its "no" as a
+            # sentence ("I have not previously been employed at Affirm"), which
+            # is not interpreted - but the sentence Anish picked on an earlier
+            # form, with {company} templated, may fill it (learned.py). A past
+            # employer never reaches here.
+            return _no_source(f, PRIOR_NOT_PAST, f"no option exactly equals 'No'; options: "
+                                                 f"{[o.label for o in f.options or ()]}")
         return Resolved(f, SELECT, opt.label, "employers:bullets.yaml (not a past employer)", meaning)
 
     if meaning == "additional_info":
@@ -449,6 +456,13 @@ def resolve_field(f: _spec.Field, sources: Sources) -> Resolved:
     # A select, multiselect, yes/no, file, location or checkbox nobody has a
     # source for.
     return _no_source(f, meaning, f"unrecognised {f.kind} question; no source to fill it from")
+
+
+# A have-you-worked-here question where the employer is checked NOT to be a
+# past one but the options are sentences. Learnable, unlike prior_employment.
+PRIOR_NOT_PAST = "prior_employment_not_past_employer"
+# A label that matched a pattern but turned out to be about something else.
+UNRECOGNISED = "unrecognised"
 
 
 def _from_memory(item: Resolved, sources: Sources) -> Resolved:

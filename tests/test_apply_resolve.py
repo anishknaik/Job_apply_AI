@@ -597,3 +597,35 @@ class TestSierraRealForm:
                       "We use Metaview", "How did you hear about this opportunity?"):
             assert by(label).action == "blocker", label
         assert len(res.items) == 16
+
+
+class TestChimeFollowUps:
+    """2026-11-05, from the Chime submit."""
+
+    NON_COMPETE = ("Are you currently subject to any agreement with a former employer/third party "
+                   "(such as a non-solicitation or non-compete agreement) that may potentially limit "
+                   "your ability to perform the duties of the position you are applying for?")
+
+    def test_a_non_compete_question_is_not_a_worked_here_question(self):
+        f = fld("q", self.NON_COMPETE, "select", options=YES_NO)
+        out = resolve.resolve_field(f, sources(company="Chime", employers=("Acme",)))
+        assert out.action == "blocker" and out.meaning == resolve.UNRECOGNISED
+        from jobpipe.apply import learned
+        assert learned.learnable(f, out.meaning), "Anish's answer to it may be remembered"
+
+    def test_a_sentence_no_for_a_non_past_employer_is_learnable(self):
+        f = fld("q", "Have you previously been employed at Affirm for any length of time?", "select",
+                options=(Option("I have not previously been employed at Affirm", "1"),
+                         Option("I have previously been employed at Affirm", "2")))
+        out = resolve.resolve_field(f, sources(company="Affirm", employers=("Acme",)))
+        assert out.action == "blocker" and out.meaning == resolve.PRIOR_NOT_PAST
+        from jobpipe.apply import learned
+        assert learned.learnable(f, out.meaning)
+
+    def test_a_past_employer_is_never_learnable(self):
+        f = fld("q", "Have you previously been employed at Acme?", "select",
+                options=(Option("I have not previously been employed at Acme", "1"),))
+        out = resolve.resolve_field(f, sources(company="Acme", employers=("Acme",)))
+        assert out.action == "blocker" and out.meaning == "prior_employment"
+        from jobpipe.apply import learned
+        assert not learned.learnable(f, out.meaning)

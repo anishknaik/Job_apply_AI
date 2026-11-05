@@ -20,10 +20,10 @@ I review and submit, I want the agent to just mark the posting as
 applied"). The form leaving the page after he clicked submit is his
 confirmation; `ctx.record_applied` is called unless the page shows the
 ATS's error box, in which case nothing is recorded and the evidence says
-why. Greenhouse's confirmation wording is UNVERIFIED, so a
-Greenhouse submit usually reads `unconfirmed` - the form is gone and
-nothing was recognised - and that still counts; the saved screenshot and
-text are there to check against.
+why. A form gone with nothing recognised (a company's own thank-you page
+the patterns miss) still counts; the saved screenshot and text are there
+to check against. Greenhouse's confirmation was verified on Chime's page,
+2026-11-05 (submit.py).
 
 Playwright's sync API must stay on the thread that opened the browser, so
 the only thread here reads stdin.
@@ -211,7 +211,7 @@ def _print_evidence(result: ReviewResult, out) -> None:
     print("\nThe form is gone. What the page shows now:", file=out)
     print(f"  url: {ev.get('url')}", file=out)
     print(f"  verdict: {ev.get('verdict') or 'no confirmation recognised'}"
-          + (" (Greenhouse patterns are UNVERIFIED - compare with the screenshot)"
+          + (" (no known confirmation pattern matched - compare with the screenshot)"
              if ev.get("verdict") != "confirmed" else ""), file=out)
     print(f"  text: {ev.get('text_excerpt', '')[:300]}", file=out)
     print(f"  saved: {ev.get('screenshot')}, {ev.get('html')}", file=out)

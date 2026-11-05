@@ -222,12 +222,16 @@ def record_choices(store: Store, form: _spec.FormSpec, resolution, choices: dict
     from . import resolve as _resolve
     filled = {r.field.key for r in resolution.items
               if r.action in (_resolve.SELECT, _resolve.FILL, _resolve.UPLOAD, _resolve.AUTOCOMPLETE)}
+    # The resolver's reading of each field, not the label pattern alone: a
+    # non-compete question mentions a "former employer" without being a
+    # have-you-worked-here question (Chime, 2026-11-05).
+    meanings = {r.field.key: r.meaning for r in resolution.items}
     recorded = []
     for f in form.fields:
         chosen = choices.get(f.key)
         if not chosen or f.key in filled:
             continue
-        if not learnable(f, _resolve.meaning_of(f)):
+        if not learnable(f, meanings.get(f.key) or _resolve.meaning_of(f)):
             continue
         if f.options is not None and not any(o.label.strip() == chosen.strip() for o in f.options):
             continue   # not one of the form's own options; not a choice we can name

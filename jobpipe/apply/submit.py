@@ -16,12 +16,13 @@ What counts as confirmation:
   you if there are next steps." (an organisation may replace the text, so
   the class is the primary signal); the error box reads "We couldn't
   submit your form.".
-* Greenhouse - UNVERIFIED. The job-boards app's bundle was not reachable
-  from the environment this was built in, so the patterns below are the
-  thank-you wording Greenhouse boards have used and a `confirmation` URL
-  segment. A miss on a real confirmation is `unconfirmed`, which is the
-  safe outcome; the first live run (HANDOFF.md, Phase 6) should capture the
-  real confirmation page and replace these.
+* Greenhouse - verified on a real submit (Chime, 2026-11-05, captured by
+  the review wait; tests/fixtures/apply/greenhouse_chime_8868948002_confirmation.html).
+  The embed form goes to `job-boards.greenhouse.io/embed/job_app/confirmation?for=<board>&token=<job>`,
+  and the page reads "Thanks for your interest in <Company>! Our team will
+  review your submission...". The URL segment is the primary signal - the
+  text is the company's own and varies; the older thank-you phrasings stay
+  as fallbacks. A miss is `unconfirmed`, the safe outcome.
 """
 from __future__ import annotations
 
@@ -48,8 +49,9 @@ _ASHBY_SUCCESS_CLASS = "ashby-application-form-success-container"
 _ASHBY_SUCCESS_TEXT = re.compile(r"successfully submitted", re.I)
 _ASHBY_ERROR_TEXT = re.compile(r"we couldn'?t submit your form", re.I)
 
-# Greenhouse: UNVERIFIED, see the module docstring.
+# Greenhouse: verified on Chime's confirmation page, see the module docstring.
 _GH_SUCCESS_TEXT = re.compile(
+    r"thanks for your interest in .{1,80}our team will review your submission|"
     r"thank you for applying|application (has been|was) (submitted|received)|"
     r"we(?:'ve| have) received your application|your application has been received", re.I)
 _GH_SUCCESS_URL = re.compile(r"/confirmation\b|confirmation=", re.I)

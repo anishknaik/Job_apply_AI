@@ -15,9 +15,10 @@ environment cannot reach either ATS directly). Nothing here is invented.
 The `content` / `descriptionHtml` posting text is truncated in the JSON
 files; the form is what these are for.
 
-**UNVERIFIED shapes** (no sampled posting carried one; the parser follows
-Greenhouse's documentation and is marked so in `spec.py`):
-`demographic_questions`. Replace with a real sample before relying on it.
+`demographic_questions` were seen live on Affirm and Chime (2026-11-05);
+the rendered control uses the bare numeric id (`spec.page_id`).
+
+| `greenhouse_chime_8868948002_confirmation.html` | Greenhouse's **real confirmation page** after a submit, captured by the review wait. No personal data on it | `job-boards.greenhouse.io/embed/job_app/confirmation?for=chime&token=8868948002` |
 
 **Not captured, and why:** Ashby's form definition JSON
 (`POST /api/non-user-graphql?op=ApiJobPostingForApplicationRequest`). The
@@ -33,8 +34,8 @@ the same ids, classes and `data-field-path` keys, with react-select,
 autocomplete, yes/no and submit behaviour scripted in `widgets.js`. They
 prove what `fill.py` and `submit.py` do and never do; they do not prove
 what Greenhouse's or Ashby's real components do. The fake ATS's success and
-error markup follow what was verified for Ashby and the UNVERIFIED wording
-assumed for Greenhouse (`submit.py`).
+error markup follow what was verified for Ashby and, since 2026-11-05, for
+Greenhouse (`submit.py`).
 
 `fake_ats.html` also takes `?auto_after=<ms>` (the page submits itself,
 standing in for Anish's click during a review wait), `?outcome=gone` (the
