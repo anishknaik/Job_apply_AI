@@ -1254,8 +1254,8 @@ workbench.
 ### Tests
 
 The full suite on this branch, locally on 2026-11-05: **1,465 passed, 0
-failed** before the `measure` change, which added six tests (see the commit
-for the count after it) in about 2.5 minutes, with the gitignored files present. The first
+failed** at slice 6; **1,471 passed, 0 failed** after the `measure` change
+(CONTEXT §8.10), which added six in about 2.5 minutes, with the gitignored files present. The first
 local run found 8 failures that the cloud session could not see: slice 3
 made `check_grounding` return `result.usage`, and the double in
 `tests/test_mcp_server.py` (`TestCheckGrounding._Result`) had no such

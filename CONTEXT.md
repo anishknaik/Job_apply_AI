@@ -65,7 +65,7 @@ metric is interviews per hour spent, not applications per day.
 | Targets | 169 companies — tier 1: 8, tier 2: 104, tier 3: 57 |
 | ATS split | greenhouse 82, ashby 79, smartrecruiters 6, workday 2 |
 | Bullet bank | 24 bullets across 11 roles (the jobpipe project's three added in November) |
-| Tests | **1,465** on `apply-session`, all passing locally (1,371 on `master`), offline |
+| Tests | **1,471** on `apply-session`, all passing locally (1,371 on `master`), offline |
 | Apply runs | 20 rows in `apply_runs` (dry runs and review runs together) |
 | Last scheduled run | 2026-11-04 16:55 UTC — 15,280 fetched, 330 new, 0 scored (it ran before `-Spend` was re-registered that day) |
 | Billing | Vertex, GCP credit (ends mid-November). The prepaid AI Studio balance is no longer drawn on |
