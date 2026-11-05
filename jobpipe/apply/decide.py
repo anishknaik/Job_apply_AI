@@ -12,8 +12,14 @@ The conditions, in the plan's order:
 3. no_blockers - every required field filled from a source
 4. verified  - every typed value read back equal; every upload this posting's
 5. no_required_never_fill - no required attestation, salary, id or payment
-6. answers_session_written - every open-ended answer a session-written,
-   grounding-passed row (a drafting model's answer is review-only)
+6. answers_session_written - every open-ended answer, and the letter, a
+   session-written, grounding-passed row. A drafting model's prose is
+   review-only: Phase 7A has Gemini 2.5 Pro draft answers and letters
+   (Anish, 2026-11-05), and a form carrying any of it never auto-submits.
+   The letter counts too - it reaches the form through prepare_letter, so
+   the writer of the cover_letter row is checked under that source
+   (before 2026-11-05 only `documents:` sources were, and a letter that
+   `cli tailor --cover-letter` had Gemini write would have passed)
 7. first_attempt - no prior submit click on this posting, not already applied
 8. under_limits - daily cap and spacing
 9. required_match - every question the rendered page marks required is a
@@ -34,7 +40,14 @@ from .config import ApplyConfig
 
 AUTO_SUBMIT, REVIEW = "auto_submit", "review"
 DRY_RUN, REVIEW_MODE, AUTO_MODE = "dry_run", "review", "auto"
+# The only writers whose prose may be on an auto-submitted form. A session
+# over MCP records this name; a drafting model records its own model id;
+# an unrecorded writer is not one of these either.
 SESSION_WRITERS = ("claude-mcp",)
+# Sources whose text was written by a model or a session, and so carry a
+# writer to check: a stored short answer, and the reviewed letter in any
+# of the shapes prepare_letter hands it over in.
+PROSE_SOURCE_PREFIXES = ("documents:", "prepare_letter")
 
 
 @dataclass(frozen=True)
@@ -141,12 +154,14 @@ def decide(inp: Inputs) -> Decision:
     # 6
     bad = []
     for item in res.items:
-        if item.action == _resolve.FILL and (item.source or "").startswith("documents:"):
-            writer = inp.answer_writers.get(item.source)
+        source = item.source or ""
+        if (item.action in (_resolve.FILL, _resolve.UPLOAD)
+                and source.startswith(PROSE_SOURCE_PREFIXES)):
+            writer = inp.answer_writers.get(source)
             if writer not in SESSION_WRITERS:
                 bad.append(f"{item.field.label[:50]!r} written by {writer or 'an unrecorded model'}")
     checks.append(Check("answers_session_written", not bad,
-                        "; ".join(bad) if bad else "every open-ended answer is a session-written, grounding-passed row"))
+                        "; ".join(bad) if bad else "every open-ended answer and the letter is a session-written, grounding-passed row"))
 
     # 7
     if inp.prior_submit_attempts:

@@ -168,6 +168,13 @@ def build_sources(conn, posting_id: int, form: _spec.FormSpec, *,
         entry = dict(row)
         short[_answers.normalise_question(entry["question"] or "")] = entry
         writers[f"documents:short_answer#{entry['id']}"] = entry.get("model") or ""
+    # The letter's writer, under the sources prepare_letter hands it over
+    # as. A Gemini-drafted letter (Phase 7A) or one from `cli tailor` fails
+    # decide.py's answers_session_written the way a drafted answer does.
+    letter_row = db.current_document(conn, posting_id, "cover_letter")
+    if letter_row is not None:
+        for source in ("prepare_letter", "prepare_letter(pdf=True)"):
+            writers[source] = letter_row["model"] or ""
 
     return (_resolve.Sources(answers=answers, resume_path=resume_path,
                              letter_text=letter_text, letter_pdf=letter_pdf,

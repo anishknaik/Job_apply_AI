@@ -123,6 +123,17 @@ any other challenge is present the runner fills and stops, and the review above 
 happens. Measured the same day: both ATSes load reCAPTCHA Enterprise on the rendered
 form page, so the review path is the main product and auto-submit the exception.
 
+**Revised 2026-11-05 (Phase 7).** An apply session in the workbench works the queue
+on a loop: for each posting it renders the resume, has **Gemini 2.5 Pro draft** the
+open-ended answers and the cover letter, fills the form with the runner, and waits for
+me to review and submit. Until now Claude wrote every piece of prose and Gemini only
+checked it; a Gemini model now writes, so writer and checker are two models of one
+family. What holds the line: every drafted claim still has to pass the grounding check
+against the profile and the bank, a failing draft is **left blank**, never filled, and
+a form carrying any answer or letter not written in a Claude session can **never
+auto-submit** — I review and submit every one of them. Drafting spends money, so it
+runs only inside a session I start from the workbench, capped per session.
+
 ### Outreach drafts, never automated sends (Phase 4)
 
 Cold-emailing scraped addresses in bulk was the original plan and was redesigned, for
@@ -202,7 +213,9 @@ These hold across all phases:
   thing only: deciding to stop.)
 - No CAPTCHA or bot-detection bypass
 - No fabricated experience in any generated document; tailoring means selecting and
-  reframing real material from the master profile, never inventing it
+  reframing real material from the master profile, never inventing it. A drafting
+  model (Gemini, since 2026-11-05) is held to the same grounding check as a session,
+  a failing draft is left blank, and its forms are always reviewed by hand
 - Secrets in `.env`, never committed
 
 ---

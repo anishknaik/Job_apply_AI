@@ -80,6 +80,15 @@ first. The profile has been wrong four times: three times it understated, and
 once — the NBS 7 work — it overstated, which is the worse failure, because
 grounding checks that a claim is in the profile, never that it is true.
 
+Since 2026-11-05 (Phase 7A) an apply session started from the workbench has
+**Gemini 2.5 Pro draft** form answers and letters (`jobpipe/apply/draft.py`),
+by Anish's decision. The same rules bind it: it writes from the profile and
+the bank only, its draft goes through `save_short_answer` /
+`save_cover_letter` with the model recorded, `check_grounding` judges it,
+and a failing draft is left blank. A form holding any answer or letter not
+written by a Claude session can never auto-submit (`decide.py`,
+`answers_session_written`); Anish reviews and submits every one.
+
 **COPY a letter before editing it. Never rename, never edit in place.**
 `copy_for_editing` does this and refuses the unsafe cases — an unchecked
 draft, an existing copy, a copy older than the draft. By hand it is:

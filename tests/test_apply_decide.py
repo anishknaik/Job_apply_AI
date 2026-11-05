@@ -34,7 +34,9 @@ def baseline(tmp_path, **over):
     kw = dict(config=ON, mode=decide.AUTO_MODE, resolution=resolution(tmp_path),
               unverified=(), posting_dir=tmp_path / "posting",
               signals_before=(), signals_at_submit=(),
-              answer_writers={"documents:short_answer#7": "claude-mcp"},
+              answer_writers={"documents:short_answer#7": "claude-mcp",
+                              "prepare_letter": "claude-mcp",
+                              "prepare_letter(pdf=True)": "claude-mcp"},
               prior_submit_attempts=0, current_status="ready_for_review",
               recent_auto_submits=(), now=NOW, required_missing=())
     kw.update(over)
@@ -113,6 +115,53 @@ class TestEachConditionAlone:
     def test_6_an_answer_with_no_recorded_writer(self, tmp_path):
         d = decide.decide(baseline(tmp_path, answer_writers={}))
         assert failing(d) == ["answers_session_written"]
+
+    # Phase 7A (PHASE7_PLAN §1): Gemini 2.5 Pro drafts answers and letters,
+    # and a form carrying any of them must never auto-submit. One test per
+    # shape the drafted prose reaches a form in.
+
+    def test_6_a_gemini_drafted_answer_forces_review(self, tmp_path):
+        d = decide.decide(baseline(tmp_path, answer_writers={
+            "documents:short_answer#7": "gemini-2.5-pro",
+            "prepare_letter": "claude-mcp", "prepare_letter(pdf=True)": "claude-mcp"}))
+        assert not d.auto_submit
+        assert failing(d) == ["answers_session_written"]
+        assert "gemini-2.5-pro" in d.reasons[0] and "Why here?" in d.reasons[0]
+
+    def test_6_a_gemini_drafted_letter_pasted_into_a_letter_box_forces_review(self, tmp_path):
+        box = Field("cover_letter_text", "Cover Letter", "textarea", False)
+        res = resolution(tmp_path, resolve.Resolved(
+            box, resolve.FILL, "Dear Team,", "prepare_letter", "cover_letter"))
+        d = decide.decide(baseline(tmp_path, resolution=res, answer_writers={
+            "documents:short_answer#7": "claude-mcp",
+            "prepare_letter": "gemini-2.5-pro", "prepare_letter(pdf=True)": "gemini-2.5-pro"}))
+        assert failing(d) == ["answers_session_written"] and "gemini-2.5-pro" in d.reasons[0]
+
+    def test_6_a_gemini_drafted_letter_uploaded_as_a_pdf_forces_review(self, tmp_path):
+        upload = Field("cover_letter", "Cover Letter", "file", False)
+        res = resolution(tmp_path, resolve.Resolved(
+            upload, resolve.UPLOAD, str(tmp_path / "posting" / "cover_letter.pdf"),
+            "prepare_letter(pdf=True)", "cover_letter"))
+        d = decide.decide(baseline(tmp_path, resolution=res, answer_writers={
+            "documents:short_answer#7": "claude-mcp",
+            "prepare_letter": "gemini-2.5-pro", "prepare_letter(pdf=True)": "gemini-2.5-pro"}))
+        assert failing(d) == ["answers_session_written"]
+
+    def test_6_a_letter_in_an_anything_else_box_with_no_recorded_writer(self, tmp_path):
+        """A `cli tailor --cover-letter` letter records the prose model; an
+        older row may record nothing. Neither is a session."""
+        box = Field("extra", "Anything else?", "textarea", False)
+        res = resolution(tmp_path, resolve.Resolved(
+            box, resolve.FILL, "Dear Team,", "prepare_letter", "additional_info"))
+        d = decide.decide(baseline(tmp_path, resolution=res, answer_writers={
+            "documents:short_answer#7": "claude-mcp"}))
+        assert failing(d) == ["answers_session_written"] and "unrecorded" in d.reasons[0]
+
+    def test_6_a_session_written_letter_still_passes(self, tmp_path):
+        box = Field("cover_letter_text", "Cover Letter", "textarea", False)
+        res = resolution(tmp_path, resolve.Resolved(
+            box, resolve.FILL, "Dear Team,", "prepare_letter", "cover_letter"))
+        assert decide.decide(baseline(tmp_path, resolution=res)).auto_submit
 
     def test_7_a_prior_submit_click(self, tmp_path):
         d = decide.decide(baseline(tmp_path, prior_submit_attempts=1))

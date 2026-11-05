@@ -182,6 +182,21 @@ class TestSources:
         row = sources.answer("Why  Alloy?")   # whitespace-insensitive, case-preserving
         assert row["content"] == "Because of the fraud work."
         assert writers[f"documents:short_answer#{row['id']}"] == "claude-mcp"
+        assert "prepare_letter" not in writers, "no letter, no writer to check"
+
+    def test_the_letters_writer_rides_under_prepare_letters_sources(self, conn, tmp_path):
+        """Phase 7A: a Gemini-drafted letter reaches the form through
+        prepare_letter, so decide.py checks its writer under that source."""
+        pid = seed(conn, tmp_path)
+        db.insert_document(conn, pid, "cover_letter", content="Dear Team,", model="gemini-2.5-pro",
+                           generated_path=str(tmp_path / "cover_letter.md"))
+        conn.commit()
+        from jobpipe.apply import spec
+        _, _, writers = runner.build_sources(
+            conn, pid, spec.parse_greenhouse(ALLOY), answers_loader=answers,
+            prepare_letter=refuse_letter)
+        assert writers["prepare_letter"] == "gemini-2.5-pro"
+        assert writers["prepare_letter(pdf=True)"] == "gemini-2.5-pro"
 
 
 @needs_chromium
