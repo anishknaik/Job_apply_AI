@@ -28,7 +28,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from .. import answers as _answers, db, letters, mcp_server as tools
 from . import decide as _decide, employers as _employers, fill as _fill
-from . import learned as _learned, resolve as _resolve
+from . import learned as _learned, required as _required, resolve as _resolve
 from . import spec as _spec, submit as _submit
 from .browser import Browser
 from .config import ApplyConfig
@@ -331,6 +331,13 @@ def _drive(conn, row, posting_id, ats, url, mode, config, outcome, shots,
         signals_before = tuple(_fill.collect_signals(page).kinds)
         letter_required = any(_resolve.meaning_of(f) == "cover_letter" and f.required
                               for f in form.fields)
+        # Independent of the parser: what the page itself marks required.
+        required_on_page, required_missing = _required.check(page, form)
+        required_report = {"required_on_page": required_on_page,
+                           "required_missing": required_missing}
+        if required_missing:
+            notes.append("required on the page but not in the spec: "
+                         + ", ".join(required_missing))
 
         if mode == _decide.DRY_RUN:
             decision = _decide.decide(_decide.Inputs(
@@ -339,14 +346,15 @@ def _drive(conn, row, posting_id, ats, url, mode, config, outcome, shots,
                 signals_at_submit=signals_before, answer_writers=writers,
                 prior_submit_attempts=db.submit_attempts(conn, posting_id),
                 current_status=db.current_statuses(conn).get(posting_id),
-                recent_auto_submits=_recent(conn), now=now))
+                recent_auto_submits=_recent(conn), now=now,
+                required_missing=None if required_missing is None else tuple(required_missing)))
             outcome.decision = "dry_run"
             outcome.reasons = decision.reasons
             outcome.report = {"ats": ats, "url": url, "form": _form_summary(form),
                               "fields": _resolution_report(resolution),
                               "notes": notes, "signals_before": list(signals_before),
                               "would_decide": decision.outcome,
-                              "letter_required": letter_required}
+                              "letter_required": letter_required, **required_report}
             _screenshot(page, shots, "dry-run", outcome)
             return
 
@@ -368,13 +376,14 @@ def _drive(conn, row, posting_id, ats, url, mode, config, outcome, shots,
             prior_submit_attempts=db.submit_attempts(conn, posting_id),
             current_status=db.current_statuses(conn).get(posting_id),
             recent_auto_submits=_recent(conn), now=now,
-            fill_error=report.error if not report.form_found else None))
+            fill_error=report.error if not report.form_found else None,
+            required_missing=None if required_missing is None else tuple(required_missing)))
         outcome.reasons = decision.reasons
         outcome.report = {**report.to_dict(), "form": _form_summary(form),
                           "notes": notes, "signals_at_submit": list(signals_now),
                           "checks": [{"name": c.name, "passed": c.passed, "detail": c.detail}
                                      for c in decision.checks],
-                          "letter_required": letter_required}
+                          "letter_required": letter_required, **required_report}
 
         if not report.form_found:
             outcome.decision = "error"

@@ -16,6 +16,9 @@ The conditions, in the plan's order:
    grounding-passed row (a drafting model's answer is review-only)
 7. first_attempt - no prior submit click on this posting, not already applied
 8. under_limits - daily cap and spacing
+9. required_match - every question the rendered page marks required is a
+   field the spec knows (required.py); an unread page fails, since a
+   parser that misses a widget fails open (Sierra, 2026-11-04)
 
 The daily cap is a rolling 24 hours, not a calendar day: stricter, and it
 does not reset at midnight for a run that started at 23:55.
@@ -70,6 +73,7 @@ class Inputs:
     recent_auto_submits: tuple[str, ...] = ()  # ISO timestamps, any order
     now: datetime | None = None
     fill_error: str | None = None
+    required_missing: tuple[str, ...] | None = None   # None: the page was not read
 
 
 def _parse(ts: str) -> datetime | None:
@@ -169,6 +173,18 @@ def decide(inp: Inputs) -> Decision:
     else:
         checks.append(Check("under_limits", True,
                             f"{len(window)} of {cap} in the last 24h, spacing ok"))
+
+    # 9
+    if inp.required_missing is None:
+        checks.append(Check("required_match", False,
+                            "the page's required markers were not read"))
+    elif inp.required_missing:
+        checks.append(Check("required_match", False,
+                            "required on the page but not in the spec: "
+                            + ", ".join(inp.required_missing)))
+    else:
+        checks.append(Check("required_match", True,
+                            "every required marker on the page is a known field"))
 
     outcome = AUTO_SUBMIT if all(c.passed for c in checks) else REVIEW
     return Decision(outcome, tuple(checks))

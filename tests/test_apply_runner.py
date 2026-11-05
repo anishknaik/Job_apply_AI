@@ -200,6 +200,7 @@ class TestDryRun:
         assert statuses["first_name"] == "planned" and statuses["question_36029295002"] == "blocker"
         assert report["would_decide"] == "review"
         assert any(r.startswith("enabled: this run is dry_run") for r in out.reasons)
+        assert report["required_missing"] == [] and "first_name" in report["required_on_page"]
         assert "Jane" not in row["report"], "hashes, never values"
         assert out.screenshots and Path(out.screenshots[0]).exists()
 
@@ -248,6 +249,7 @@ class TestReview:
         assert by["first_name"]["status"] == "ok" and by["resume"]["status"] == "ok"
         assert by["question_36029295002"]["status"] == "blocked"
         assert [c["name"] for c in report["checks"] if not c["passed"]] == ["enabled", "no_blockers", "no_required_never_fill"]
+        assert report["required_missing"] == []
         assert db.submit_attempts(conn, pid) == 0
 
     def test_keep_open_hands_the_browser_back(self, conn, site, tmp_path):

@@ -36,7 +36,7 @@ def baseline(tmp_path, **over):
               signals_before=(), signals_at_submit=(),
               answer_writers={"documents:short_answer#7": "claude-mcp"},
               prior_submit_attempts=0, current_status="ready_for_review",
-              recent_auto_submits=(), now=NOW)
+              recent_auto_submits=(), now=NOW, required_missing=())
     kw.update(over)
     return decide.Inputs(**kw)
 
@@ -49,7 +49,7 @@ class TestTheBaseline:
     def test_everything_holding_is_auto_submit(self, tmp_path):
         d = decide.decide(baseline(tmp_path))
         assert d.auto_submit and d.reasons == []
-        assert len(d.checks) == 8
+        assert len(d.checks) == 9
 
 
 class TestEachConditionAlone:
@@ -138,6 +138,21 @@ class TestEachConditionAlone:
 
     def test_8_spacing_satisfied(self, tmp_path):
         d = decide.decide(baseline(tmp_path, recent_auto_submits=((NOW - timedelta(minutes=11)).isoformat(),)))
+        assert d.auto_submit
+
+
+class TestTheNinthCondition:
+    def test_9_the_page_was_not_read(self, tmp_path):
+        d = decide.decide(baseline(tmp_path, required_missing=None))
+        assert failing(d) == ["required_match"] and "not read" in d.reasons[0]
+
+    def test_9_a_required_question_the_spec_does_not_know(self, tmp_path):
+        d = decide.decide(baseline(tmp_path, required_missing=("3d33a44a", "de771a19")))
+        assert failing(d) == ["required_match"]
+        assert "3d33a44a, de771a19" in d.reasons[0]
+
+    def test_9_every_marker_known_passes(self, tmp_path):
+        d = decide.decide(baseline(tmp_path, required_missing=()))
         assert d.auto_submit
 
 
