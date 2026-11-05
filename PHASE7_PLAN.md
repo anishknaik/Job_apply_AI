@@ -158,6 +158,11 @@ leaves `master` working.
 | **7A** — session + drafting | 0 guardrail docs; 1 grounding-loop cap; 2 `draft.py` (fake provider in tests); 3 session worker + state; 4 routes + panel + queue live status; 5 resume auto-render + drop flags; 6 docs |
 | **7B** — the agent | 0 verify model id/SDK shape (record findings); 1 policy layer (pure, table-driven tests); 2 agent loop against a scripted fake model; 3 a Workday-like test page; 4 wire into the session for non-GH/Ashby postings; 5 docs |
 
+**Status 2026-11-05:** 7A is built on `apply-session`, all seven slices:
+0-4 in the cloud session, 5-6 locally after its credit ran out. Not run
+live and not merged. `HANDOFF.md` §9 has where this plan was wrong and the
+risks for the first live run. 7B is not started.
+
 Live verification is local and supervised, in order: one 7A session on two
 or three postings with Anish submitting; then one agent run on a Workday
 posting, watched. The GCP credit ends mid-November, so 7B's live check

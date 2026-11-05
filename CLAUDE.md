@@ -5,8 +5,11 @@ scoring → sheet) and Phase 2 (resume + cover letter tailoring) are built and
 running, and Phase 5 exposes them as an MCP server that a session works the
 queue through. Phase 6, the apply runner, fills Greenhouse and Ashby forms
 in a browser of its own and is in real use (three applications, each
-submitted by Anish); Phase 7, an apply session in the workbench plus an AI
-agent for other ATSes, is planned for cloud sessions (`PHASE7_PLAN.md`).
+submitted by Anish). Phase 7A, the apply session — the workbench works
+the queue through the runner, with Gemini 2.5 Pro drafting answers and
+letters — is built on the `apply-session` branch and has not run live
+(`HANDOFF.md` §9); 7B, an AI agent for other ATSes, is not started
+(`PHASE7_PLAN.md`).
 Read `PROJECT.md` first — it holds the guardrails that apply to everything
 here — then `HANDOFF.md` (its "Start here" block) for where things stand.
 
@@ -43,6 +46,7 @@ python -m jobpipe.cli filter --refilter           # re-run Stage A over the corp
 python -m jobpipe.apply <posting_id> [--dry-run]   # Phase 6: plan a Greenhouse/Ashby form, fill nothing (default)
 python -m jobpipe.apply <posting_id> --review      # fill it and leave the window open for Anish; records applied after his submit
 python -m jobpipe.web                              # the workbench, http://127.0.0.1:8765
+                                                   #   /session: the apply session (Phase 7A); Anish starts it
 python -m pytest tests/ -q                         # ~1,370 tests, no network
 ```
 
@@ -239,9 +243,42 @@ editing, edit the `.sent.md` copy in a textarea, render the letter PDF,
 check a short answer, record a status. It also shows `form_answers`
 read-only, and `measure`.
 
-What it deliberately cannot do: submit, send, score, calibrate, daily, fetch,
-or write a letter or a short answer — those are a session's work, through
-the tools. No route writes `cover_letter.md`; the editor writes only the
+**The apply session (Phase 7A, `/session`).** Anish ticks postings from the
+queue — scored, Stage A passed, seen in the last 2 days, Greenhouse or
+Ashby, no status or `not_applied`, best `apply_score` first — sets N, and
+presses Start. That click is the ask for the spend. The workbench starts
+`python -m jobpipe.apply.session` as a child process, and for each posting
+it:
+
+1. opens the form headless to check it is still live; a gone posting is
+   recorded `discarded` and skipped;
+2. renders the resume from the grid variant, with the bank's skill tags the
+   posting names as `posting_skills` (`bullets.posting_vocabulary`), and
+   **flags** — never skips — a dropped bullet carrying one of them;
+3. has Gemini 2.5 Pro draft each open-ended box with no passing answer on
+   file, and the letter where the form has a letter field or an "anything
+   else" textarea (`jobpipe/apply/draft.py`), saves each with the model
+   recorded as writer, and runs `check_grounding`. A failing or unfinished
+   check leaves that box blank, with the reason on the panel;
+4. fills with the runner in review mode;
+5. waits for Anish's submit (applied recorded by the runner), or Skip / Stop
+   from the panel; closing the window pauses the session, and Resume
+   re-fills.
+
+Drafting is capped at `JOBPIPE_MAX_DRAFTS_PER_SESSION` postings (default
+10); past it the form is still filled, without drafts. The panel shows
+each posting's drop list and flags, every draft with its verdict, the
+fill's fields and sources, and a running cost estimate. State is
+`state.json` and the buttons write one word to a `command` file, both under
+the runner's output folder, so a workbench restart loses nothing. One
+session at a time.
+
+What it deliberately cannot do: submit, send, score, calibrate, daily or
+fetch. No route writes prose: a letter or short answer is written by a
+Claude session through the tools, or by the apply session's worker through
+the same `save_*` tools with the drafting model recorded as writer. Neither
+tool lets its caller name the writer over MCP. No route writes
+`cover_letter.md`; the editor writes only the
 `.sent.md` copy, and refuses a missing or stale one. It answers on a
 loopback Host only and refuses cross-origin POSTs, because a page on any
 other site can POST a form at 127.0.0.1 and one of these buttons spends
@@ -356,7 +393,7 @@ same tools and the same table below - `form_answers`, `render_resume`,
 `prepare_letter`, a grounding-passed short answer - and writes no prose; a
 field with no source is a blocker, and the posting goes to review with it
 listed. Dry run is its default. It may click submit once, and only when
-`jobpipe/apply/decide.py`'s eight conditions all hold, which includes no
+`jobpipe/apply/decide.py`'s nine conditions all hold, which includes no
 bot check on the page and that every required marker on the page is a
 field the spec knows; both ATSes load reCAPTCHA Enterprise on the rendered
 form, so expect review. From the workbench it runs in review or dry-run
@@ -372,9 +409,22 @@ ATS's error box; run `cli sync` afterwards. It refuses to fill a posting
 already `applied`, so sync the sheet before a run if he applied by hand.
 Two more things it fills from existing sources: the reviewed letter
 into an "anything else" textarea, and "Have you previously worked at
-{company}?" with No from the bank's experience roles. One application has
-gone through it (Sierra, review mode, 2026-11-04); `HANDOFF.md` §8 has what
-is verified and the live checks still owed.
+{company}?" with No from the bank's experience roles. Three applications
+have gone through it (Sierra, Chime, Deepgram, review mode); `HANDOFF.md` §8
+has what is verified and the live checks still owed.
+
+**A third way, on a loop: the apply session** (Phase 7A, "Web workbench"
+above). It drives the same runner in review mode, one posting after
+another, and adds one thing the runner never did: Gemini 2.5 Pro drafts the
+open-ended answers and the letter. The table below still holds for every
+value. A drafted answer reaches the form only after `check_grounding`
+passes it; a drafted letter is copied with `copy_for_editing` and reaches
+the form through `prepare_letter`, like any other. `decide.py`'s
+`answers_session_written` fails for any prose not written by a Claude
+session, through `documents:` or `prepare_letter` sources alike, so **a
+form carrying a drafted answer or letter can never auto-submit**. Anish
+reviews the drafts in the form itself, and anything he rewrites there is
+his edit on the page, not on the stored copy.
 
 **Scope the browser.** The extension sees every tab in the logged-in
 browser. Open the application in a new tab of its own and work only there.

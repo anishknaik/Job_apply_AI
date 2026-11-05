@@ -31,11 +31,12 @@ are the history behind them.
 - **The sheet now carries every posting with a status**, ranked or not
   (`db.get_tracked_rows`), so an application outside the daily top 25
   still gets a row.
-- **Phase 7 is planned, not started**: `PHASE7_PLAN.md` - an apply session
-  in the workbench (Gemini 2.5 Pro drafts essays and letters, Anish
-  reviews), then an AI agent for Workday/Lever/SmartRecruiters. Both are
-  built in cloud sessions; the prompts are in its §6. Anish will start 7A
-  from `master`. Do not build it locally unless he asks.
+- **Phase 7A is built, on branch `apply-session`, and has not run live**
+  (§9). Slices 0-4 were built in a cloud session; the credit ran out there,
+  and slices 5-6 were finished locally on 2026-11-05. It is not merged into
+  `master`. Before its first live run, read §9's "Risks for the first live
+  run": two of them are in the drafting path and would show up as blank
+  boxes or a low cost figure, not as errors. 7B (the agent) is not started.
 - **Open, in order of value:** the Greenhouse fill gaps in §8 (Education
   section, Location cleared, phone country, resume read-back timeout,
   Hispanic/Race); the grounding check's output loop (slice 1 of 7A); live
@@ -103,7 +104,8 @@ fresh reader going straight through will absorb the wrong versions. The
 corrections are in §5.
 
 Read after `PROJECT.md` and `PHASE5_PLAN.md`; for the runner,
-`PHASE6_PLAN.md`; for what is next, `PHASE7_PLAN.md`. `CONTEXT.md` §2 and
+`PHASE6_PLAN.md`; for the apply session and what is next, `PHASE7_PLAN.md`
+and §9 here. `CONTEXT.md` §2 and
 §4 were remeasured on 2026-11-05; its §9 is superseded by `PHASE5_PLAN.md`.
 
 ---
@@ -1128,3 +1130,118 @@ Stripe (19565), PostHog (20767) from Anish's batch of the day before,
   posting; a posting with blockers stays there until a later run clears
   them or Anish records a status by hand.
 - §8 of the plan, the AI browser agent for other boards, is not started.
+
+---
+
+## 9. Phase 7A - the apply session (built 2026-11-05, not run live)
+
+`PHASE7_PLAN.md` §1-§3 is the spec. Branch `apply-session`, one commit per
+slice. Slices 0-4 came from a cloud session (`1d9a422`..`8ce3b48`); its
+credit ran out after slice 4, and slices 5 and 6 were done locally the same
+day. **Nothing here has opened a real form, called Gemini, or drafted for a
+real posting.** Every test runs against doubles or the fake ATS pages.
+
+### What was built
+
+| Slice | Where | What |
+|---|---|---|
+| 0 | `PROJECT.md`, `CLAUDE.md`, `.env.example`, `decide.py` | Gemini drafting recorded as a guardrail change. `answers_session_written` now also covers letters reaching a form through `prepare_letter` (see "Where the plan was wrong") |
+| 1 | `grounding.py`, `providers/*` | The checker's output ceiling (8,192 tokens, `JOBPIPE_GROUNDING_MAX_OUTPUT_TOKENS`) and `GroundingLoopError`, "the checker looped". New `score_capped` on the provider contract; `ProviderResponse.truncated` |
+| 2 | `jobpipe/apply/draft.py` | `draft_answer`, `draft_letter` (reuses `letters.generate_letter`), one retry on a banned phrase or an over-length answer, then `DraftError` and a blank box. `save_short_answer` / `save_cover_letter` take the writer as `model`; the MCP registration does not expose it |
+| 3 | `jobpipe/apply/session.py`, `runner.inspect`, `review.wait(end_when_form_gone=)` | The worker: liveness, resume, drafts, fill, review wait, per posting. `state.json` plus a one-word `command` file. The drafting cap. A running cost estimate |
+| 4 | `web.py`, `templates/web/session.html` | `/session` and its five other routes, in `ROUTE_ALLOWLIST`. The panel, refreshed by a meta refresh, no script |
+| 5 | `bullets.posting_vocabulary`, `bullets.flag_dropped`, `session._resume`, posting page | The resume renders with the bank's skill tags the posting names; a dropped bullet carrying one is flagged on the panel, never skipped. The posting page's render form is prefilled with the same vocabulary |
+| 6 | this section; `CLAUDE.md` workbench and form-filling sections | docs |
+
+**Slice 5 detail.** Slices 3-4 passed `posting_skills=[]`, so the one-page
+loop's relevance promotion never ran for a session's resume and nothing
+could be flagged. The vocabulary is now the bank's own `skills` tags that
+the posting's title and text name. Matching is word-boundary: a tag's parts
+joined by a space, a hyphen or nothing, an optional plural, and a short
+alias table (`postgres`, `sklearn`, `k8s`, `function calling`...). Markup is
+stripped and `&nbsp;` folded first. Only bank tags count, because
+`match_score` compares against nothing else. Tags the bank uses as ordinary
+English are left out entirely (`GENERIC_TAGS`: testing, ownership,
+performance, backend...), so a flag means a specific technology. Checked
+read-only on eight real queued postings: PlanetScale reads `postgresql`
+x3, Pinecone `retrieval`/`rag`/`vector_database`, and the Perplexity
+Research Fellowship nothing. Whether a flag is ever a false alarm on live
+postings is not yet known. If one is, the fix goes in `GENERIC_TAGS` or
+`TAG_ALIASES`, never a per-posting change.
+
+### Where the plan was wrong
+
+- **§1 says `answers_session_written` "already fails" for a non-Claude
+  writer. It did not, for letters.** It read only `documents:` sources, so a
+  letter reaching the form through `prepare_letter` (a textarea, an
+  "anything else" box, or a PDF upload) was never asked who wrote it. That
+  includes one from `cli tailor --cover-letter`, which has always had
+  Gemini write. Fixed in slice 0, with five tests.
+- **§2 step 2 implied the resume step already had a vocabulary.** It did not
+  (slice 5, above).
+
+### Risks for the first live run - unverified, read before starting
+
+1. **2.5 Pro's thinking may eat the drafting ceilings.** The Vertex provider
+   correctly sends no `thinking_budget` to Pro (the 2026-08-31 400). But on
+   2.5 models, thinking tokens count against `max_output_tokens`, and the
+   ceilings are 2,048 for an answer (`draft.ANSWER_MAX_OUTPUT_TOKENS`) and
+   4,096 for a letter (`letters.MAX_OUTPUT_TOKENS`). If Pro thinks past
+   them, the reply is truncated and every box comes back "not drafted", a
+   blank rather than an error. Watch the first drafted posting. If that
+   happens, the fix is a bounded `thinking_budget` for Pro (it accepts
+   128-32,768) with the ceiling raised by the same amount, in the provider
+   where the thinking rule already lives.
+2. **The cost estimate undercounts Pro.** `output_tokens` is
+   `candidates_token_count`, which excludes `thoughts_token_count`, and
+   Google bills thoughts at the output rate (`metering.py` already says
+   so). `estimate_cost`'s docstring says it "errs high". For Pro it errs
+   low, perhaps by several times. Read the GCP billing page after the first
+   session rather than trusting the panel.
+3. **A letter edited in the form is measured as unedited.** The session
+   runs `copy_for_editing` straight after grounding passes, so
+   `cover_letter.sent.md` is the draft byte for byte. Anish reviews the
+   letter in the form, where an edit never reaches the `.sent.md`. Recorded
+   with `letter_required=true`, `measure` would count it at ~0.000: the
+   §8.3 failure in a new form. It also mixes Gemini letters into a measure
+   so far taken on Claude-written ones. Anish's call, before a letter goes
+   through a session to a form that requires one. Options: `measure`
+   excludes session-copied letters; `measure` splits by writer model; or the
+   review wait reads the letter field back into the `.sent.md` before
+   submit.
+4. The GCP credit ends mid-November. After that, drafting bills to the
+   card.
+
+### Verified only against doubles
+
+The loop's order, the cap, Skip/Pause/Resume/Stop, the closed-window pause,
+the error-box outcome, the routes and the panel. Also one class running the
+real `inspect`, `run` and review wait against the fake ATS page, which
+submits itself in place of Anish's click. Not exercised at all: a real
+Gemini draft, a real grounding verdict on a drafted answer, the panel
+against a live runner window on Windows, the worker as a child of the real
+workbench.
+
+### Live checks owed, in order
+
+1. **A session on two or three real postings, watched, Anish submitting.**
+   Pick ones whose forms ask an open-ended question. Confirm: the liveness
+   step, the resume and its flags, at least one drafted answer **passing**
+   grounding and filled, the panel's Applied update after his submit, and
+   `cli sync` carrying it to the sheet.
+2. **A drafted answer failing grounding** is left blank with the reason
+   shown, and the form still fills.
+3. **The cost figure against the GCP billing page** (risk 2).
+4. Decide risk 3 before any session meets a form that requires a letter.
+
+### Tests
+
+The full suite on this branch, locally on 2026-11-05: **1,465 passed, 0
+failed** in about 2.5 minutes, with the gitignored files present. The first
+local run found 8 failures that the cloud session could not see: slice 3
+made `check_grounding` return `result.usage`, and the double in
+`tests/test_mcp_server.py` (`TestCheckGrounding._Result`) had no such
+field. A clean checkout fails those same tests for other reasons, which
+hid them. The real `GroundingResult` has the field, so the double was
+fixed, not the code. A cloud run's "only the usual clean-checkout failures"
+is a claim to re-check locally, not to trust.
