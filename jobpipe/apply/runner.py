@@ -275,6 +275,7 @@ def inspect(conn, posting_id: int, config: ApplyConfig, *, targets: list | None 
             if form is None:
                 html = page.content()
                 form = _spec.parse_ashby_form(html, _spec.extract_app_data(html), apply_url=url)
+            form = _with_page_fields(page, ats, form)
             signals = list(_fill.collect_signals(page).kinds)
     return Inspection(posting_id, True, ats, url, form, signals=signals)
 
@@ -364,6 +365,15 @@ def run(conn, posting_id: int, mode: str, config: ApplyConfig, *,
     return outcome
 
 
+def _with_page_fields(page, ats, form):
+    """Greenhouse renders fields its questions JSON never lists (the phone
+    country, an Education section); read them off the form's own frame."""
+    if ats != _spec.GREENHOUSE:
+        return form
+    frame, _ = _fill.form_root(page, ats)
+    return _spec.greenhouse_page_fields(form, (frame or page.main_frame).content())
+
+
 def _run_in_browser(conn, row, ats, url, mode, config, outcome, shots, *,
                     targets, fetch_json, browser_factory, headless,
                     answers_loader, prepare_letter, employers_loader,
@@ -401,6 +411,7 @@ def _drive(conn, row, posting_id, ats, url, mode, config, outcome, shots,
         if form is None:
             html = page.content()
             form = _spec.parse_ashby_form(html, _spec.extract_app_data(html), apply_url=url)
+        form = _with_page_fields(page, ats, form)
 
         sources, notes, writers = build_sources(
             conn, posting_id, form, answers_loader=answers_loader,

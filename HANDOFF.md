@@ -1295,6 +1295,27 @@ within seconds; `cli sync` wrote both into the sheet.
 Still owed from check 1: a drafted short **answer** (only a letter has been
 drafted live). Checks 2-5 stand.
 
+**Greenhouse fill gaps, same day - four of five closed in code, none yet
+watched on a live fill:**
+- Upload read-back holds an element handle (`fill._upload`); the input
+  Greenhouse swaps out no longer times out into a false `error`.
+- `candidate-location` parses as a location: typed, then the exactly equal
+  suggestion picked. **Unverified:** whether Greenhouse's suggestion text
+  ever equals §12's `identity.location`. If not, the field is left and
+  reported, not silently emptied.
+- **Fields Greenhouse renders but never lists** are read off the page
+  (`spec.greenhouse_page_fields`, both in `runner.inspect` and the fill):
+  the phone `country` from §12's new `identity.phone_country` (Anish's
+  word), and the Education section (`school--0` ... `end-year--0`) from
+  `answers.yaml`'s new `greenhouse_education`, in Greenhouse's own option
+  wording from its public education API. Start date September 2023 is
+  Anish's. A live dry run on Affirm (24670) planned all of them and the
+  required check found nothing missing. Fixtures: Affirm's blank form and
+  questions JSON. **Unverified:** the School combobox is an async search;
+  whether typing the full name brings up that exact option is the next
+  live fill's question.
+- Still open: Hispanic/Latino and Race (EEOC, conditional) on Affirm.
+
 ### Tests
 
 The full suite on this branch, locally on 2026-11-05: **1,465 passed, 0

@@ -113,6 +113,23 @@ class TestOnThePage:
         assert missing == []
 
 
+    def test_affirms_education_section_is_caught_then_covered(self, fixtures_site, tmp_path):
+        """Affirm, 2026-11-05: an Education section the questions JSON never
+        lists. The check named it missing; with the page's own fields added
+        to the spec (spec.greenhouse_page_fields) nothing is missing."""
+        import json
+        form = spec.parse_greenhouse(json.loads(
+            (FIXTURES / "greenhouse_affirm_8008649003_questions.json").read_text(encoding="utf-8")))
+        html = (FIXTURES / "greenhouse_affirm_8008649003_form.html").read_text(encoding="utf-8")
+        with open_browser(tmp_path) as b:
+            page = b.new_page()
+            page.goto(f"{fixtures_site}/greenhouse_affirm_8008649003_form.html")
+            _, before = required.check(page, form)
+            _, after = required.check(page, spec.greenhouse_page_fields(form, html))
+        assert {"school--0", "degree--0", "discipline--0"} <= set(before)
+        assert after == []
+
+
 class TestGreenhouseDemographicIds:
     """Chime, 2026-11-05: the page marks a required demographic question
     by its bare id; the spec keys it demographic_question_<id>."""

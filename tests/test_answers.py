@@ -83,6 +83,26 @@ class TestLoad:
         with pytest.raises(answers.AnswersError, match="quote it"):
             answers.load(path)
 
+    def test_greenhouse_education_loads_as_text(self, tmp_path):
+        path = write(tmp_path, """\
+            greenhouse_education:
+              degree: "Bachelor's Degree"
+              end_year: "2025"
+            """)
+        assert answers.load(path)["greenhouse_education"] == {
+            "degree": "Bachelor's Degree", "end_year": "2025"}
+
+    @pytest.mark.parametrize("body,match", [
+        ("  end_year: 2025", "quoted text"),          # an int to YAML
+        ("  degree: yes", "quoted text"),             # a boolean to YAML
+        ("  major: Computer Science", "not one of"),  # not a field Greenhouse has
+    ])
+    def test_greenhouse_education_refuses_what_yaml_would_misread(self, tmp_path, body, match):
+        path = tmp_path / "answers.yaml"
+        path.write_text("greenhouse_education:\n" + body + "\n", encoding="utf-8")
+        with pytest.raises(answers.AnswersError, match=match):
+            answers.load(path)
+
     def test_a_bare_string_instead_of_a_list_is_refused(self, tmp_path):
         path = write(tmp_path, """\
             self_identification:

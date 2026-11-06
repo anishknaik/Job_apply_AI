@@ -118,8 +118,25 @@ def load(path: Path | str = ANSWERS_PATH) -> dict:
                                f"the questions it has answered, as text")
         reusable[key] = {"answer": text.strip(), "asked_as": asked}
 
+    # Greenhouse's Education section, in Greenhouse's own option wording
+    # (HANDOFF §9, 2026-11-06). Text only: an unquoted 2025 is an int and an
+    # unquoted yes a boolean, and either would be typed wrong or not at all.
+    gh_education = {}
+    for key, value in (raw.get("greenhouse_education") or {}).items():
+        if key not in GH_EDUCATION_KEYS:
+            raise AnswersError(f"greenhouse_education.{key} is not one of "
+                               f"{', '.join(GH_EDUCATION_KEYS)}")
+        if not isinstance(value, str):
+            raise AnswersError(f"greenhouse_education.{key} must be quoted text, "
+                               f"not {type(value).__name__}")
+        gh_education[key] = value.strip()
+
     return {"self_identification": self_id, "logistics": logistics,
-            "reusable_answers": reusable}
+            "reusable_answers": reusable, "greenhouse_education": gh_education}
+
+
+GH_EDUCATION_KEYS = ("school", "degree", "discipline", "start_month",
+                     "start_year", "end_month", "end_year")
 
 
 def form_view(profile_text: str, answers: dict) -> dict:
@@ -154,6 +171,7 @@ def form_view(profile_text: str, answers: dict) -> dict:
         # (§6.1.1 constraint 3): it may have gone stale, and adapting it
         # makes a new claim.
         "reusable_answers": answers.get("reusable_answers", {}),
+        "greenhouse_education": answers.get("greenhouse_education", {}),
         "leave_for_anish": missing,
         "never_fill": list(NEVER_FILL),
     }

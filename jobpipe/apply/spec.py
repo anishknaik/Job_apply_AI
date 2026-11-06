@@ -196,6 +196,65 @@ def parse_greenhouse(payload: dict[str, Any], company: str | None = None) -> For
     )
 
 
+# Fields Greenhouse renders that its questions JSON never lists. Read from the
+# rendered page and appended to the spec, so the resolver gives each a source
+# (or a blocker) and the filler sees it. Seen live: the phone widget's country
+# selector on every form (Alloy, Chime, Arize), and an Education section on
+# some (Affirm, captured 2026-11-06). Each entry: page id, kind, label used if
+# the page's own label cannot be read.
+GH_PAGE_FIELDS = (
+    ("country", SELECT, "Country"),
+    ("school--0", SELECT, "School"),
+    ("degree--0", SELECT, "Degree"),
+    ("discipline--0", SELECT, "Discipline"),
+    ("start-month--0", SELECT, "Start date month"),
+    ("start-year--0", TEXT, "Start date year"),
+    ("end-month--0", SELECT, "End date month"),
+    ("end-year--0", TEXT, "End date year"),
+)
+EDUCATION_SECTION = "education"
+
+
+def _input_tag(html_text: str, ident: str) -> str | None:
+    m = re.search(r'<input\b[^>]*\bid="' + re.escape(ident) + r'"[^>]*>', html_text)
+    return m.group(0) if m else None
+
+
+def _label_text(html_text: str, ident: str) -> str | None:
+    m = re.search(r'<label\b[^>]*\bid="' + re.escape(ident) + r'-label"[^>]*>(.*?)</label>',
+                  html_text, re.S)
+    if not m:
+        return None
+    text = re.sub(r"<span[^>]*>\*</span>", "", m.group(1))
+    return _strip_tags(text).strip() or None
+
+
+def greenhouse_page_fields(form: FormSpec, html_text: str) -> FormSpec:
+    """`form` plus the GH_PAGE_FIELDS the rendered page carries and the spec
+    lacks. A select must render as a combobox to count; required is the
+    page's own aria-required. Options stay None - read from the live widget,
+    exact text only, as for Ashby's dropdowns."""
+    if form.ats != GREENHOUSE:
+        return form
+    added = []
+    for ident, kind, fallback in GH_PAGE_FIELDS:
+        if form.field_by_key(ident) is not None:
+            continue
+        tag = _input_tag(html_text, ident)
+        if tag is None or (kind == SELECT and 'role="combobox"' not in tag):
+            continue
+        added.append(Field(
+            key=ident, label=_label_text(html_text, ident) or fallback, kind=kind,
+            required='aria-required="true"' in tag,
+            section=APPLICATION if ident == "country" else EDUCATION_SECTION))
+    if not added:
+        return form
+    return FormSpec(ats=form.ats, job_id=form.job_id, company=form.company,
+                    title=form.title, fields=form.fields + tuple(added),
+                    apply_url=form.apply_url, bot_check_site_key=form.bot_check_site_key,
+                    notes=form.notes)
+
+
 def greenhouse_questions_url(board_token: str, job_id: str | int) -> str:
     return (f"https://boards-api.greenhouse.io/v1/boards/{board_token}/jobs/"
             f"{job_id}?questions=true")

@@ -161,6 +161,22 @@ _KEY_MEANINGS = {
     "_systemfield_phone": "phone", "_systemfield_location": "location",
     "_systemfield_resume": "resume", "_systemfield_linkedin": "linkedin",
     "_systemfield_website": "website",
+    # Greenhouse fields read off the rendered page (spec.GH_PAGE_FIELDS)
+    "country": "phone_country",
+    "school--0": "edu_school", "degree--0": "edu_degree",
+    "discipline--0": "edu_discipline",
+    "start-month--0": "edu_start_month", "start-year--0": "edu_start_year",
+    "end-month--0": "edu_end_month", "end-year--0": "edu_end_year",
+}
+
+# Greenhouse's Education section takes its own option wording ("Bachelor's
+# Degree", the school's name as Greenhouse lists it), which is not how §12
+# states the same facts. The form spellings live in answers.yaml's
+# greenhouse_education, as the Greenhouse spellings of self-ID answers do.
+_GH_EDUCATION = {
+    "edu_school": "school", "edu_degree": "degree", "edu_discipline": "discipline",
+    "edu_start_month": "start_month", "edu_start_year": "start_year",
+    "edu_end_month": "end_month", "edu_end_year": "end_year",
 }
 
 NEVER_FILL = ("salary", "government_id", "payment", "attestation", "signature")
@@ -396,6 +412,15 @@ def resolve_field(f: _spec.Field, sources: Sources) -> Resolved:
                             note="the reviewed letter, into the additional-information box")
         return _open_ended(f, sources, meaning)
 
+    if meaning == "phone_country":
+        return _put_text(f, meaning, _text(identity.get("phone_country")),
+                         "profile:identity.phone_country",
+                         "identity.phone_country is not in master_profile.md §12")
+    if meaning in _GH_EDUCATION:
+        key = _GH_EDUCATION[meaning]
+        return _put_text(f, meaning, _text((answers.get("greenhouse_education") or {}).get(key)),
+                         f"answers:greenhouse_education.{key}",
+                         f"greenhouse_education.{key} is not in config/answers.yaml")
     if meaning == "first_name" or meaning == "last_name":
         first, last, note = _split_name(identity)
         value = first if meaning == "first_name" else last

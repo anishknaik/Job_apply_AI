@@ -74,3 +74,15 @@ logistics:
 #
 #       Second paragraph.
 reusable_answers: {}
+
+# Greenhouse's Education section, in Greenhouse's own option wording. The
+# lists are public: boards-api.greenhouse.io/v1/boards/<token>/education/
+# degrees, disciplines, schools?term=<name>. Quote every value, years too.
+greenhouse_education:
+  school: "Example State University"
+  degree: "Bachelor's Degree"
+  discipline: "Computer Science"
+  start_month: "September"
+  start_year: "2021"
+  end_month: "May"
+  end_year: "2025"

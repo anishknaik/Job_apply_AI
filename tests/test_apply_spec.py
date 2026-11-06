@@ -237,3 +237,58 @@ class TestAshby:
             "https://jobs.ashbyhq.com/langchain/abc/application"
         assert spec.ashby_application_url("https://jobs.ashbyhq.com/langchain/abc/application") == \
             "https://jobs.ashbyhq.com/langchain/abc/application"
+
+
+class TestGreenhousePageFields:
+    """Fields Greenhouse renders that its questions JSON never lists,
+    read off real captured pages."""
+
+    @staticmethod
+    def _load(name):
+        import json
+        form = spec.parse_greenhouse(json.loads(
+            (FIXTURES / f"greenhouse_{name}_questions.json").read_text(encoding="utf-8")))
+        html = (FIXTURES / f"greenhouse_{name}_form.html").read_text(encoding="utf-8")
+        return form, html
+
+    def test_affirms_education_section_and_phone_country(self):
+        form, html = self._load("affirm_8008649003")
+        out = spec.greenhouse_page_fields(form, html)
+        added = {f.key: f for f in out.fields if form.field_by_key(f.key) is None}
+        assert set(added) == {"country", "school--0", "degree--0", "discipline--0",
+                              "start-month--0", "start-year--0", "end-month--0", "end-year--0"}
+        assert added["school--0"].label == "School" and added["school--0"].kind == "select"
+        assert added["start-year--0"].kind == "text"
+        assert added["degree--0"].options is None, "options come from the live widget"
+        assert all(f.required for f in added.values())
+        assert added["school--0"].section == "education"
+
+    def test_alloy_has_only_the_phone_country(self):
+        form, html = self._load("alloy_8495229002")
+        out = spec.greenhouse_page_fields(form, html)
+        assert [f.key for f in out.fields[len(form.fields):]] == ["country"]
+
+    def test_it_adds_nothing_twice_and_leaves_ashby_alone(self):
+        form, html = self._load("affirm_8008649003")
+        once = spec.greenhouse_page_fields(form, html)
+        assert spec.greenhouse_page_fields(once, html).fields == once.fields
+        ashby = spec.FormSpec("ashby", "1", "x", "x", ())
+        assert spec.greenhouse_page_fields(ashby, html) is ashby
+
+    def test_the_new_fields_resolve_from_profile_and_answers(self):
+        from jobpipe.apply import resolve
+        form, html = self._load("affirm_8008649003")
+        out = spec.greenhouse_page_fields(form, html)
+        sources = resolve.Sources(answers={
+            "identity": {"phone_country": "United States"},
+            "greenhouse_education": {"school": "Example State University",
+                                     "degree": "Bachelor's Degree", "start_year": "2023"}})
+        r = {k: resolve.resolve_field(out.field_by_key(k), sources)
+             for k in ("country", "school--0", "degree--0", "start-year--0", "end-month--0")}
+        assert (r["country"].action, r["country"].value) == ("select", "United States")
+        assert r["country"].source == "profile:identity.phone_country"
+        assert (r["school--0"].action, r["school--0"].value) == ("select", "Example State University")
+        assert r["degree--0"].source == "answers:greenhouse_education.degree"
+        assert (r["start-year--0"].action, r["start-year--0"].value) == ("fill", "2023")
+        assert r["end-month--0"].action == "blocker"
+        assert "greenhouse_education.end_month" in r["end-month--0"].note
