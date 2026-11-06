@@ -629,3 +629,30 @@ class TestChimeFollowUps:
         assert out.action == "blocker" and out.meaning == "prior_employment"
         from jobpipe.apply import learned
         assert not learned.learnable(f, out.meaning)
+
+
+class TestDoorDashLabels:
+    """DoorDash, 2026-11-06: a privacy acknowledgement matched nothing and
+    was remembered as "Yes"; an SMS consent question resolved as email."""
+
+    @pytest.mark.parametrize("label", [
+        "Applicant Privacy Acknowledgement",
+        "I have read the Privacy Notice",
+        "Please acknowledge the candidate privacy policy",
+    ])
+    def test_privacy_acknowledgements_are_never_filled_or_learned(self, label):
+        from jobpipe.apply import learned
+        f = spec.Field("q", label, "select", True)
+        assert resolve.meaning_of(f) == "attestation"
+        assert not learned.learnable(f, "attestation")
+        assert resolve.resolve_field(f, resolve.Sources(answers={})).action == resolve.BLOCKER
+
+    def test_an_sms_consent_question_is_not_the_email_field(self):
+        from jobpipe.apply import learned
+        f = spec.Field("q", "Would you like to receive communications via SMS and/or WhatsApp "
+                            "to the phone number provided? If you select no, we will only "
+                            "communicate with you via email/or telephone calls.", "select", True)
+        assert resolve.meaning_of(f) == "communications_consent"
+        assert learned.learnable(f, "communications_consent")
+        r = resolve.resolve_field(f, resolve.Sources(answers={"identity": {"email": "x@example.com"}}))
+        assert r.value != "x@example.com"

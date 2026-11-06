@@ -103,7 +103,11 @@ _MEANINGS: tuple[tuple[str, str], ...] = (
                         r"anything (you'?d|you would) like (us|to)|is there anything|"
                         r"other information|any other (information|details|comments)"),
     ("signature", r"signature|\binitials?\b|\be-?sign\b"),
-    ("attestation", r"\bi\s+(certify|acknowledge|understand|agree|confirm|attest|declare|consent)\b|certif(y|ication) that|acknowledg(e|ement) (that|of)"),
+    # Any acknowledgement, and any privacy-notice box: DoorDash's "Applicant
+    # Privacy Acknowledgement" (2026-11-06) matched nothing, was remembered
+    # as a learned "Yes", and would have been confirmed on later forms.
+    ("attestation", r"\bi\s+(certify|acknowledge|understand|agree|confirm|attest|declare|consent)\b|certif(y|ication) that|"
+                    r"\backnowledg(e|ed|ement|ment)\b|privacy (notice|policy|statement)"),
     ("government_id", r"\bssn\b|social security|passport|national id|government[- ]issued|date of birth|\bdob\b|driver'?s? licen"),
     ("payment", r"\bbank\b|payment|routing number|\biban\b"),
     # Answered only when the label also names this posting's employer; see
@@ -121,6 +125,10 @@ _MEANINGS: tuple[tuple[str, str], ...] = (
     ("first_name", r"^(legal\s+)?first\s*name|given name"),
     ("last_name", r"^(legal\s+)?last\s*name|family name|surname"),
     ("full_name", r"^(full |legal )?name$|^your name$"),
+    # Before email: DoorDash's SMS/WhatsApp consent question mentions email
+    # in passing and was resolved as the email field. A consent choice is
+    # his to make; it is left, and remembered once he makes it.
+    ("communications_consent", r"\bsms\b|whatsapp|text messag|receive (communications|messages|updates|texts)"),
     ("email", r"\be-?mail\b"),
     ("phone", r"\bphone\b|\bmobile\b|\btelephone\b"),
     ("linkedin", r"linkedin"),
