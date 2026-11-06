@@ -32,6 +32,8 @@ is what pulls the seven apart. Variants are versioned artifacts.
 """
 from __future__ import annotations
 
+import re
+
 # Ordering per variant, strongest first. Every ordering is a permutation of
 # the whole bank — `tests/test_variants.py` fails if one drifts into a subset
 # or picks up an id the bank no longer has.
@@ -194,8 +196,25 @@ _AI_ML_BY_DOMAIN: dict[str, str] = {
 # reports it rather than swallowing it.
 DEFAULT_VARIANT = "ai_ml_infra"
 
+# `domain` describes the COMPANY, not the role. A robotics company hires
+# platform, SRE and internal-tooling engineers too, and the CV ordering leads
+# those with three computer-vision bullets: Physical Intelligence's "Software
+# Engineer, AI Productivity" went out that way on 2026-11-06. So the CV
+# ordering needs the title to name vision or robotics work; any other title
+# at a robotics_cv company takes ai_ml_infra (Anish's call, 2026-11-06).
+# Matched as word prefixes, so "robot" covers robotics and "autonom" covers
+# autonomy and autonomous.
+CV_TITLE_TERMS = (
+    "vision", "perception", "robot", "manipulation", "simulation", "scenario",
+    "scene", "maneuver", "autonom", "lidar", "camera", "3d", "video", "imag",
+    "mapping", "slam", "localization", "sensor", "cv", "embodied",
+)
+_CV_TITLE = re.compile(r"\b(?:" + "|".join(CV_TITLE_TERMS) + r")", re.IGNORECASE)
+NON_CV_AT_ROBOTICS = "ai_ml_infra"
 
-def resolve(archetype: str | None, domain: str | None) -> tuple[str, str]:
+
+def resolve(archetype: str | None, domain: str | None,
+            title: str | None = None) -> tuple[str, str]:
     """Pick a variant from `(lane, domain)`. Returns (variant, why).
 
     The `why` is not decoration. Roughly 565 postings were scored before
@@ -212,6 +231,10 @@ def resolve(archetype: str | None, domain: str | None) -> tuple[str, str]:
 
     if lane == "ai_ml":
         variant = _AI_ML_BY_DOMAIN.get(domain or "")
+        if variant == "ai_ml_cv" and title is not None and not _CV_TITLE.search(title):
+            return NON_CV_AT_ROBOTICS, (
+                f"AI/ML lane, domain {domain}, but the title names no vision "
+                f"or robotics work")
         if variant:
             return variant, f"AI/ML lane, domain {domain}"
         return DEFAULT_VARIANT, (

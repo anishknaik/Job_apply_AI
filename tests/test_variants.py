@@ -114,6 +114,32 @@ class TestResolution:
     def test_the_ai_ml_lane_splits_by_domain(self, domain, expected):
         assert variants.resolve("ai_ml_engineer", domain)[0] == expected
 
+    @pytest.mark.parametrize("title", [
+        "Software Engineer - Computer Vision",
+        "Robot Learning Engineer - Manipulation",
+        "Perception Engineer - Offroad",
+        "Software Engineer - Neural Simulation",
+        "Machine Learning Engineer, Maneuvering Tech",
+        "Senior Machine Learning Engineer, Scenes, Traffic Controls",
+    ])
+    def test_a_vision_or_robotics_title_keeps_the_cv_ordering(self, title):
+        assert variants.resolve("ai_ml_engineer", "robotics_cv", title)[0] == "ai_ml_cv"
+
+    @pytest.mark.parametrize("title", [
+        "Software Engineer, AI Productivity",     # went out as CV, 2026-11-06
+        "Software Engineer, AI Platform - New Grad",
+        "Platform Engineer (SDO)",
+        "Site Reliability Engineer, Vehicle Software",
+    ])
+    def test_any_other_title_at_a_robotics_company_takes_infra(self, title):
+        variant, why = variants.resolve("ai_ml_engineer", "robotics_cv", title)
+        assert variant == "ai_ml_infra"
+        assert "confirm" not in why and "title" in why
+
+    def test_the_title_rule_touches_only_the_cv_ordering(self):
+        assert variants.resolve("ai_ml_engineer", "healthcare",
+                                "Platform Engineer")[0] == "ai_ml_health"
+
     def test_an_unscored_domain_falls_back_and_says_so(self):
         """~565 postings predate the `domain` field, so this is a live path.
         The caller has to be able to tell a resolution from a guess."""

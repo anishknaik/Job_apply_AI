@@ -110,14 +110,19 @@
   {% if alive %}
   <p class="muted">A session is running. Stop it before starting another.</p>
   {% else %}
-  <p class="hint">The queue: scored, passed Stage A, seen in the last {{ days }} days, on a board the runner fills (Greenhouse, Ashby), with no status yet or not applied. Highest apply score first. Untick what you do not want; the first N ticked are worked. Drafting is capped at {{ cap }} postings per session (JOBPIPE_MAX_DRAFTS_PER_SESSION); past it forms are filled without drafts.</p>
+  <p class="hint">The queue: scored, passed Stage A, seen in the last {{ days }} days, on a board the runner fills (Greenhouse, Ashby), with no status yet or not applied. Highest apply score first. Nothing is ticked: tick each posting to work, and the first N ticked are worked, in this order. Drafting is capped at {{ cap }} postings per session (JOBPIPE_MAX_DRAFTS_PER_SESSION); past it forms are filled without drafts.</p>
   <form method="post" action="/session/start">
+  <div class="actions">
+    <label>work at most <input type="number" name="limit" min="1" value="{{ cap }}" style="width: 5em"></label>
+    <button class="primary" {% if not queue %}disabled{% endif %}>Start session</button>
+    <span class="hint">spends money: {{ draft_model }} drafts and grounding checks, under the cap</span>
+  </div>
   <table>
     <thead><tr><th></th><th class="num">Tier</th><th>Company</th><th>Title</th><th>Location</th><th class="num">Score</th><th>Board</th><th></th></tr></thead>
     <tbody>
     {% for r in queue %}
     <tr>
-      <td><input type="checkbox" name="ids" value="{{ r.id }}" checked></td>
+      <td><input type="checkbox" name="ids" value="{{ r.id }}"></td>
       <td class="num muted">{{ r.tier if r.tier is not none else '—' }}</td>
       <td><a class="row-link" href="/posting/{{ r.id }}">{{ r.company }}</a></td>
       <td>{{ r.title }}</td>
@@ -131,11 +136,6 @@
     {% endfor %}
     </tbody>
   </table>
-  <div class="actions">
-    <label>work at most <input type="number" name="limit" min="1" value="{{ cap }}" style="width: 5em"></label>
-    <button class="primary" {% if not queue %}disabled{% endif %}>Start session</button>
-    <span class="hint">spends money: {{ draft_model }} drafts and grounding checks, under the cap</span>
-  </div>
   </form>
   {% endif %}
 </section>

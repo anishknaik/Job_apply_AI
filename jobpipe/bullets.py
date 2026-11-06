@@ -271,6 +271,10 @@ GENERIC_TAGS = frozenset({
     "prototyping", "regression", "routing", "scoping", "scoring",
     "stakeholder_communication", "startup", "testing", "tracking",
     "transactions",
+    # Nearly every bullet in the bank is Python work, so a dropped bullet
+    # tagged python says nothing; on the first live session (2026-11-06) it
+    # flagged brain-survey and capstone-quality on a posting naming Python once.
+    "python",
 })
 
 # Other spellings postings use for a tag. A tag's own forms - its parts

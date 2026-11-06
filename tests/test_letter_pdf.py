@@ -103,3 +103,31 @@ class TestRender:
         with pytest.raises(letter_pdf.LetterRenderError):
             letter_pdf.render(sample(), out)
         assert not out.exists(), "a bad file must not be left to upload"
+
+    def test_renders_while_the_callers_own_browser_is_open(self, tmp_path):
+        """The apply runner asks for the letter PDF with its form browser
+        open on the same thread. A second sync Playwright there raised
+        "using Playwright Sync API inside the asyncio loop" (Arize,
+        2026-11-06); the render now runs on a thread of its own."""
+        from playwright.sync_api import sync_playwright
+        out = tmp_path / "cover_letter.pdf"
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            try:
+                result = letter_pdf.render(sample(), out)
+                page = browser.new_page()            # the caller's browser still works
+                page.set_content("<p>ok</p>")
+                assert page.inner_text("p") == "ok"
+            finally:
+                browser.close()
+        assert result["pages"] == 1
+        assert out.exists()
+
+
+def test_a_render_error_reaches_the_caller(tmp_path, monkeypatch):
+    """Running on a worker thread must not swallow the refusal."""
+    def boom(*a, **k):
+        raise resume.RenderError("no chromium")
+    monkeypatch.setattr(resume, "_render_pdf", boom)
+    with pytest.raises(resume.RenderError, match="no chromium"):
+        letter_pdf.render(sample(), tmp_path / "x.pdf")

@@ -1251,6 +1251,41 @@ workbench.
    form required a letter, record it with `advance_status(...,
    letter_required=...)`.
 
+### First live session, 2026-11-06 - check 1 done
+
+`apply-session` was fast-forwarded into `master` first. One session, two
+postings, both submitted by Anish and recorded `applied` by the runner
+within seconds; `cli sync` wrote both into the sheet.
+
+- **Physical Intelligence 18682 (Ashby).** No draft: the open question
+  reused a Claude-written, grounding-passed answer from 2026-11-04, so
+  `answers_session_written` passing was correct. **The resume went out in
+  the wrong lane** - the grid keyed on the company's `robotics_cv` domain
+  alone and led an AI-productivity role with three CV bullets. Fixed:
+  `variants.resolve` now takes the title, and the CV ordering needs one of
+  `CV_TITLE_TERMS`; any other robotics-company title takes `ai_ml_infra`
+  (Anish's call).
+- **Arize AI 16325 (Greenhouse).** **The first live Gemini draft:** a
+  413-word letter from `gemini-2.5-pro`, grounding passed 11/11, 2.6 cents
+  by the panel's estimate. Risk 1 (thinking eating the ceiling) did not
+  happen. The first fill then failed with "Playwright Sync API inside the
+  asyncio loop": the runner asks `prepare_letter(pdf=True)` with its own
+  form browser open, and a second sync Playwright on that thread is refused.
+  Fixed: `letter_pdf.render` runs on a thread of its own; a test renders a
+  letter inside an open browser. Anish edited the letter's last paragraph
+  in the `.sent.md`, the re-run reused the letter rather than redrafting,
+  and the PDF was uploaded. Both uploads report `error` (the known
+  Greenhouse read-back timeout) though the screenshot shows both attached;
+  Location (City) was again left empty. The letter field was optional, so
+  `letter_required=false` and `measure` does not count it.
+- **The panel:** no posting is ticked by default any more (Start spends
+  money; it had ticked all of them), and Start sits above the table.
+- **Drop flags:** `python` is in `GENERIC_TAGS`; it flagged two irrelevant
+  bullets on Arize.
+
+Still owed from check 1: a drafted short **answer** (only a letter has been
+drafted live). Checks 2-5 stand.
+
 ### Tests
 
 The full suite on this branch, locally on 2026-11-05: **1,465 passed, 0

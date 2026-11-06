@@ -15,6 +15,7 @@ Nothing here reads bullets.yaml, master_profile.md, answers.yaml or .env. The
 tools that need them are stubbed, so this file passes on a clean checkout.
 """
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -822,6 +823,14 @@ class TestApplySessionRoutes:
         assert 'action="/session/start"' in got.text
         assert "http-equiv" not in got.text, "no refresh while nothing runs"
         assert "Nothing here" not in got.text
+
+    def test_no_posting_is_ticked_by_default(self, client, conn):
+        # Start spends money; a posting is worked only if Anish ticks it.
+        seed(conn, source_id="1")
+        seed(conn, source_id="2")
+        got = client.get("/session")
+        assert got.text.count('name="ids"') == 2
+        assert re.search(r'<input[^>]*name="ids"[^>]*checked', got.text) is None
 
     def test_start_launches_the_worker_on_the_ticked_postings_in_queue_order(self, client, conn, launched):
         low = seed(conn, source_id="1", apply_score=6)

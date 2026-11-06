@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import html
 import re
+import threading
 from pathlib import Path
 
 from . import resume
@@ -63,8 +64,31 @@ def render(text: str, out: Path | str) -> dict:
 
     Refuses - and removes the file, so it cannot be uploaded by mistake - a
     PDF whose text does not read back as the letter.
+
+    Runs on a thread of its own. The apply runner asks for the letter PDF
+    while its own form browser is open, and Playwright's sync API refuses a
+    second instance on a thread that already drives one ("using Playwright
+    Sync API inside the asyncio loop") - the 2026-11-06 Arize run failed on
+    exactly that. A fresh thread has no loop, and `resume`'s browser state is
+    per thread, so the render cannot see or disturb the caller's.
     """
-    out = Path(out)
+    result: dict = {}
+
+    def work():
+        try:
+            result["value"] = _render(text, Path(out))
+        except BaseException as exc:                         # noqa: BLE001
+            result["error"] = exc
+
+    worker = threading.Thread(target=work, name="letter-pdf", daemon=True)
+    worker.start()
+    worker.join()
+    if "error" in result:
+        raise result["error"]
+    return result["value"]
+
+
+def _render(text: str, out: Path) -> dict:
     pages, used = None, FONT_LADDER[0]
     for used in FONT_LADDER:
         pages = resume._render_pdf(build_html(text, used), out)

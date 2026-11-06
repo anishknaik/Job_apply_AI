@@ -286,7 +286,8 @@ def create_app(db_path: str | None = None, session_dir: Path | None = None) -> F
 
         score = detail["score"] or {}
         suggested, why = variants.resolve(score.get("archetype"),
-                                          score.get("domain"))
+                                          score.get("domain"),
+                                          row["title"] or "")
         # The vocabulary an apply session renders with, prefilled so a
         # re-render from here starts where the session did. Free; a bank
         # that will not load leaves the box empty.

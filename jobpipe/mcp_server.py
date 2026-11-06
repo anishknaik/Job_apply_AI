@@ -452,7 +452,7 @@ def render_resume(conn, posting_id: int, variant: str | None = None,
     domain = score["domain"] if score else None
 
     if variant is None:
-        variant, why = variants.resolve(archetype, domain)
+        variant, why = variants.resolve(archetype, domain, row["title"] or "")
         if "confirm" in why:
             raise ToolError(
                 f"cannot pick a variant for posting {posting_id} on its own: "
@@ -464,7 +464,7 @@ def render_resume(conn, posting_id: int, variant: str | None = None,
             raise ToolError(
                 f"unknown variant {variant!r}. Known: "
                 f"{', '.join(sorted(variants.ORDERINGS))}")
-        suggested, why = variants.resolve(archetype, domain)
+        suggested, why = variants.resolve(archetype, domain, row["title"] or "")
         why = (f"given explicitly; the grid would have picked {suggested}"
                if suggested != variant else f"given explicitly, agrees with "
                                             f"the grid ({why})")
