@@ -74,6 +74,20 @@ SKIP, PAUSE, RESUME, STOP = "skip", "pause", "resume", "stop"
 COMMANDS = (SKIP, PAUSE, RESUME, STOP)
 
 
+# Who writes a session's open-ended answers and letters. Anish's decision,
+# 2026-11-06: Claude, in a Claude Code session, before the workbench session
+# runs - so by default the worker drafts nothing and spends nothing; a box with
+# no stored, grounding-passed answer is left blank and named on the panel.
+# "gemini" brings back Phase 7A's drafting by JOBPIPE_DRAFT_MODEL.
+DRAFTING_ENV = "JOBPIPE_SESSION_DRAFTING"
+CLAUDE_NOTE = ("no answer on file: write it in Claude Code (save_short_answer or "
+               "save_cover_letter, then check_grounding) and re-run this posting")
+
+
+def gemini_drafting() -> bool:
+    return (os.environ.get(DRAFTING_ENV) or "").strip().lower() == "gemini"
+
+
 def max_drafts_per_session() -> int:
     raw = (os.environ.get(CAP_ENV) or "").strip()
     try:
@@ -562,6 +576,16 @@ class Session:
         rec.drafts = []
         letter_needed = wants_letter and not self._letter_ready(conn, rec)
         if not open_fields and not letter_needed:
+            return
+        if not gemini_drafting():
+            rec.drafts.extend({"kind": "answer", "question": f.label, "key": f.key,
+                               "filled": False, "verdict": None, "reason": CLAUDE_NOTE,
+                               "model": None, "cost": 0.0} for f in open_fields)
+            if letter_needed:
+                rec.drafts.append({"kind": "letter", "question": "cover letter", "filled": False,
+                                   "verdict": None, "reason": CLAUDE_NOTE,
+                                   "model": None, "cost": 0.0})
+            self.save()
             return
         if self.state.drafted_for >= self.state.cap:
             rec.drafts.append({"kind": "cap", "filled": False,

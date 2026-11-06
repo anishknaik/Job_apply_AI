@@ -255,11 +255,16 @@ it:
 2. renders the resume from the grid variant, with the bank's skill tags the
    posting names as `posting_skills` (`bullets.posting_vocabulary`), and
    **flags** — never skips — a dropped bullet carrying one of them;
-3. has Gemini 2.5 Pro draft each open-ended box with no passing answer on
-   file, and the letter where the form has a letter field or an "anything
-   else" textarea (`jobpipe/apply/draft.py`), saves each with the model
-   recorded as writer, and runs `check_grounding`. A failing or unfinished
-   check leaves that box blank, with the reason on the panel;
+3. fills each open-ended box and letter field from what is on file. **Since
+   2026-11-06 Claude writes all of that prose, in Claude Code, before the
+   session** (Anish's decision): for the postings he picks, dry-run each
+   form (free) to see its questions, write every answer with
+   `save_short_answer` and every letter with `save_cover_letter`, run
+   `check_grounding` on each, `copy_for_editing` the letter for his review,
+   and only then start the session. A box with no grounding-passed answer is
+   left blank and named on the panel. The worker drafts nothing unless
+   `JOBPIPE_SESSION_DRAFTING=gemini`, which brings back Gemini 2.5 Pro
+   drafting (`jobpipe/apply/draft.py`);
 4. fills with the runner in review mode;
 5. waits for Anish's submit (applied recorded by the runner), or Skip / Stop
    from the panel; closing the window pauses the session, and Resume

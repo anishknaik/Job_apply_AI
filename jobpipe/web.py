@@ -551,7 +551,11 @@ def create_app(db_path: str | None = None, session_dir: Path | None = None) -> F
 
 
 def _draft_model() -> str:
-    from .apply import draft
+    """Who writes the prose, for the panel. Claude in Claude Code by default
+    (2026-11-06); the drafting model only when JOBPIPE_SESSION_DRAFTING=gemini."""
+    from .apply import draft, session as _session
+    if not _session.gemini_drafting():
+        return "Claude (written in Claude Code before the session)"
     return draft.draft_model()
 
 

@@ -29,6 +29,14 @@ def bank():
                 bullets={"b1": b}, skills={})
 
 
+@pytest.fixture(autouse=True)
+def _gemini_drafting(monkeypatch, request):
+    """Most of this file exercises Phase 7A's Gemini drafting path, which is
+    opt-in since 2026-11-06; TestClaudeWritesTheProse covers the default."""
+    if not getattr(request.cls, "claude_default", False):
+        monkeypatch.setenv(session.DRAFTING_ENV, "gemini")
+
+
 @pytest.fixture
 def db_path(tmp_path):
     path = tmp_path / "jobpipe.db"
@@ -704,3 +712,29 @@ class TestAgainstTheFakeAts:
                                targets=[Target("Alloy", "greenhouse", "alloy", 3)],
                                fetch_json=gone, browser_factory=lambda *a, **k: opened.append(1))
         assert not found.alive and "404" in found.reason and opened == []
+
+
+class TestClaudeWritesTheProse:
+    """Anish, 2026-11-06: Claude writes every answer and letter in Claude
+    Code; by default the worker drafts nothing and spends nothing."""
+    claude_default = True
+
+    def test_no_drafting_by_default(self, monkeypatch):
+        monkeypatch.delenv(session.DRAFTING_ENV, raising=False)
+        assert not session.gemini_drafting()
+        monkeypatch.setenv(session.DRAFTING_ENV, "Gemini")
+        assert session.gemini_drafting()
+
+    def test_an_open_question_is_left_for_claude_and_nothing_is_spent(self, conn, db_path, tmp_path, monkeypatch):
+        monkeypatch.delenv(session.DRAFTING_ENV, raising=False)
+        pid = seed(conn)
+        d = Doubles()
+        state = make(db_path, tmp_path, [pid], d).run()
+        called = names(d)
+        assert "draft_answer" not in called and "draft_letter" not in called
+        assert "check_grounding" not in called
+        assert "run" in called, "the form is still filled"
+        rec = state.postings[0]
+        assert rec.drafts and all(e["reason"] == session.CLAUDE_NOTE for e in rec.drafts)
+        assert {e["kind"] for e in rec.drafts} == {"answer", "letter"}
+        assert state.drafted_for == 0 and state.cost_usd == 0
