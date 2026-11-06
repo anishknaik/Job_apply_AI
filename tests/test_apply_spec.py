@@ -85,9 +85,18 @@ class TestGreenhouse:
 
     def test_location_maps_to_the_rendered_id(self, alloy):
         """The JSON calls it `location`; the page renders
-        `candidate-location`. The key is what the filler locates by."""
+        `candidate-location`. The key is what the filler locates by.
+        It is an autocomplete, not text: the page keeps a value only when a
+        suggestion is picked, so typed text read back equal and then emptied
+        on three live forms."""
         loc = alloy.field_by_key("candidate-location")
-        assert loc is not None and loc.kind == "text" and loc.required
+        assert loc is not None and loc.kind == "location" and loc.required
+
+    def test_location_resolves_to_pick_a_suggestion(self, alloy):
+        from jobpipe.apply import resolve
+        loc = alloy.field_by_key("candidate-location")
+        r = resolve.resolve_field(loc, resolve.Sources(answers={"identity": {"location": "Springfield, IL"}}))
+        assert r.action == resolve.AUTOCOMPLETE and r.value == "Springfield, IL"
 
     def test_eeoc_options_are_verbatim(self, alloy):
         gender = alloy.field_by_key("gender")

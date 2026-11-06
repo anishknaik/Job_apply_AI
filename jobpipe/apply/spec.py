@@ -130,6 +130,11 @@ def _gh_question(q: dict, section: str) -> Field:
         twin = next((f for f in fields[1:] if f.get("type") == "textarea"), None)
         text_key = str(twin["name"]) if twin else None
     key = _GH_DOM_IDS.get(name, name)
+    if key == "candidate-location":
+        # The payload calls it input_text, but the page renders a react-select
+        # that keeps nothing typed unless a suggestion is picked: filled as
+        # text it read back equal, then emptied (Affirm, Chime, Arize).
+        kind = LOCATION
     options = _gh_options(primary.get("values")) if kind in (SELECT, MULTISELECT) else None
     if kind == MULTISELECT and key.endswith("[]"):
         key = key[:-2]

@@ -123,6 +123,26 @@ class TestGreenhouseDouble:
         assert page.evaluate("document.querySelector('#resume').files[0].name") == "resume.pdf"
         assert page.evaluate("document.querySelector('#autofill-upload').files.length") == 0
 
+    def test_an_input_the_ats_replaces_after_upload_still_reads_back(self, page, tmp_path):
+        """Greenhouse parses the file on change and swaps the input out; the
+        locator then found nothing and timed out (Arize, 2026-11-06)."""
+        page.evaluate("""() => {
+            const el = document.querySelector('#resume');
+            el.addEventListener('change', () => {
+                const fresh = document.createElement('input');
+                fresh.type = 'file';
+                const label = document.createElement('span');
+                label.textContent = el.files[0].name;
+                el.replaceWith(label);
+                label.after(fresh);
+            });
+        }""")
+        pdf = tmp_path / "resume.pdf"
+        pdf.write_bytes(b"%PDF-1.4 test")
+        report = fill.fill_form(page, gh_form(), items(resume=("upload", str(pdf))))
+        f = {x.key: x for x in report.fields}["resume"]
+        assert f.status == "ok" and f.verified, f.note
+
     def test_a_missing_file_is_an_error_not_an_upload(self, page, tmp_path):
         res = items(resume=("upload", str(tmp_path / "nope.pdf")))
         report = fill.fill_form(page, gh_form(), res)

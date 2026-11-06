@@ -166,8 +166,18 @@ def _fill_text(control, value: str) -> str:
 
 
 def _upload(control, path: Path) -> tuple[str, str]:
-    control.set_input_files(str(path))
-    name, size = control.evaluate(
+    """Attach `path` and read back what the input now holds.
+
+    Through an element handle, not the locator. Greenhouse parses the file
+    on change and replaces the input, so re-resolving the locator afterwards
+    waited 30 s for an element that was gone and reported `error` on an
+    upload that had worked (Chime and Arize, 2026-11-05/06). The handle
+    keeps the element we attached to, detached or not, and its `files`
+    still say what was attached.
+    """
+    handle = control.element_handle()
+    handle.set_input_files(str(path))
+    name, size = handle.evaluate(
         "el => el.files && el.files[0] ? [el.files[0].name, el.files[0].size] : ['', -1]")
     return name, str(size)
 
