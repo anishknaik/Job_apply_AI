@@ -31,12 +31,21 @@ are the history behind them.
 - **The sheet now carries every posting with a status**, ranked or not
   (`db.get_tracked_rows`), so an application outside the daily top 25
   still gets a row.
-- **Phase 7A is built, on branch `apply-session`, and has not run live**
-  (§9). Slices 0-4 were built in a cloud session; the credit ran out there,
-  and slices 5-6 were finished locally on 2026-11-05. It is not merged into
-  `master`. Before its first live run, read §9's "Risks for the first live
-  run": two of them are in the drafting path and would show up as blank
-  boxes or a low cost figure, not as errors. 7B (the agent) is not started.
+- **Phase 7A is merged into `master` and has run live** (2026-11-06, §9
+  "First live session"): two applications, Physical Intelligence and
+  Arize, both submitted by Anish; the first live Gemini letter passed
+  grounding. Three defects found and fixed the same day.
+- **7B, the AI agent, is shelved** - Anish's decision, 2026-11-06
+  (`PHASE7_PLAN.md` §4 has the counts and reasons). Everything Google-side
+  stays on the promo credit, nothing on the card. **The working mode now:**
+  Anish picks postings in a Claude Code session; the session writes letters
+  and answers through the jobpipe tools (grounded by Gemini), fills
+  Greenhouse/Ashby with the runner in review mode and anything else with
+  Claude in Chrome, and he submits. The workbench's apply session stays
+  available for Gemini-drafted batches.
+- **Gmail, read-only, for verification codes** (2026-11-06): a session may
+  fetch the ATS's code for the form in front of it and show it to Anish;
+  he types it. `CLAUDE.md` "Scope the browser" has the rule.
 - **Open, in order of value:** the Greenhouse fill gaps in §8 (Education
   section, Location cleared, phone country, resume read-back timeout,
   Hispanic/Race); the grounding check's output loop (slice 1 of 7A); live

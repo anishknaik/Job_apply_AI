@@ -120,6 +120,41 @@ workbench ── POST /session/start ──▶ session worker (local child proce
 
 ## 4. The AI agent (`jobpipe/agent/`)
 
+> **SHELVED 2026-11-06 - Anish's decision. Not built.** Slice 0's checks
+> settled it:
+>
+> - **Reach.** Live postings scoring 6+ on 2026-11-06: Ashby 186, Greenhouse
+>   96, Workday 7, SmartRecruiters 2, Lever 0 (no target is on Lever). The
+>   runner already fills 97% of them. Workday asks for an account, where
+>   the agent had to stop anyway, so its real reach was about two
+>   SmartRecruiters forms.
+> - **Model.** Google's current Computer Use page for Vertex lists only 3.x
+>   models (3 Flash preview, 3.5 Flash, 3.5 Flash-Lite, 3.6-3.8 Flash) and no
+>   longer lists `gemini-2.5-computer-use-preview-10-2025`. That id still
+>   resolves on the project (`models.get`; a made-up id 404s) and is priced
+>   under the 2.5 SKUs at Pro rates, so it would run on the credit - but
+>   only until the credit ends mid-November, and it looks set to be
+>   retired. 3.x is outside the credit's SKU group, so it bills to the
+>   card. **Anish's rule: everything on the promo credit, nothing on the
+>   card.** The free Gemini Developer API tier stays ruled out, as §6's
+>   prompt says: it may use content for training, and the agent would send
+>   screenshots of his profile data.
+> - **What replaces it.** A Claude Code session with the Claude in Chrome
+>   extension fills the rare non-Greenhouse/Ashby form under `CLAUDE.md`'s
+>   form rules, with every value from the jobpipe tools (Track C, as for
+>   LangChain on 2026-09-10). It costs his Claude subscription, not Google
+>   spend. A deterministic parser in the runner is the free next step if
+>   SmartRecruiters ever grows in the targets.
+>
+> The design below is kept for the day either constraint changes. If it is
+> revived: the SDK shape is `types.Tool(computer_use=types.ComputerUse(
+> environment=ENVIRONMENT_BROWSER, excluded_predefined_functions=[...],
+> enable_prompt_injection_detection=True))` on `generate_content`
+> (google-genai 2.18.0 has all four fields); actions come back as function
+> calls on a 0-999 grid with an `intent` (3.5+) and sometimes a
+> `safety_decision` of `require_confirmation`, which Google's terms require
+> a human to confirm; responses carry the URL and a screenshot.
+
 For postings whose ATS the runner cannot parse — Workday (Barclays,
 Broadridge), Lever, SmartRecruiters, company-hosted forms.
 
