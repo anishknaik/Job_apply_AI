@@ -45,7 +45,26 @@ are the history behind them.
   available for Gemini-drafted batches.
 - **Gmail, read-only, for verification codes** (2026-11-06): a session may
   fetch the ATS's code for the form in front of it and show it to Anish;
-  he types it. `CLAUDE.md` "Scope the browser" has the rule.
+  he types it. `CLAUDE.md` "Scope the browser" has the rule. Every other
+  Gmail tool is denied in `.claude/settings.json`. Greenhouse emails a
+  security code at submit on most forms (Mercury, DoorDash).
+- **Claude writes all prose since 2026-11-06** (`CLAUDE.md` workbench
+  section): prepare answers and letters here before a workbench session;
+  the worker drafts nothing unless `JOBPIPE_SESSION_DRAFTING=gemini`.
+- **Second session, 2026-11-06 evening:** Ema, Mercury, Abridge, Supabase,
+  DoorDash, Suno applied (runner-recorded, synced); Pinecone closed; Monte
+  Carlo (16356) was mid-fill when the session ended - check `status`
+  before assuming it went out. More self-ID option spellings were added to
+  the gitignored `answers.yaml` on Anish's word (the values stay there).
+- **Open, found in that session:** Greenhouse **Country** and **Location
+  (City)** were `unmatched_option` on every form - read the live option
+  and suggestion text and fix the match; Mercury's resume upload raised
+  Greenhouse's own "Cannot read properties of undefined (reading
+  'uploadFile')" while DoorDash's worked - compare the two; the grounding
+  checker took claims from Mercury's requirements list into a letter
+  (the §5 defect, on letters); `learned_answers.yaml` still holds an "AI
+  policy" agreement, now inert as an attestation; Suno's code-review
+  question wants a real example from Anish.
 - **Open, in order of value:** the Greenhouse fill gaps in §8 (Education
   section, Location cleared, phone country, resume read-back timeout,
   Hispanic/Race); the grounding check's output loop (slice 1 of 7A); live
